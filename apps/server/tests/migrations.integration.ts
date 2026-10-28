@@ -61,9 +61,15 @@ test('upgrading the previous schema keeps battle snapshots and stages existing v
     const result = await legacy.migrateToLatest();
     if (result.error) throw result.error;
     const character = (await database.sql.selectFrom('characters').select('data').executeTakeFirstOrThrow()).data;
+    character.energy.fire = 48; character.energy.water = -3;
+    character.skillLevels = { strike: 7 };
+    character.inventory = [{ itemId: 'potion', quantity: 250 }];
+    await database.sql.updateTable('characters').set({ data: JSON.stringify(character) }).where('id', '=', character.id).execute();
     const completed = newBattle(randomUUID(), 'Старый бой', 'bot', 'before', character, seedContent);
+    delete completed.combatVersion; completed.rule = 'before';
     completed.status = 'finished'; completed.winner = 0; completed.version = 7;
     const active = newBattle(randomUUID(), 'Старое лобби', 'bot', 'before', character, seedContent);
+    delete active.combatVersion; active.rule = 'before';
     for (const battle of [completed, active]) {
       await database.sql.insertInto('battles').values({ id: battle.id, version: battle.version, data: JSON.stringify(battle) }).execute();
     }
@@ -74,8 +80,18 @@ test('upgrading the previous schema keeps battle snapshots and stages existing v
     assert.equal(staged[0].delivered_at, null);
     assert.equal((await database.sql.selectFrom('battles').selectAll().execute()).length, 2);
     assert.equal((await database.sql.selectFrom('characters').selectAll().execute()).length, 10);
+    const migratedItems = await database.sql.selectFrom('item_instances').selectAll().where('owner_id', '=', character.id).execute();
+    assert.equal(migratedItems.length, 3);
+    assert.equal(migratedItems.reduce((total, item) => total + item.quantity, 0), 250);
+    assert.ok(migratedItems.every(item => item.quantity <= 99 && item.inventory_id === character.id));
+    const expected = structuredClone(character); expected.skillPoints += 2; expected.stats.maxEnergy = 30;
+    expected.energy = { ...expected.energy, fire: 30, water: 0, defense: 0 };
+    const getCharacter = async () => (await database!.sql.selectFrom('characters').select('data').where('id', '=', character.id).executeTakeFirstOrThrow()).data;
+    assert.deepEqual(await getCharacter(), expected);
+    assert.deepEqual((await database.sql.selectFrom('battles').select('data').where('id', '=', active.id).executeTakeFirstOrThrow()).data, active);
     await database.onModuleInit();
     assert.equal((await database.sql.selectFrom('battle_archive_outbox').selectAll().execute()).length, 1);
+    assert.deepEqual(await getCharacter(), expected);
   } finally {
     if (previous === undefined) delete process.env.POSTGRES_URL; else process.env.POSTGRES_URL = previous;
     await database?.onApplicationShutdown();

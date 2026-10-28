@@ -1,16 +1,115 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { InventoryCommand, InventoryState, ItemInstance, applyInventoryCommand, availableItemActions, backpackStacks, equipmentBonuses } from '@game/core';
+import { z } from 'zod';
+import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
 import { CharactersService } from '../../characters/application/characters.service';
-import { ItemsService } from '../../items/application/items.service';
+import { ContentService } from '../../content/application/content.service';
+import { SkillsService } from '../../skills/application/skills.service';
+import { InventoryRepository } from '../ports/inventory.repository';
 
 @Injectable()
 export class InventoryService {
   constructor(
+    @Inject(UnitOfWork) private readonly transactions: UnitOfWork,
+    @Inject(InventoryRepository) private readonly repository: InventoryRepository,
     @Inject(CharactersService) private readonly characters: CharactersService,
-    @Inject(ItemsService) private readonly items: ItemsService,
+    @Inject(ContentService) private readonly content: ContentService,
+    @Inject(SkillsService) private readonly skills: SkillsService,
   ) {}
 
-  async get(characterId: string) {
-    const [character, items] = await Promise.all([this.characters.get(characterId), this.items.list()]);
-    return character.inventory.map(stack => ({ ...stack, item: items.find(item => item.id === stack.itemId) ?? null }));
+  async get(ownerId: string) {
+    const content = await this.content.get(true);
+    return this.transactions.run(async context => {
+      const character = await this.characters.get(ownerId, content, context, true);
+      await this.repository.ensurePrimary(ownerId, character.inventory, Object.fromEntries(content.items.map(item => [item.id, item.stackLimit])), context);
+      const state = await this.repository.load(ownerId, context);
+      const groups = content.itemGroups ?? [];
+      return {
+        ...state, definitions: content.items, groups,
+        items: state.items.map(instance => {
+          const definition = content.items.find(item => item.id === instance.itemId);
+          const actions = definition ? availableItemActions(instance, state, definition, groups) : [];
+          if (definition?.grantedSkillId && character.learnedSkillIds.includes(definition.grantedSkillId)) {
+            const read = actions.find(action => action.id === 'read');
+            if (read) { read.enabled = false; read.reason = 'Навык уже известен'; }
+          }
+          return { ...instance, actions };
+        }),
+      };
+    });
+  }
+
+  async stacks(ownerId: string) {
+    const state = await this.get(ownerId);
+    return backpackStacks(state).map(stack => ({ ...stack, item: state.definitions.find(item => item.id === stack.itemId) ?? null }));
+  }
+
+  async instance(id: string) {
+    const instance = await this.repository.instance(id);
+    if (!instance) throw new NotFoundException('Предмет не найден');
+    const view = await this.get(instance.ownerId);
+    const current = view.items.find(item => item.id === id);
+    if (!current) throw new ConflictException('Предмет перемещён. Повторите запрос.');
+    return { ...current, definition: view.definitions.find(item => item.id === current.itemId) ?? null };
+  }
+
+  /** Trusted server rewards/scenarios only. Repeated operation IDs do not mint extra items. */
+  receive(ownerId: string, itemId: string, quantity: number, operationId: string, inventoryId?: string | null) {
+    return this.execute({ type: 'receive', ownerId, itemId, quantity, inventoryId }, operationId);
+  }
+
+  async execute(command: InventoryCommand, operationId: string) {
+    z.string().uuid().parse(operationId);
+    const signature = JSON.stringify(Object.fromEntries(Object.entries(command).sort(([left], [right]) => left.localeCompare(right))));
+    const content = await this.content.get(true);
+    return this.transactions.run(async context => {
+      const receipt = await this.repository.claimOperation(operationId, signature, context);
+      if (receipt.signature !== signature) throw new ConflictException('ID операции уже использован с другими параметрами');
+      if (receipt.result) return receipt.result;
+      const ownerIds = await this.owners(command, context);
+      const states: InventoryState[] = [];
+      // Every inventory mutation locks character owners first, in the same order as rewards.
+      for (const ownerId of [...new Set(ownerIds)].sort()) {
+        const character = await this.characters.get(ownerId, content, context, true);
+        await this.repository.ensurePrimary(ownerId, character.inventory, Object.fromEntries(content.items.map(item => [item.id, item.stackLimit])), context);
+        states.push(await this.repository.load(ownerId, context));
+      }
+      if ('instanceId' in command && !states.some(state => state.items.some(item => item.id === command.instanceId))) throw new ConflictException('Предмет перемещён. Повторите действие.');
+      let changed: ReturnType<typeof applyInventoryCommand>;
+      try { changed = applyInventoryCommand(states, command, content.items, content.itemGroups, randomUUID); }
+      catch (error) { throw new BadRequestException((error as Error).message); }
+      for (const effect of changed.effects) {
+        const granted = await this.skills.grant(effect.ownerId, effect.skillId, context);
+        if (!granted.granted) throw new BadRequestException('Навык уже известен; свиток не потрачен');
+      }
+      await this.repository.save(changed.states, context);
+      for (const state of changed.states) {
+        await this.characters.update(state.ownerId, content, character => {
+          character.inventory = backpackStacks(state);
+          character.equipmentBonuses = equipmentBonuses(state, content.items);
+        }, context);
+      }
+      await this.repository.finishOperation(operationId, changed.result, context);
+      return changed.result;
+    });
+  }
+
+  private async owners(command: InventoryCommand, context: TransactionContext) {
+    if (command.type === 'receive' || command.type === 'create-inventory') return [command.ownerId];
+    const instance = await this.repository.instance(command.instanceId, context);
+    if (!instance) throw new NotFoundException('Предмет не найден');
+    const ids = [instance.ownerId];
+    if ('targetInventoryId' in command) {
+      const owner = await this.repository.inventoryOwner(command.targetInventoryId, context);
+      if (!owner) throw new NotFoundException('Инвентарь не найден');
+      ids.push(owner);
+    }
+    if (command.type === 'merge') {
+      const target = await this.repository.instance(command.targetInstanceId, context);
+      if (!target) throw new NotFoundException('Целевой предмет не найден');
+      ids.push(target.ownerId);
+    }
+    return ids;
   }
 }

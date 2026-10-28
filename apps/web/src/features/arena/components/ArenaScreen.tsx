@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { Battle, Rule } from '@game/core';
+import { Battle, BattlefieldOptions, battlefieldOptionsSchema, DEFAULT_FIELD_SIZE } from '@game/core';
+import { BattlefieldSettings } from '../../battlefield/components/BattlefieldSettings';
 import { kindNames, ruleNames } from '../../../shared/ui/game-labels';
 
 interface Props {
   rooms: Battle[]; canCreate: boolean; busy: boolean; onRefresh: () => void; onOpen: (id: string) => void;
-  onCreate: (input: { name: string; kind: Battle['kind']; rule: Rule }) => void;
+  onCreate: (input: { name: string; kind: Battle['kind']; battlefield: BattlefieldOptions }) => void;
 }
 
 export function ArenaScreen({ rooms, canCreate, busy, onRefresh, onOpen, onCreate }: Props) {
+  const [battlefield, setBattlefield] = useState<BattlefieldOptions>({ size: DEFAULT_FIELD_SIZE });
+  const validField = battlefieldOptionsSchema.safeParse(battlefield);
   const [name, setName] = useState('Битва стихий');
   const [kind, setKind] = useState<Battle['kind']>('bot');
-  const [rule, setRule] = useState<Rule>('before-after');
   return <div className="main-column">
     <section className="panel create-room">
       <div className="section-label">02 / НАЧНИ НОВОЕ СРАЖЕНИЕ</div><h2>Собери свою тактику</h2>
@@ -22,12 +24,12 @@ export function ArenaScreen({ rooms, canCreate, busy, onRefresh, onOpen, onCreat
       </div>
       <div className="form-grid">
         <label>Название комнаты<input value={name} onChange={event => setName(event.target.value)} maxLength={48}/></label>
-        <label>Правила применения навыков<select value={rule} onChange={event => setRule(event.target.value as Rule)}>
-          {Object.entries(ruleNames).map(([key, text]) => <option key={key} value={key}>{text}</option>)}
-        </select></label>
+
       </div>
-      <p className="rule-note">{rule === 'before' ? 'Один навык до перестановки. Собранные фишки наносят урон, затем ход переходит сопернику.' : rule === 'before-after' ? 'Один навык за ход: до или после перестановки. Урон от фишек — сразу. Заверши ход кнопкой.' : 'Сначала собери фишки, затем обязательно выбери навык. Количество фишек усиливает его действие.'}</p>
-      <button className="primary" disabled={!canCreate || busy || name.trim().length < 2} onClick={() => onCreate({ name, kind, rule })}>Создать комнату <span>↗</span></button>
+      <BattlefieldSettings value={battlefield} onChange={setBattlefield} disabled={busy}/>
+      {!validField.success && <p className="hint" role="status">{validField.error.issues.map(issue => issue.message).join('; ')}</p>}
+      <p className="rule-note">Сначала поле и все каскады. Затем — навык типа прямого совпадения с расходом энергии. Защита усиливает героя на ход противника; вторичные совпадения только копят энергию.</p>
+      <button className="primary" disabled={!canCreate || busy || name.trim().length < 2 || !validField.success} onClick={() => onCreate({ name, kind, battlefield })}>Создать комнату <span>↗</span></button>
     </section>
     <section className="panel rooms">
       <div className="section-label">03 / ОБЩЕЕ ЛОББИ</div>

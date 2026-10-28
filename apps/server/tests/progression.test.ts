@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Battle, Character, emptyEnergy, joinBattle, newBattle, possibleMove, seedContent, startBattle } from '@game/core';
+import { Battle, BattlefieldOptions, createBoard, Character, emptyEnergy, joinBattle, newBattle, possibleMove, seedContent, startBattle } from '@game/core';
+import { BattlefieldService } from '../src/modules/battlefield/application/battlefield.service';
 import { BattlesService } from '../src/modules/battles/application/battles.service';
 import { BattleEvents } from '../src/modules/battles/ports/battle-events';
 import { CharactersService } from '../src/modules/characters/application/characters.service';
@@ -23,9 +24,13 @@ const battleId = '00000000-0000-4000-8000-000000000003';
 const hero = (id: string): Character => ({ id, name: id === winnerId ? 'Winner' : 'Loser', level: 1, experience: 0, skillPoints: 2, learnedSkillIds: ['strike'], stats: { ...seedContent.balance.characterStats }, energy: emptyEnergy(), inventory: [], createdAt: new Date().toISOString() });
 interface State { characters: Record<string, { data: Character }>; battles: Record<string, { data: Battle; version: number }>; receipts: string[]; outbox: Record<string, Battle> }
 /** Transactional test double: exercises service rollback and command races without a running PostgreSQL. */
-function fixture(kind: 'duel' | 'bot' = 'duel') {
+function fixture(kind: 'duel' | 'bot' = 'duel', battlefield: BattlefieldOptions = {}) {
   const winner = hero(winnerId), loser = hero(loserId);
-  const battle = newBattle(battleId, 'test', kind, 'before', winner, seedContent);
+  const battle = newBattle(battleId, 'test', kind, 'before', winner, seedContent, battlefield);
+  delete battle.combatVersion; battle.rule = 'before';
+  battle.content.skills.find(skill => skill.id === 'strike')!.cost = 0;
+  delete battle.content.balance.combat;
+  if (!battlefield.elementTypes) { battle.battlefield!.elementTypes = ['fire', 'water', 'earth', 'air', 'physical']; battle.board = createBoard({ size: battle.battlefield!.size, elementTypes: battle.battlefield!.elementTypes }); }
   if (kind === 'duel') joinBattle(battle, loser, 1); startBattle(battle); battle.fighters[0].stats.attack = 1000;
   let state: State = { characters: { [winnerId]: { data: winner }, [loserId]: { data: loser } }, battles: { [battleId]: { data: battle, version: 0 } }, receipts: [], outbox: {} };
   let tail = Promise.resolve(), failCharacterWrite = false, failOutboxWrite = false;
@@ -75,7 +80,7 @@ function fixture(kind: 'duel' | 'bot' = 'duel') {
   const skills = new SkillsService(adapter, characters, content, {} as SkillsCatalogService);
   const rewards = new RewardsService(new PostgresRewardsRepository(adapter), characters);
   const history = new BattleHistoryService(new PostgresBattleArchiveOutbox(adapter), {} as BattleHistoryRepository, {} as TaskQueue);
-  const service = new BattlesService(adapter, new PostgresBattlesRepository(adapter), characters, content, rewards, history, events);
+  const service = new BattlesService(adapter, new PostgresBattlesRepository(adapter), characters, content, rewards, history, events, new BattlefieldService());
   const command = () => ({ characterId: winnerId, version: 0, action: { type: 'swap', ...possibleMove(battle.board)!, targetId: battle.fighters[1].id } });
   return { service, characters, skills, command, published, locks, state: () => state, failWrite: () => { failCharacterWrite = true; }, failOutbox: () => { failOutboxWrite = true; } };
 }
@@ -122,6 +127,8 @@ test('starting a lobby freezes the latest learned skills and stats, including le
   assert.equal(started.status, 'active'); const fighter = started.fighters.find(p => p.characterId === winnerId)!;
   assert.deepEqual(fighter.skillIds, ['strike', 'ember']); assert.equal(fighter.stats.attack, 8);
   assert.ok(started.content.balance.progression); assert.equal(f.state().receipts.length, 0);
+  assert.equal(started.combatVersion, 2); assert.equal(started.rule, 'on-match');
+  assert.equal(started.battlefield?.elementTypes.length, 6);
 });
 
 test('a bot victory grants experience once and never creates an NPC reward', async () => {
@@ -167,4 +174,55 @@ test('outbox persistence failure rolls back the result and all rewards', async (
   assert.equal(f.published.length, 0);
   await f.service.command(battleId, f.command());
   assert.equal(f.state().outbox[battleId].status, 'finished');
+});
+
+test('battle commands expose direct and generated removals outside the old eight-column bounds', async () => {
+  const f = fixture('duel', { size: { rows: 6, cols: 10 }, elementTypes: ['fire', 'water', 'earth'] });
+  f.state().battles[battleId].data.board = Array.from({ length: 6 }, (_, row) => Array.from({ length: 10 }, (_, col) => (row + col) % 2 ? 'water' : 'fire'));
+  const result = await f.service.command(battleId, { characterId: winnerId, version: 0, action: { type: 'swap', from: { row: 1, col: 8 }, to: { row: 1, col: 9 }, targetId: loserId } });
+  assert.equal(result.battlefield?.size.cols, 10);
+  const report = result.boardMoves![0];
+  assert.equal(report.actorId, winnerId);
+  assert.deepEqual(report.direct, { count: 6, byType: { fire: 3, water: 3, earth: 0 } });
+  assert.equal(report.total.count, report.direct.count + report.generated.count);
+  assert.deepEqual(f.state().battles[battleId].data.boardMoves, result.boardMoves);
+});
+
+test('legacy battle snapshots acquire default field configuration without a database migration', async () => {
+  const f = fixture();
+  delete f.state().battles[battleId].data.battlefield;
+  delete f.state().battles[battleId].data.boardMoves;
+  const result = await f.service.command(battleId, f.command());
+  assert.deepEqual(result.battlefield?.size, { rows: 8, cols: 8 });
+  assert.equal(result.battlefield?.elementTypes.length, 5);
+  assert.equal(result.boardMoves?.length, 1);
+});
+
+test('automatic NPC moves retain the chosen field types and each actor gets its own report', async () => {
+  const f = fixture('bot', { size: { rows: 5, cols: 10 }, elementTypes: ['fire', 'water', 'earth'] });
+  for (const fighter of f.state().battles[battleId].data.fighters) { fighter.hp = 100000; fighter.stats.maxHp = 100000; fighter.stats.attack = 8; }
+  const result = await f.service.command(battleId, f.command());
+  assert.deepEqual(result.boardMoves?.map(move => move.actorId), [winnerId, 'bot-opponent']);
+  assert.ok(result.board.flat().every(type => ['fire', 'water', 'earth'].includes(type)));
+  assert.equal(result.activeId, winnerId);
+  const skill = await f.service.command(battleId, { characterId: winnerId, version: result.version, action: { type: 'skill', skillId: 'strike', targetId: 'bot-opponent' } });
+  assert.deepEqual(skill.boardMoves, []);
+});
+
+test('matched combat only rewards the finishing skill and rejects its duplicate atomically', async () => {
+  const f = fixture('duel', { size: { rows: 6, cols: 10 }, elementTypes: ['physical', 'water', 'defense'] });
+  const state = f.state().battles[battleId].data;
+  state.combatVersion = 2; state.rule = 'on-match'; state.content = structuredClone(seedContent);
+  state.board = Array.from({ length: 6 }, (_, row) => Array.from({ length: 10 }, (_, col) => (row + col) % 2 ? 'water' : 'physical'));
+  const moved = await f.service.command(battleId, { characterId: winnerId, version: 0, action: { type: 'swap', from: { row: 1, col: 8 }, to: { row: 1, col: 9 } } });
+  assert.equal(moved.status, 'active'); assert.equal(moved.phase, 'choose');
+  assert.equal(moved.fighters[1].hp, 120); assert.equal(f.state().receipts.length, 0);
+  assert.deepEqual(moved.skillChoices, [{ skillId: 'strike', enabled: true }]);
+  const action = { characterId: winnerId, version: moved.version, action: { type: 'skill', skillId: 'strike', targetId: loserId } };
+  const results = await Promise.allSettled([f.service.command(battleId, action), f.service.command(battleId, action)]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  const finished = f.state().battles[battleId].data;
+  assert.equal(finished.status, 'finished'); assert.deepEqual(finished.boardMoves, []);
+  assert.equal(finished.fighters[0].energy.physical, moved.fighters[0].energy.physical - 3);
+  assert.equal(f.state().receipts.length, 1); assert.deepEqual(f.state().outbox[battleId], finished);
 });

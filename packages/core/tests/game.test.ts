@@ -1,6 +1,7 @@
+import { newLegacyBattle as newBattle, createLegacyBoard as createBoard, legacyContent as seedContent } from './helpers/legacy';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Battle, Character, Rule, applyAction, contentSchema, createBoard, emptyEnergy, joinBattle, matches, newBattle, possibleMove, resolveSwap, runNpcTurns, seedContent, startBattle } from '../src';
+import { Battle, Character, Rule, applyAction, contentSchema,  emptyEnergy, joinBattle, matches, possibleMove, resolveSwap, runNpcTurns,  startBattle } from '../src';
 
 function rng(seed: number) { return () => { seed = Math.imul(1664525, seed) + 1013904223 | 0; return (seed >>> 0) / 4294967296; }; }
 const character = (id: string): Character => ({ id, name: id, level: 1, experience: 0, skillPoints: 2, learnedSkillIds: seedContent.skills.map(s => s.id), stats: { maxHp: 120, attack: 8, defense: 3, maxEnergy: 30 }, energy: emptyEnergy(), inventory: [{ itemId: 'potion', quantity: 3 }], createdAt: new Date().toISOString() });
@@ -50,7 +51,7 @@ test('energy costs and cooldowns are server rules', () => {
   move(b); applyAction(b, 'a', { type: 'end' }); move(b, 'b', 'a'); applyAction(b, 'b', { type: 'end' });
   assert.throws(() => applyAction(b, 'a', { type: 'skill', skillId: 'fireball', targetId: 'b' }), /перезаряжается/);
 });
-test('energy is capped for every element', () => { const b = duel(); for (const e of Object.keys(b.fighters[0].energy)) b.fighters[0].energy[e as keyof typeof b.fighters[0]['energy']] = 30; move(b); assert.deepEqual(Object.values(b.fighters[0].energy), [30, 30, 30, 30, 30]); });
+test('energy is capped for every element', () => { const b = duel(); for (const e of Object.keys(b.fighters[0].energy)) b.fighters[0].energy[e as keyof typeof b.fighters[0]['energy']] = 30; move(b); assert.deepEqual(Object.values(b.fighters[0].energy), [30, 30, 30, 30, 30, 30]); });
 test('item healing consumes inventory and the turn skill allowance', () => { const b = duel(); b.fighters[0].hp = 100; applyAction(b, 'a', { type: 'item', itemId: 'potion' }); assert.equal(b.fighters[0].hp, 120); assert.equal(b.fighters[0].inventory[0].quantity, 2); assert.equal(b.usedSkill, true); });
 test('skills validate ally/enemy targeting before spending energy', () => { const b = duel(); b.fighters[0].energy.water = 10; assert.throws(() => applyAction(b, 'a', { type: 'skill', skillId: 'tide', targetId: 'b' }), /союзника/); assert.equal(b.fighters[0].energy.water, 10); });
 test('duel victory finishes battle and rejects subsequent actions', () => { const b = duel('before'); b.fighters[1].hp = 1; move(b); assert.equal(b.status, 'finished'); assert.equal(b.winner, 0); assert.equal(b.activeId, null); assert.throws(() => move(b), /не активен/); });

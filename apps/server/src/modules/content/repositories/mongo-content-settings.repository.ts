@@ -1,5 +1,5 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
-import { Balance, Enemy, seedContent } from '@game/core';
+import { Balance, Enemy, seedContent, defaultCombatRules } from '@game/core';
 import { MongoDatabase } from '../../../infrastructure/mongo/mongo.service';
 import { ContentSettingsRepository } from '../ports/content-settings.repository';
 
@@ -13,6 +13,7 @@ export class MongoContentSettingsRepository extends ContentSettingsRepository im
     await settings.updateOne({ id: 'balance' }, { $setOnInsert: { id: 'balance', ...seedContent.balance } }, { upsert: true });
     await settings.updateOne({ id: 'balance', progression: { $exists: false } }, { $set: { progression: seedContent.balance.progression } });
     await settings.updateOne({ id: 'balance', 'progression.victoryExperience.bot': { $exists: false } }, { $set: { 'progression.victoryExperience.bot': seedContent.balance.progression.victoryExperience.bot } });
+    await settings.updateOne({ id: 'balance', 'combat.version': { $ne: 2 } }, { $set: { combat: defaultCombatRules, 'progression.startingSkillPoints': 4, 'progression.statGrowth.maxEnergy': 0, 'characterStats.maxEnergy': 30 } });
     const enemies = this.mongo.db.collection<Enemy>('enemies');
     await enemies.createIndex({ id: 1 }, { unique: true });
     for (const enemy of seedContent.enemies) {

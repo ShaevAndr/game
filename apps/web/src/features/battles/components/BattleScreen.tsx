@@ -1,7 +1,8 @@
 import { Action, Battle } from '@game/core';
 import { useBattleControls } from '../model/useBattleControls';
 import { BattleRewards } from './BattleRewards';
-import { BattleBoard } from './BattleBoard';
+import { BattlefieldBoard } from '../../battlefield/components/BattlefieldBoard';
+import { BattlefieldSummary } from '../../battlefield/components/BattlefieldSummary';
 import { BattleSkills } from './BattleSkills';
 
 interface Props {
@@ -12,6 +13,8 @@ interface Props {
 export function BattleScreen({ battle, characterId, hasCharacter, busy, onCommand, onJoin, onStart, onCopy }: Props) {
   const controls = useBattleControls(battle, characterId, busy, onCommand);
   const { me, active, myTurn, targetId, healTarget } = controls;
+  const lastMove = [...(battle.boardMoves ?? [])].reverse().find(move => move.actorId === characterId) ?? battle.boardMoves?.[battle.boardMoves.length - 1];
+  const phaseLabel = battle.status === 'active' ? battle.phase === 'choose' ? 'Выбери навык' : battle.phase === 'after' ? 'Заверши ход' : 'Собери три в ряд' : 'Общее поле';
   return <div className="main-column">
     <section className="panel battle-top">
       <div className="section-heading"><div>
@@ -22,7 +25,7 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, onComman
       <div className="fighters">{battle.fighters.map(fighter => <button key={fighter.id}
         onClick={() => { if (fighter.team !== me?.team && fighter.hp > 0) controls.setTargetId(fighter.id); }}
         className={`fighter ${fighter.id === battle.activeId ? 'acting' : ''} ${fighter.id === targetId ? 'target' : ''} ${fighter.hp === 0 ? 'dead' : ''}`}>
-        <div><span>{fighter.npc ? '⬡' : '◈'} {fighter.name}</span><small>Команда {fighter.team + 1}{fighter.id === me?.id ? ' · ты' : ''}{fighter.id === targetId ? ' · цель' : ''}</small></div>
+        <div><span>{fighter.npc ? '⬡' : '◈'} {fighter.name}</span><small>Команда {fighter.team + 1}{fighter.id === me?.id ? ' · ты' : ''}{fighter.id === targetId ? ' · цель' : ''}</small>{(fighter.guardDefense ?? 0) > 0 && <small className="guard-status">⛨ Защита +{fighter.guardDefense} до своего хода</small>}</div>
         <b>{fighter.hp}<small> / {fighter.stats.maxHp}</small></b><div className="hp-track"><i style={{ width: `${100 * fighter.hp / fighter.stats.maxHp}%` }}/></div>
       </button>)}</div>
       {battle.status === 'waiting' && <div className="lobby-actions">
@@ -33,7 +36,9 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, onComman
       </div>}
     </section>
     <div className="combat-grid">
-      <BattleBoard battle={battle} myTurn={myTurn} busy={busy} selected={controls.selected} onTile={controls.tileClick}/>
+      <BattlefieldBoard board={battle.board} enabled={myTurn && !busy && battle.phase === 'before'} selected={controls.selected} onTile={controls.tileClick} phaseLabel={phaseLabel}>
+        <BattlefieldSummary report={lastMove} actorName={battle.fighters.find(fighter => fighter.id === lastMove?.actorId)?.name}/>
+      </BattlefieldBoard>
       <BattleSkills battle={battle} me={me} myTurn={myTurn} busy={busy} targetId={targetId} healTarget={healTarget} onAlly={controls.setAllyId} onCommand={onCommand}/>
     </div>
     <section className="panel journal"><div className="section-label">ЖУРНАЛ БОЯ</div>

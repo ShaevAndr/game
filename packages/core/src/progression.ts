@@ -1,10 +1,11 @@
 import { Battle, Character, Content, Progression, Skill, Stats, emptyEnergy } from './types';
+import { grantSkill } from './skills';
 
 export function createCharacter(id: string, name: string, content: Content, templateId?: string): Character {
   const template = templateId ? content.characterTemplates.find(t => t.id === templateId) : undefined;
   if (templateId && !template) throw new Error('Тип персонажа не найден');
   const character: Character = { id, name, ...(template ? { templateId: template.id } : {}), level: 1, experience: 0, skillPoints: content.balance.progression.startingSkillPoints, learnedSkillIds: content.skills.filter(s => s.learning.starter).map(s => s.id), stats: { ...content.balance.characterStats }, energy: emptyEnergy(), inventory: structuredClone(content.balance.starterItems), createdAt: new Date().toISOString() };
-  if (template) learnSkill(character, template.skillId, content);
+  character.skillLevels = Object.fromEntries(character.learnedSkillIds.map(id => [id, 1]));
   return character;
 }
 
@@ -14,7 +15,8 @@ export function experienceToNextLevel(level: number, config: Progression): numbe
 }
 /** Old characters keep their existing stats and inventory and receive progression defaults. */
 export function normalizeCharacter(character: Character, content: Content): Character {
-  return { ...character, experience: character.experience ?? 0, skillPoints: character.skillPoints ?? (content.balance.progression.startingSkillPoints + (character.level - 1) * content.balance.progression.skillPointsPerLevel), learnedSkillIds: [...new Set([...(character.learnedSkillIds ?? []), ...content.skills.filter(s => s.learning.starter).map(s => s.id)])] };
+  const ids = [...new Set([...(character.learnedSkillIds ?? []), ...content.skills.filter(s => s.learning.starter).map(s => s.id)])];
+  return { ...character, skillLevels: Object.fromEntries(ids.map(id => [id, character.skillLevels?.[id] ?? 1])), experience: character.experience ?? 0, skillPoints: character.skillPoints ?? (content.balance.progression.startingSkillPoints + (character.level - 1) * content.balance.progression.skillPointsPerLevel), learnedSkillIds: [...new Set([...(character.learnedSkillIds ?? []), ...content.skills.filter(s => s.learning.starter).map(s => s.id)])] };
 }
 export function gainExperience(character: Character, amount: number, config: Progression): number {
   if (!Number.isSafeInteger(amount) || amount < 0) throw new Error('Некорректное количество опыта');
@@ -40,7 +42,7 @@ export function learnSkill(character: Character, skillId: string, content: Conte
   if (!skill) throw new Error('Навык не найден');
   const reasons = learningBlockers(character, skill, content.skills);
   if (reasons.length) throw new Error(reasons.join('; '));
-  character.skillPoints -= skill.learning.pointCost; character.learnedSkillIds.push(skill.id);
+  character.skillPoints -= skill.learning.pointCost; grantSkill(character, skill.id, content);
 }
 export function victoryRecipients(battle: Battle): string[] {
   if (battle.status !== 'finished' || battle.winner === null) return [];

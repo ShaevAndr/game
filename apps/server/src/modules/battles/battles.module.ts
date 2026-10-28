@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BattlefieldModule } from '../battlefield/battlefield.module';
 import { DatabaseModule } from '../../infrastructure/database/database.module';
 import { CharactersModule } from '../characters/characters.module';
 import { ContentModule } from '../content/content.module';
@@ -12,7 +13,7 @@ import { BattlesController } from './http/battles.controller';
 import { BattlesGateway } from './http/battles.gateway';
 
 @Module({
-  imports: [DatabaseModule, CharactersModule, ContentModule, RewardsModule, BattleHistoryModule],
+  imports: [BattlefieldModule, DatabaseModule, CharactersModule, ContentModule, RewardsModule, BattleHistoryModule],
   controllers: [BattlesController],
   providers: [BattlesService, BattlesGateway, { provide: BattleEvents, useExisting: BattlesGateway },
     { provide: BattlesRepository, useClass: PostgresBattlesRepository }],

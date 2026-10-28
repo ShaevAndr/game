@@ -1,13 +1,15 @@
-import { Character, Fighter, elementNames, elements } from '@game/core';
+import { Character, Fighter, ENERGY_CAP, elements, tileTypeNames, tileTypes } from '@game/core';
 import { symbols } from './game-labels';
 
-export function EnergyPanel({ character, fighter }: { character?: Character; fighter?: Fighter }) {
+export function EnergyPanel({ character, fighter, legacy = false }: { character?: Character; fighter?: Fighter; legacy?: boolean }) {
+  const types = legacy ? elements : tileTypes;
+  const maxEnergy = legacy ? fighter?.stats.maxEnergy ?? ENERGY_CAP : ENERGY_CAP;
   return <section className="panel legend">
-    <div className="section-label">ПЯТЬ ИСТОЧНИКОВ СИЛЫ</div>
-    {elements.map(element => <div key={element}>
-      <span className={`element-icon ${element}`}>{symbols[element]}</span><span>{elementNames[element]}</span>
-      <b>{fighter?.energy[element] ?? character?.energy[element] ?? 0}<small> / {fighter?.stats.maxEnergy ?? character?.stats.maxEnergy ?? 30}</small></b>
+    <div className="section-label">ЭНЕРГИЯ И ЗАЩИТА</div>
+    {types.map(type => <div key={type}>
+      <span className={`element-icon ${type}`}>{symbols[type]}</span><span>{type === 'defense' ? 'Энергия защиты' : tileTypeNames[type]}</span>
+      <b>{fighter?.energy[type] ?? character?.energy[type] ?? 0}<small> / {maxEnergy}</small></b>
     </div>)}
-    <p className="hint">Каждая удалённая фишка даёт +1 энергии своей стихии. Энергия расходуется на навыки.</p>
+    <p className="hint">{legacy ? 'Совпадения дают энергию по правилам этого боя.' : 'Прямые и вторичные совпадения дают энергию. Прямая защита даёт временный бонус, вторичная — энергию защиты. Навык выбирается после всех сокращений.'}</p>
   </section>;
 }

@@ -29,10 +29,10 @@ export class ContentService implements OnApplicationBootstrap {
       const parsed = contentSchema.safeParse(cached);
       if (parsed.success) return parsed.data;
     }
-    const [settings, skills, items, characterTemplates] = await Promise.all([
-      this.settings.get(), this.skills.list(), this.items.list(), this.templates.list(),
+    const [settings, skills, items, characterTemplates, itemGroups] = await Promise.all([
+      this.settings.get(), this.skills.list(), this.items.list(), this.templates.list(), this.items.groups(),
     ]);
-    const content = contentSchema.parse({ ...settings, skills, items, characterTemplates });
+    const content = contentSchema.parse({ ...settings, skills, items, characterTemplates, itemGroups });
     await this.cache.set(cacheKey, content, 30);
     return content;
   }

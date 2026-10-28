@@ -1,6 +1,7 @@
+import { newLegacyBattle as newBattle, createLegacyBoard as createBoard, legacyContent as seedContent } from './helpers/legacy';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyAction, contentSchema, createBoard, createCharacter, joinBattle, newBattle, possibleMove, rules, runNpcTurns, seedContent, startBattle, victoryRecipients } from '../src';
+import { applyAction, contentSchema,  createCharacter, joinBattle, possibleMove, rules, runNpcTurns,  startBattle, victoryRecipients } from '../src';
 
 function botBattle(rule: typeof rules[number] = 'before-after') {
   const character = createCharacter('hero', 'Герой', seedContent, 'pyromancer');

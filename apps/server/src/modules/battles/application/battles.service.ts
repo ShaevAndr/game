@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { Battle, applyAction, characterFighter, commandSchema, createBattleSchema, joinBattle, joinBattleSchema, newBattle, runNpcTurns, startBattle } from '@game/core';
+import { Battle, applyAction, characterFighter, commandSchema, createBattleSchema, elements, joinBattle, joinBattleSchema, newBattle, runNpcTurns, startBattle } from '@game/core';
 import { z } from 'zod';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
 import { CharactersService } from '../../characters/application/characters.service';
@@ -8,6 +8,7 @@ import { ContentService } from '../../content/application/content.service';
 import { RewardsService } from '../../rewards/application/rewards.service';
 import { BattleHistoryService } from '../../battle-history/application/battle-history.service';
 import { BattlesRepository } from '../ports/battles.repository';
+import { BattlefieldService } from '../../battlefield/application/battlefield.service';
 import { BattleEvents } from '../ports/battle-events';
 
 function domainAction<T>(action: () => T): T {
@@ -25,6 +26,7 @@ export class BattlesService {
     @Inject(RewardsService) private readonly rewards: RewardsService,
     @Inject(BattleHistoryService) private readonly history: BattleHistoryService,
     @Inject(BattleEvents) private readonly events: BattleEvents,
+    @Inject(BattlefieldService) private readonly battlefield: BattlefieldService,
   ) {}
 
   list() { return this.repository.list(); }
@@ -38,7 +40,7 @@ export class BattlesService {
     const input = createBattleSchema.parse(body);
     const content = await this.content.get(true);
     const character = await this.characters.get(input.characterId, content);
-    const battle = domainAction(() => newBattle(randomUUID(), input.name, input.kind, input.rule, character, content));
+    const battle = domainAction(() => newBattle(randomUUID(), input.name, input.kind, input.rule, character, content, input.battlefield, this.battlefield));
     await this.repository.create(battle);
     this.events.publish(battle);
     return battle;
@@ -51,8 +53,9 @@ export class BattlesService {
       if (expected !== undefined && expected !== row.version) throw new ConflictException('Состояние изменилось. Повторите действие.');
       const state = row.battle;
       const wasFinished = state.status === 'finished';
+      state.boardMoves = [];
       await change(state, context);
-      domainAction(() => runNpcTurns(state));
+      domainAction(() => runNpcTurns(state, this.battlefield));
       const finished = !wasFinished && state.status === 'finished';
       if (finished) await this.rewards.award(state, await this.content.get(), context);
       state.version = row.version + 1;
@@ -76,6 +79,11 @@ export class BattlesService {
     return this.mutate(id, version, async (state, context) => {
       if (!state.fighters.some(fighter => fighter.characterId === characterId)) throw new BadRequestException('Выберите участника боя');
       if (state.status !== 'waiting') throw new BadRequestException('Бой уже начался');
+      if (state.combatVersion !== 2 && (!state.battlefield || elements.every(type => state.battlefield!.elementTypes.includes(type)) && state.battlefield.elementTypes.length === elements.length)) {
+        const field = domainAction(() => this.battlefield.create({ size: { rows: state.board.length, cols: state.board[0]?.length ?? 0 } }));
+        state.board = field.board; state.battlefield = field.config;
+      }
+      state.combatVersion = 2; state.rule = 'on-match'; state.skillChoices = []; state.matchedElements = [];
       state.content = await this.content.get(true);
       state.totalWaves = state.kind === 'dungeon' ? state.content.balance.dungeonWaves.length : 1;
       for (const fighter of [...state.fighters].filter(f => !f.npc).sort((a, b) => a.id.localeCompare(b.id))) {
@@ -88,6 +96,6 @@ export class BattlesService {
 
   command(id: string, body: unknown) {
     const { characterId, version, action } = commandSchema.parse(body);
-    return this.mutate(id, version, state => domainAction(() => applyAction(state, characterId, action)));
+    return this.mutate(id, version, state => domainAction(() => applyAction(state, characterId, action, Math.random, this.battlefield)));
   }
 }

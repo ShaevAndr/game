@@ -1,14 +1,15 @@
-import { Character, Content, Fighter, experienceToNextLevel } from '@game/core';
+import { Character, Content, Fighter, experienceToNextLevel, effectiveStats } from '@game/core';
 import { InventoryList } from '../../inventory/components/InventoryList';
 import { CharacterCreation } from './CharacterCreation';
 
 interface Props {
   characters: Character[]; characterId: string; character?: Character; content: Content | null;
-  fighter?: Fighter; busy: boolean; onChoose: (id: string) => void; onSkills: () => void;
+  fighter?: Fighter; busy: boolean; onChoose: (id: string) => void; onSkills: () => void; onInventory: () => void;
   onCreate: (name: string, templateId?: string) => Promise<boolean>;
 }
 
-export function CharacterPanel({ characters, characterId, character, content, fighter, busy, onChoose, onSkills, onCreate }: Props) {
+export function CharacterPanel({ characters, characterId, character, content, fighter, busy, onChoose, onSkills, onInventory, onCreate }: Props) {
+  const stats = fighter?.stats ?? (character ? effectiveStats(character) : null);
   const nextLevel = character && content ? experienceToNextLevel(character.level, content.balance.progression) : 0;
   return <section className="panel">
     <div className="section-label">01 / ПЕРСОНАЖ</div><h2>Выбери героя</h2>
@@ -26,11 +27,12 @@ export function CharacterPanel({ characters, characterId, character, content, fi
         <button className="ghost" onClick={onSkills}>Очки навыков: {character.skillPoints} <span>↗</span></button>
       </div>
       <div className="stats">
-        <div><span>Здоровье</span><b>{character.stats.maxHp}</b></div>
-        <div><span>Атака</span><b>{character.stats.attack}</b></div>
-        <div><span>Защита</span><b>{character.stats.defense}</b></div>
-        <div><span>Лимит энергии</span><b>{character.stats.maxEnergy}</b></div>
+        <div><span>Здоровье</span><b>{stats?.maxHp}</b></div>
+        <div><span>Атака</span><b>{stats?.attack}</b></div>
+        <div><span>Защита</span><b>{stats?.defense}{fighter?.guardDefense ? ` + ${fighter.guardDefense}` : ''}</b></div>
+        <div><span>Лимит энергии</span><b>{stats?.maxEnergy}</b></div>
       </div>
+      <button className="ghost" onClick={onInventory}>Открыть инвентари ↗</button>
       <InventoryList stacks={fighter?.inventory ?? character.inventory} items={content?.items ?? []} inBattle={!!fighter}/>
     </> : <p className="hint">Выбери готового героя 10-го уровня или создай своего. Регистрация не нужна.</p>}
   </section>;

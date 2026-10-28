@@ -3,9 +3,11 @@ import { Kysely, Migrator, PostgresDialect, Transaction } from 'kysely';
 import { Pool } from 'pg';
 import { TransactionContext, UnitOfWork } from '../../shared/application/unit-of-work';
 import { Tables } from './tables';
+import { matchedCombatMigration } from './migrations/006-matched-combat';
 import { initialMigration } from './migrations/001-initial';
 import { progressionRewardsMigration } from './migrations/002-progression-rewards';
 import { demoCharactersMigration } from './migrations/003-demo-characters';
+import { inventoriesMigration } from './migrations/005-inventories';
 import { battleArchiveOutboxMigration } from './migrations/004-battle-archive-outbox';
 
 @Injectable()
@@ -36,6 +38,8 @@ export class Database extends UnitOfWork implements OnModuleInit, OnApplicationS
       '002_progression_rewards': progressionRewardsMigration,
       '003_demo_characters': demoCharactersMigration,
       '004_battle_archive_outbox': battleArchiveOutboxMigration,
+      '005_inventories': inventoriesMigration,
+      '006_matched_combat': matchedCombatMigration,
     }) } });
     const result = await migrator.migrateToLatest();
     if (result.error) throw result.error;
