@@ -1,0 +1,18 @@
+import { Module } from '@nestjs/common';
+import { MongoModule } from '../../infrastructure/mongo/mongo.module';
+import { RedisModule } from '../../infrastructure/redis/redis.module';
+import { CharacterTemplatesModule } from '../characters/character-templates.module';
+import { SkillsCatalogModule } from '../skills/skills-catalog.module';
+import { ItemsModule } from '../items/items.module';
+import { ContentService } from './application/content.service';
+import { ContentController } from './http/content.controller';
+import { ContentSettingsRepository } from './ports/content-settings.repository';
+import { MongoContentSettingsRepository } from './repositories/mongo-content-settings.repository';
+
+@Module({
+  imports: [MongoModule, RedisModule, CharacterTemplatesModule, SkillsCatalogModule, ItemsModule],
+  controllers: [ContentController],
+  providers: [ContentService, { provide: ContentSettingsRepository, useClass: MongoContentSettingsRepository }],
+  exports: [ContentService],
+})
+export class ContentModule {}

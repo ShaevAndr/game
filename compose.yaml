@@ -21,6 +21,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
   server:
     build: { context: ., target: server }
     environment:
@@ -28,11 +38,14 @@ services:
       POSTGRES_URL: postgres://game:game@postgres:5432/game
       MONGO_URL: mongodb://mongo:27017
       MONGO_DB: elemental_tactics
+      REDIS_URL: redis://redis:6379
+      REDIS_NAMESPACE: ${REDIS_NAMESPACE:-game}
       WEB_ORIGIN: http://localhost:${GAME_WEB_PORT:-8088}
     ports: ["127.0.0.1:3001:3001"]
     depends_on:
       postgres: { condition: service_healthy }
       mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
   web:
     build: { context: ., target: web }
     ports: ["${GAME_WEB_PORT:-8088}:80"]
@@ -40,3 +53,4 @@ services:
 volumes:
   postgres_data:
   mongo_data:
+  redis_data:

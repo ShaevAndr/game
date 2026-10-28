@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Character, createCharacter, experienceToNextLevel, gainExperience, learnSkill, seedContent } from '@game/core';
-import characters from '../src/database/migrations/003-demo-characters.json';
+import characters from '../src/infrastructure/database/migrations/003-demo-characters.json';
 
 test('migration contains ten unique level 10 heroes with valid learned skills and remaining points', () => {
   assert.equal(characters.length, 10); assert.equal(new Set(characters.map(c => c.id)).size, 10);

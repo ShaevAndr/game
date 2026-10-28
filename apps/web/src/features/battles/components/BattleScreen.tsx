@@ -1,0 +1,43 @@
+import { Action, Battle } from '@game/core';
+import { useBattleControls } from '../model/useBattleControls';
+import { BattleRewards } from './BattleRewards';
+import { BattleBoard } from './BattleBoard';
+import { BattleSkills } from './BattleSkills';
+
+interface Props {
+  battle: Battle; characterId: string; hasCharacter: boolean; busy: boolean;
+  onCommand: (action: Action) => void; onJoin: (team: number) => void; onStart: () => void; onCopy: () => void;
+}
+
+export function BattleScreen({ battle, characterId, hasCharacter, busy, onCommand, onJoin, onStart, onCopy }: Props) {
+  const controls = useBattleControls(battle, characterId, busy, onCommand);
+  const { me, active, myTurn, targetId, healTarget } = controls;
+  return <div className="main-column">
+    <section className="panel battle-top">
+      <div className="section-heading"><div>
+        <div className="section-label">БОЕВОЙ ИНСТАНС · ХОД {battle.turn || '—'}</div>
+        <h2>{battle.status === 'waiting' ? 'Сбор участников' : battle.status === 'finished' ? `Победа команды ${(battle.winner ?? 0) + 1}` : myTurn ? 'Твой ход' : `Ход: ${active?.name}`}</h2>
+      </div><button className="ghost" onClick={onCopy}>Скопировать приглашение ↗</button></div>
+      <BattleRewards battle={battle} characterId={characterId}/>
+      <div className="fighters">{battle.fighters.map(fighter => <button key={fighter.id}
+        onClick={() => { if (fighter.team !== me?.team && fighter.hp > 0) controls.setTargetId(fighter.id); }}
+        className={`fighter ${fighter.id === battle.activeId ? 'acting' : ''} ${fighter.id === targetId ? 'target' : ''} ${fighter.hp === 0 ? 'dead' : ''}`}>
+        <div><span>{fighter.npc ? '⬡' : '◈'} {fighter.name}</span><small>Команда {fighter.team + 1}{fighter.id === me?.id ? ' · ты' : ''}{fighter.id === targetId ? ' · цель' : ''}</small></div>
+        <b>{fighter.hp}<small> / {fighter.stats.maxHp}</small></b><div className="hp-track"><i style={{ width: `${100 * fighter.hp / fighter.stats.maxHp}%` }}/></div>
+      </button>)}</div>
+      {battle.status === 'waiting' && <div className="lobby-actions">
+        {!me ? <>{(battle.kind === 'bot' ? [] : [0, 1]).filter(team => battle.kind !== 'dungeon' || team === 0).map(team =>
+          <button key={team} disabled={!hasCharacter || busy} onClick={() => onJoin(team)}>Вступить в команду {team + 1}</button>)}</>
+          : <button className="primary" disabled={busy} onClick={onStart}>Начать бой →</button>}
+        <p className="hint">{battle.kind === 'bot' ? 'Играй один: бот получит характеристики и навыки твоего героя и будет ходить автоматически.' : battle.kind === 'dungeon' ? 'Можно играть одному или пригласить ещё двух героев.' : 'Другой игрок открывает приглашение и выбирает своего персонажа.'}</p>
+      </div>}
+    </section>
+    <div className="combat-grid">
+      <BattleBoard battle={battle} myTurn={myTurn} busy={busy} selected={controls.selected} onTile={controls.tileClick}/>
+      <BattleSkills battle={battle} me={me} myTurn={myTurn} busy={busy} targetId={targetId} healTarget={healTarget} onAlly={controls.setAllyId} onCommand={onCommand}/>
+    </div>
+    <section className="panel journal"><div className="section-label">ЖУРНАЛ БОЯ</div>
+      {[...battle.log].reverse().slice(0, 30).map((line, index) => <div key={`${battle.log.length}-${index}`}><span>{String(battle.log.length - index).padStart(2, '0')}</span>{line}</div>)}
+    </section>
+  </div>;
+}

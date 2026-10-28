@@ -3,9 +3,11 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @game/server --filter @game/web dev",
     "start": "docker compose up --build",
-    "infra": "docker compose up -d postgres mongo",
+    "infra": "docker compose up -d postgres mongo redis",
     "build": "pnpm -r build", "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "check:architecture": "node scripts/check-architecture.mjs",
+    "check": "pnpm check:architecture && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": { "typescript": "~5.7.3", "@types/node": "^22.10.0" }
 }

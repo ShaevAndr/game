@@ -5,20 +5,9 @@ import { resolve } from 'node:path';
 config({ path: resolve(process.cwd(), '../../.env') }); config();
 
 async function bootstrap() {
-  const { Module, Catch } = await import('@nestjs/common');
   const { NestFactory } = await import('@nestjs/core');
-  const { ZodError } = await import('zod');
-  const { DatabaseModule } = await import('./database/database.module');
-  const { ContentModule } = await import('./content/content.module');
-  const { CharactersModule } = await import('./characters/characters.module');
-  const { BattlesModule } = await import('./battles/battles.module');
-  @Module({ imports: [DatabaseModule, ContentModule, CharactersModule, BattlesModule] }) class AppModule {}
-  @Catch(ZodError)
-  class ValidationFilter {
-    catch(exception: InstanceType<typeof ZodError>, host: import('@nestjs/common').ArgumentsHost) {
-      host.switchToHttp().getResponse().status(400).json({ message: exception.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ') });
-    }
-  }
+  const { AppModule } = await import('./app.module');
+  const { ValidationFilter } = await import('./shared/http/validation.filter');
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api'); app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173' });
   app.useGlobalFilters(new ValidationFilter()); app.enableShutdownHooks();
