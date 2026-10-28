@@ -33,7 +33,7 @@ export class BattlesService {
       if (!wasFinished && state.status === 'finished') {
         const content = await this.content.get();
         const config = state.content.balance.progression ?? content.balance.progression;
-        const experience = config.victoryExperience[state.kind];
+        const experience = config.victoryExperience[state.kind] ?? config.victoryExperience.duel;
         state.rewards = [];
         // Lock characters in a stable order, including when two battles finish together.
         for (const characterId of victoryRecipients(state)) {

@@ -13,10 +13,10 @@ const battleId = '00000000-0000-4000-8000-000000000003';
 const hero = (id: string): Character => ({ id, name: id === winnerId ? 'Winner' : 'Loser', level: 1, experience: 0, skillPoints: 2, learnedSkillIds: ['strike'], stats: { ...seedContent.balance.characterStats }, energy: emptyEnergy(), inventory: [], createdAt: new Date().toISOString() });
 interface State { characters: Record<string, { data: Character }>; battles: Record<string, { data: Battle; version: number }>; receipts: string[] }
 /** Transactional test double: exercises service rollback and command races without a running PostgreSQL. */
-function fixture() {
+function fixture(kind: 'duel' | 'bot' = 'duel') {
   const winner = hero(winnerId), loser = hero(loserId);
-  const battle = newBattle(battleId, 'test', 'duel', 'before', winner, seedContent);
-  joinBattle(battle, loser, 1); startBattle(battle); battle.fighters[0].stats.attack = 1000;
+  const battle = newBattle(battleId, 'test', kind, 'before', winner, seedContent);
+  if (kind === 'duel') joinBattle(battle, loser, 1); startBattle(battle); battle.fighters[0].stats.attack = 1000;
   let state: State = { characters: { [winnerId]: { data: winner }, [loserId]: { data: loser } }, battles: { [battleId]: { data: battle, version: 0 } }, receipts: [] };
   let tail = Promise.resolve(), failCharacterWrite = false;
   const locks: string[] = [], published: Battle[] = [];
@@ -52,7 +52,7 @@ function fixture() {
   const content = { get: async () => structuredClone(seedContent) } as ContentService;
   const gateway = { publish: (b: Battle) => { published.push(structuredClone(b)); } } as unknown as BattlesGateway;
   const service = new BattlesService(database, content, gateway), characters = new CharactersService(database, content);
-  const command = () => ({ characterId: winnerId, version: 0, action: { type: 'swap', ...possibleMove(battle.board)!, targetId: loserId } });
+  const command = () => ({ characterId: winnerId, version: 0, action: { type: 'swap', ...possibleMove(battle.board)!, targetId: battle.fighters[1].id } });
   return { service, characters, command, published, locks, state: () => state, failWrite: () => { failCharacterWrite = true; } };
 }
 test('duplicate concurrent winning commands award experience exactly once', async () => {
@@ -98,4 +98,29 @@ test('starting a lobby freezes the latest learned skills and stats, including le
   assert.equal(started.status, 'active'); const fighter = started.fighters.find(p => p.characterId === winnerId)!;
   assert.deepEqual(fighter.skillIds, ['strike', 'ember']); assert.equal(fighter.stats.attack, 8);
   assert.ok(started.content.balance.progression); assert.equal(f.state().receipts.length, 0);
+});
+
+test('a bot victory grants experience once and never creates an NPC reward', async () => {
+  const f = fixture('bot');
+  const results = await Promise.allSettled([f.service.command(battleId, f.command()), f.service.command(battleId, f.command())]);
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+  assert.equal(f.state().receipts.length, 1);
+  assert.deepEqual(f.state().battles[battleId].data.rewards, [{ characterId: winnerId, experience: 100, levelsGained: 1 }]);
+  assert.equal(f.state().characters[winnerId].data.level, 2);
+});
+test('bot commands return after the automatic NPC turn', async () => {
+  const f = fixture('bot'); f.state().battles[battleId].data.fighters[0].stats.attack = 8;
+  const battle = await f.service.command(battleId, f.command());
+  assert.equal(battle.status, 'active'); assert.equal(battle.activeId, winnerId);
+  assert.ok(battle.fighters[0].hp < battle.fighters[0].stats.maxHp);
+  assert.equal(f.state().receipts.length, 0);
+});
+test('starting a bot lobby uses the latest player stats and learned skills', async () => {
+  const f = fixture('bot'), room = f.state().battles[battleId].data;
+  room.status = 'waiting'; room.activeId = null; room.fighters = room.fighters.filter(f => !f.npc);
+  await f.characters.learn(winnerId, { skillId: 'ember' });
+  const battle = await f.service.start(battleId, { characterId: winnerId, version: 0 });
+  const bot = battle.fighters.find(f => f.npc)!;
+  assert.equal(bot.characterId, undefined); assert.equal(battle.fighters.length, 2);
+  assert.deepEqual(bot.skillIds, ['strike', 'ember']); assert.equal(bot.stats.attack, 8);
 });

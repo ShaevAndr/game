@@ -19,6 +19,7 @@ export function newBattle(id: string, name: string, kind: Battle['kind'], rule: 
 }
 export function joinBattle(b: Battle, character: Character, team: number) {
   if (b.status !== 'waiting') throw new Error('Бой уже начался');
+  if (b.kind === 'bot') throw new Error('Бой с ботом рассчитан на одного игрока');
   if (b.fighters.some(f => f.id === character.id)) throw new Error('Персонаж уже в комнате');
   if (b.kind === 'dungeon' && team !== 0) throw new Error('В подземелье игроки в одной команде');
   const limit = b.kind === 'duel' ? 1 : b.content.balance.teamSize;
@@ -27,6 +28,12 @@ export function joinBattle(b: Battle, character: Character, team: number) {
 }
 export function startBattle(b: Battle) {
   if (b.status !== 'waiting') throw new Error('Бой уже начался');
+  if (b.kind === 'bot') {
+    if (b.fighters.length !== 1 || b.fighters[0].npc || b.fighters[0].team !== 0) throw new Error('Для боя с ботом нужен один игрок');
+    const hero = b.fighters[0];
+    b.fighters.push({ id: 'bot-opponent', name: `Бот: ${hero.name}`, team: 1, npc: true, stats: { ...hero.stats }, hp: hero.stats.maxHp, energy: emptyEnergy(), inventory: [], cooldowns: {}, skillIds: [...hero.skillIds] });
+    addLog(b, 'Бот готов: характеристики и навыки соответствуют вашему герою.');
+  }
   if (b.kind === 'dungeon') spawnWave(b);
   if (!b.fighters.some(f => f.team === 0) || !b.fighters.some(f => f.team === 1)) throw new Error('Нужен хотя бы один участник в каждой команде');
   // Interleave teams so a full party cannot act repeatedly before its opponent.
@@ -114,14 +121,19 @@ export function runNpcTurns(b: Battle) {
     const actor = b.fighters.find(f => f.id === b.activeId);
     if (!actor?.npc) return;
     let victim = b.fighters.find(f => f.hp > 0 && f.team !== actor.team)!;
-    const chooseSkill = () => b.content.skills.filter(s => actor.skillIds.includes(s.id) && s.effect === 'damage' && actor.energy[s.element] >= s.cost && !(actor.cooldowns[s.id] > 0)).sort((a, c) => c.power - a.power)[0];
-    if (b.rule !== 'on-match') { const s = chooseSkill(); if (s) applyAction(b, actor.id, { type: 'skill', skillId: s.id, targetId: victim.id }); }
+    const chooseSkill = () => {
+      const available = b.content.skills.filter(s => actor.skillIds.includes(s.id) && actor.energy[s.element] >= s.cost && !(actor.cooldowns[s.id] > 0));
+      const heal = actor.hp <= actor.stats.maxHp / 2 ? available.filter(s => s.effect === 'heal').sort((a, c) => c.power - a.power)[0] : undefined;
+      return heal ?? available.filter(s => s.effect === 'damage').sort((a, c) => c.power - a.power)[0];
+    };
+    const cast = () => { const s = chooseSkill(); if (!s) throw new Error('Противнику нужен базовый навык без затрат'); applyAction(b, actor.id, { type: 'skill', skillId: s.id, targetId: s.effect === 'heal' ? actor.id : victim.id }); };
+    if (b.rule !== 'on-match') cast();
     if (b.status !== 'active' || b.activeId !== actor.id) continue;
     victim = b.fighters.find(f => f.hp > 0 && f.team !== actor.team)!;
     const move = possibleMove(b.board); if (!move) throw new Error('Нет доступного хода');
     applyAction(b, actor.id, { type: 'swap', ...move, targetId: victim.id });
     if (b.status !== 'active' || b.activeId !== actor.id) continue;
-    if (b.phase === 'choose') { const s = chooseSkill(); if (!s) throw new Error('Противнику нужен базовый навык без затрат'); applyAction(b, actor.id, { type: 'skill', skillId: s.id, targetId: victim.id }); }
+    if (b.phase === 'choose') cast();
     else if (b.phase === 'after') applyAction(b, actor.id, { type: 'end' });
   }
 }

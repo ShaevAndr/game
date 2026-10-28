@@ -1,0 +1,370 @@
+[
+  {
+    "id": "de000000-0000-4000-8000-000000000001",
+    "name": "Искра",
+    "templateId": "pyromancer",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 12,
+    "learnedSkillIds": [
+      "strike",
+      "ember",
+      "fireball",
+      "inferno",
+      "phoenix-warmth",
+      "healing-flame",
+      "phoenix-heart"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 48
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z"
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000002",
+    "name": "Феникс",
+    "templateId": "phoenix",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 12,
+    "learnedSkillIds": [
+      "strike",
+      "ember",
+      "fireball",
+      "inferno",
+      "phoenix-warmth",
+      "healing-flame",
+      "phoenix-heart"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 48
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z"
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000003",
+    "name": "Прилив",
+    "templateId": "tidekeeper",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 12,
+    "learnedSkillIds": [
+      "strike",
+      "spring",
+      "tide",
+      "renewal",
+      "ice-shard",
+      "ice-lance",
+      "glacier"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 48
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z"
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000004",
+    "name": "Иней",
+    "templateId": "frostmage",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 12,
+    "learnedSkillIds": [
+      "strike",
+      "spring",
+      "tide",
+      "renewal",
+      "ice-shard",
+      "ice-lance",
+      "glacier"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 48
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z"
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000005",
+    "name": "Гранит",
+    "templateId": "geomancer",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 12,
+    "learnedSkillIds": [
+      "strike",
+      "pebble",
+      "quake",
+      "landslide",
+      "lifesap",
+      "grove",
+      "world-tree"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 48
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z"
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000006",
+    "name": "Ива",
+    "templateId": "druid",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 12,
+    "learnedSkillIds": [
+      "strike",
+      "pebble",
+      "quake",
+      "landslide",
+      "lifesap",
+      "grove",
+      "world-tree"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 48
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z"
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000007",
+    "name": "Шторм",
+    "templateId": "stormcaller",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 12,
+    "learnedSkillIds": [
+      "strike",
+      "breeze",
+      "gust",
+      "tempest",
+      "soothing-wind",
+      "cloud-rest",
+      "sky-blessing"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 48
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z"
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000008",
+    "name": "Зефир",
+    "templateId": "windkeeper",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 12,
+    "learnedSkillIds": [
+      "strike",
+      "breeze",
+      "gust",
+      "tempest",
+      "soothing-wind",
+      "cloud-rest",
+      "sky-blessing"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 48
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z"
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000009",
+    "name": "Клинок",
+    "templateId": "duelist",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 14,
+    "learnedSkillIds": [
+      "strike",
+      "cleave",
+      "execution",
+      "lunge",
+      "second-wind",
+      "blade-dance"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 48
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z"
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000010",
+    "name": "Оплот",
+    "templateId": "veteran",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 14,
+    "learnedSkillIds": [
+      "strike",
+      "cleave",
+      "execution",
+      "lunge",
+      "second-wind",
+      "blade-dance"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 48
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z"
+  }
+]

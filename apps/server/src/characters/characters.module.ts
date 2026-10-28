@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Inject, Injectable, Module, NotFoundException, Param, Post } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { Character, createCharacterSchema, emptyEnergy, learnSkill, normalizeCharacter } from '@game/core';
+import { Character, createCharacter, createCharacterSchema, learnSkill, normalizeCharacter } from '@game/core';
 import { z } from 'zod';
 import { Database } from '../database/database.module';
 import { ContentService } from '../content/content.module';
@@ -13,9 +13,10 @@ export class CharactersService {
     return (await this.db.sql.selectFrom('characters').select('data').execute()).map(row => normalizeCharacter(row.data, content));
   }
   async create(input: unknown) {
-    const { name } = createCharacterSchema.parse(input);
-    const content = await this.content.get(), { balance } = content;
-    const character: Character = { id: randomUUID(), name, level: 1, experience: 0, skillPoints: balance.progression.startingSkillPoints, learnedSkillIds: content.skills.filter(s => s.learning.starter).map(s => s.id), stats: balance.characterStats, energy: emptyEnergy(), inventory: balance.starterItems, createdAt: new Date().toISOString() };
+    const { name, templateId } = createCharacterSchema.parse(input);
+    const content = await this.content.get();
+    let character: Character;
+    try { character = createCharacter(randomUUID(), name, content, templateId); } catch (error) { throw new BadRequestException((error as Error).message); }
     await this.db.sql.insertInto('characters').values({ id: character.id, data: JSON.stringify(character) }).execute(); return character;
   }
   async learn(id: string, input: unknown) {

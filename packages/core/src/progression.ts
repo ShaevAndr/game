@@ -1,4 +1,12 @@
-import { Battle, Character, Content, Progression, Skill, Stats } from './types';
+import { Battle, Character, Content, Progression, Skill, Stats, emptyEnergy } from './types';
+
+export function createCharacter(id: string, name: string, content: Content, templateId?: string): Character {
+  const template = templateId ? content.characterTemplates.find(t => t.id === templateId) : undefined;
+  if (templateId && !template) throw new Error('Тип персонажа не найден');
+  const character: Character = { id, name, ...(template ? { templateId: template.id } : {}), level: 1, experience: 0, skillPoints: content.balance.progression.startingSkillPoints, learnedSkillIds: content.skills.filter(s => s.learning.starter).map(s => s.id), stats: { ...content.balance.characterStats }, energy: emptyEnergy(), inventory: structuredClone(content.balance.starterItems), createdAt: new Date().toISOString() };
+  if (template) learnSkill(character, template.skillId, content);
+  return character;
+}
 
 export const statNames: Record<keyof Stats, string> = { maxHp: 'Здоровье', attack: 'Атака', defense: 'Защита', maxEnergy: 'Лимит энергии' };
 export function experienceToNextLevel(level: number, config: Progression): number {

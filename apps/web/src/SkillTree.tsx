@@ -12,13 +12,13 @@ export function SkillTree({ character, content, busy, onLearn }: Props) {
     <p className="tree-help">Изучи предыдущие навыки ветки, достигни нужного уровня и характеристик. Каждое повышение уровня даёт {content.balance.progression.skillPointsPerLevel} очка навыков. Новые навыки и характеристики применяются при старте боя. Уже начатые бои сохраняют свой набор.</p>
     <div className="skill-branches">{elements.map(element => <section className="skill-branch" key={element} aria-label={`Ветка: ${elementNames[element]}`}>
       <div className="branch-title"><span className={`element-icon ${element}`}>{symbols[element]}</span><h3>{elementNames[element]}</h3></div>
+      <div className="branch-heroes"><div className="section-label">ГЕРОИ ВЕТКИ</div>{content.characterTemplates.filter(t => t.element === element).map(template => <p key={template.id}><strong>{template.name}</strong><span>Начальный навык: {skills.find(s => s.id === template.skillId)?.name}</span></p>)}</div>
       {skills.filter(s => s.element === element).sort((a, b) => depth(a) - depth(b) || a.learning.level - b.learning.level || a.id.localeCompare(b.id)).map(skill => {
         const learned = character?.learnedSkillIds.includes(skill.id) ?? false;
         const blockers = character ? learningBlockers(character, skill, skills) : ['Выберите персонажа'];
         const available = !!character && !learned && blockers.length === 0;
         const r = skill.learning;
         return <article key={skill.id} className={`skill-node ${learned ? 'learned' : available ? 'available' : 'locked'}`}>
-          {r.prerequisites.length > 0 && <div className="branch-link" aria-hidden="true">↓</div>}
           <div className="node-status">{learned ? '✓ ИЗУЧЕН' : available ? 'МОЖНО ИЗУЧИТЬ' : 'ЗАКРЫТ'}</div>
           <h4>{skill.name}</h4><p className="node-description">{skill.description}</p>
           <div className="node-effect">{skill.effect === 'heal' ? 'Лечение' : 'Урон'}: {skill.power} · Энергия: {skill.cost}<br/>Перезарядка: {skill.cooldown} ход.</div>

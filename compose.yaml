@@ -28,14 +28,14 @@ services:
       POSTGRES_URL: postgres://game:game@postgres:5432/game
       MONGO_URL: mongodb://mongo:27017
       MONGO_DB: elemental_tactics
-      WEB_ORIGIN: http://localhost:8080
+      WEB_ORIGIN: http://localhost:${GAME_WEB_PORT:-8088}
     ports: ["127.0.0.1:3001:3001"]
     depends_on:
       postgres: { condition: service_healthy }
       mongo: { condition: service_healthy }
   web:
     build: { context: ., target: web }
-    ports: ["8080:80"]
+    ports: ["${GAME_WEB_PORT:-8088}:80"]
     depends_on: [server]
 volumes:
   postgres_data:

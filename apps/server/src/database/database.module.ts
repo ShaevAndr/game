@@ -2,6 +2,7 @@ import { Global, Injectable, Module, OnModuleDestroy, OnModuleInit } from '@nest
 import { ColumnType, Kysely, Migrator, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 import { Battle, Character } from '@game/core';
+import { demoCharactersMigration } from './migrations/003-demo-characters';
 
 export interface Tables {
   characters: { id: string; data: ColumnType<Character, string, string> };
@@ -21,7 +22,7 @@ export class Database implements OnModuleInit, OnModuleDestroy {
         .addColumn('character_id', 'uuid', c => c.notNull().references('characters.id'))
         .addColumn('experience', 'integer', c => c.notNull())
         .addPrimaryKeyConstraint('battle_rewards_pk', ['battle_id', 'character_id']).execute();
-    } } }) } });
+    } }, '003_demo_characters': demoCharactersMigration }) } });
     const result = await migration.migrateToLatest(); if (result.error) throw result.error;
   }
   async onModuleDestroy() { await this.sql.destroy(); }

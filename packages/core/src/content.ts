@@ -1,7 +1,19 @@
 import { Content, SkillLearning } from './types';
 const learning = (level: number, prerequisites: string[] = [], stats: SkillLearning['stats'] = {}, pointCost = 1): SkillLearning => ({ level, prerequisites, stats, pointCost, starter: false });
 export const seedContent: Content = {
-  balance: { characterStats: { maxHp: 120, attack: 8, defense: 3, maxEnergy: 30 }, starterItems: [{ itemId: 'potion', quantity: 3 }], damagePerTile: 2, energyPerTile: 1, teamSize: 3, dungeonWaves: ['sentinel', 'wisp', 'warden'], progression: { baseExperience: 100, experiencePerLevel: 50, startingSkillPoints: 2, skillPointsPerLevel: 2, statGrowth: { maxHp: 12, attack: 2, defense: 1, maxEnergy: 2 }, victoryExperience: { duel: 100, team: 140, dungeon: 240 } } },
+  characterTemplates: [
+    { id: 'pyromancer', name: 'Пиромант', description: 'Огненный маг. Начинает с «Искры» и развивает разрушительную магию.', element: 'fire', skillId: 'ember' },
+    { id: 'phoenix', name: 'Адепт Феникса', description: 'Целитель огня. Начинает с «Тепла Феникса» и восстанавливает союзников.', element: 'fire', skillId: 'phoenix-warmth' },
+    { id: 'tidekeeper', name: 'Хранитель прилива', description: 'Целитель воды. Начинает с «Источника».', element: 'water', skillId: 'spring' },
+    { id: 'frostmage', name: 'Маг льда', description: 'Боевой маг воды. Начинает с «Ледяной иглы».', element: 'water', skillId: 'ice-shard' },
+    { id: 'geomancer', name: 'Геомант', description: 'Повелитель камня. Начинает с «Каменного осколка».', element: 'earth', skillId: 'pebble' },
+    { id: 'druid', name: 'Друид', description: 'Целитель земли. Начинает с «Сока жизни».', element: 'earth', skillId: 'lifesap' },
+    { id: 'stormcaller', name: 'Заклинатель бури', description: 'Боевой маг воздуха. Начинает с «Дуновения».', element: 'air', skillId: 'breeze' },
+    { id: 'windkeeper', name: 'Хранитель ветра', description: 'Целитель воздуха. Начинает с «Дыхания ветра».', element: 'air', skillId: 'soothing-wind' },
+    { id: 'duelist', name: 'Дуэлянт', description: 'Мастер точных атак. Начинает с «Выпада».', element: 'physical', skillId: 'lunge' },
+    { id: 'veteran', name: 'Ветеран', description: 'Боец поддержки. Начинает со «Второго дыхания».', element: 'physical', skillId: 'second-wind' },
+  ],
+  balance: { characterStats: { maxHp: 120, attack: 8, defense: 3, maxEnergy: 30 }, starterItems: [{ itemId: 'potion', quantity: 3 }], damagePerTile: 2, energyPerTile: 1, teamSize: 3, dungeonWaves: ['sentinel', 'wisp', 'warden'], progression: { baseExperience: 100, experiencePerLevel: 50, startingSkillPoints: 2, skillPointsPerLevel: 2, statGrowth: { maxHp: 12, attack: 2, defense: 1, maxEnergy: 2 }, victoryExperience: { duel: 100, bot: 100, team: 140, dungeon: 240 } } },
   skills: [
     { id: 'strike', name: 'Удар', description: 'Базовая атака без затрат энергии. Известна всем персонажам.', element: 'physical', cost: 0, power: 5, effect: 'damage', cooldown: 0, learning: { ...learning(1), starter: true } },
     { id: 'ember', name: 'Искра', description: 'Первый шаг по пути огня.', element: 'fire', cost: 2, power: 10, effect: 'damage', cooldown: 0, learning: learning(1, [], { attack: 8 }) },
@@ -18,6 +30,21 @@ export const seedContent: Content = {
     { id: 'tempest', name: 'Буря', description: 'Высшая ступень воздушной магии.', element: 'air', cost: 7, power: 36, effect: 'damage', cooldown: 2, learning: learning(4, ['gust'], { maxEnergy: 36, attack: 14 }, 2) },
     { id: 'cleave', name: 'Рассечение', description: 'Мощная физическая атака.', element: 'physical', cost: 5, power: 23, effect: 'damage', cooldown: 2, learning: learning(2, ['strike'], { attack: 10 }) },
     { id: 'execution', name: 'Сокрушение', description: 'Завершающая ступень боевого мастерства.', element: 'physical', cost: 9, power: 46, effect: 'damage', cooldown: 3, learning: learning(4, ['cleave'], { attack: 14, defense: 6 }, 2) },
+    { id: 'phoenix-warmth', name: 'Тепло Феникса', description: 'Согревает живого союзника и восстанавливает здоровье.', element: 'fire', cost: 3, power: 14, effect: 'heal', cooldown: 1, learning: learning(1) },
+    { id: 'healing-flame', name: 'Целебное пламя', description: 'Лечит выбранного союзника силой огня.', element: 'fire', cost: 5, power: 28, effect: 'heal', cooldown: 2, learning: learning(2, ['phoenix-warmth'], { maxEnergy: 32 }) },
+    { id: 'phoenix-heart', name: 'Сердце Феникса', description: 'Мощное лечение живой цели. Не воскрешает погибших.', element: 'fire', cost: 9, power: 58, effect: 'heal', cooldown: 3, learning: learning(4, ['healing-flame'], { maxEnergy: 36 }, 2) },
+    { id: 'ice-shard', name: 'Ледяная игла', description: 'Пронзает выбранного противника льдом.', element: 'water', cost: 2, power: 9, effect: 'damage', cooldown: 0, learning: learning(1) },
+    { id: 'ice-lance', name: 'Ледяное копьё', description: 'Сильная атака водной стихией по одной цели.', element: 'water', cost: 4, power: 20, effect: 'damage', cooldown: 1, learning: learning(2, ['ice-shard'], { attack: 10 }) },
+    { id: 'glacier', name: 'Ледник', description: 'Сокрушительный ледяной удар по выбранному противнику.', element: 'water', cost: 8, power: 42, effect: 'damage', cooldown: 3, learning: learning(4, ['ice-lance'], { attack: 14 }, 2) },
+    { id: 'lifesap', name: 'Сок жизни', description: 'Сила растений восстанавливает здоровье союзника.', element: 'earth', cost: 3, power: 15, effect: 'heal', cooldown: 1, learning: learning(1) },
+    { id: 'grove', name: 'Священная роща', description: 'Лечит выбранного союзника энергией земли.', element: 'earth', cost: 5, power: 30, effect: 'heal', cooldown: 2, learning: learning(2, ['lifesap'], { defense: 4 }) },
+    { id: 'world-tree', name: 'Мировое древо', description: 'Дарует живому союзнику мощный прилив здоровья.', element: 'earth', cost: 9, power: 60, effect: 'heal', cooldown: 3, learning: learning(4, ['grove'], { defense: 6 }, 2) },
+    { id: 'soothing-wind', name: 'Дыхание ветра', description: 'Лёгкий ветер исцеляет выбранного союзника.', element: 'air', cost: 2, power: 10, effect: 'heal', cooldown: 0, learning: learning(1) },
+    { id: 'cloud-rest', name: 'Облачный покой', description: 'Восстанавливает здоровье одной союзной цели.', element: 'air', cost: 4, power: 23, effect: 'heal', cooldown: 1, learning: learning(2, ['soothing-wind'], { maxEnergy: 32 }) },
+    { id: 'sky-blessing', name: 'Благословение небес', description: 'Высшая ступень целительной магии воздуха.', element: 'air', cost: 8, power: 49, effect: 'heal', cooldown: 2, learning: learning(4, ['cloud-rest'], { maxEnergy: 36 }, 2) },
+    { id: 'lunge', name: 'Выпад', description: 'Быстрая физическая атака по выбранной цели.', element: 'physical', cost: 2, power: 10, effect: 'damage', cooldown: 0, learning: learning(1) },
+    { id: 'second-wind', name: 'Второе дыхание', description: 'Помогает себе или живому союзнику восстановить здоровье.', element: 'physical', cost: 3, power: 15, effect: 'heal', cooldown: 1, learning: learning(1) },
+    { id: 'blade-dance', name: 'Танец клинков', description: 'Серия ударов по одной выбранной цели.', element: 'physical', cost: 6, power: 30, effect: 'damage', cooldown: 2, learning: learning(3, ['lunge'], { attack: 12 }) },
   ],
   items: [{ id: 'potion', name: 'Зелье здоровья', description: 'Восстанавливает 35 HP. Используется вместо навыка до перестановки.', heal: 35 }],
   enemies: [
