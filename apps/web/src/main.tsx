@@ -1,0 +1,92 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { io } from 'socket.io-client';
+import { Action, Battle, Character, Content, Element, Rule, elementNames, elements, experienceToNextLevel } from '@game/core';
+import './style.css';
+import { SkillTree } from './SkillTree';
+import './skill-tree.css';
+import { BattleRewards } from './BattleRewards';
+
+const symbols: Record<Element, string> = { fire: '♨', water: '◆', earth: '⬢', air: '✦', physical: '⚔' };
+const ruleNames: Record<Rule, string> = { before: 'Навык → поле', 'before-after': 'Навык до / после', 'on-match': 'Поле → выбор навыка' };
+const kindNames = { duel: 'Дуэль', team: 'Командный бой', dungeon: 'Подземелье' };
+async function api<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`/api${path}`, { method: body === undefined ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const result = await response.json(); if (!response.ok) throw new Error(result.message || 'Ошибка сервера'); return result;
+}
+const socket = io({ autoConnect: false });
+function App() {
+  const [characters, setCharacters] = useState<Character[]>([]), [rooms, setRooms] = useState<Battle[]>([]), [content, setContent] = useState<Content | null>(null);
+  const [characterId, selectCharacter] = useState(sessionStorage.getItem('character') ?? '');
+  const [screen, setScreen] = useState(location.hash === '#skills' ? 'skills' : 'arena');
+  const [roomId, setRoomId] = useState(location.hash === '#skills' ? '' : location.hash.slice(1)), [battle, setBattle] = useState<Battle | null>(null);
+  const [name, setName] = useState(''), [roomName, setRoomName] = useState('Битва стихий'), [kind, setKind] = useState<Battle['kind']>('dungeon'), [rule, setRule] = useState<Rule>('before-after');
+  const [error, setError] = useState(''), [busy, setBusy] = useState(false), [connected, setConnected] = useState(false);
+  const [selected, setSelected] = useState<{ row: number; col: number } | null>(null), [targetId, setTargetId] = useState(''), [allyId, setAllyId] = useState('');
+  const character = characters.find(c => c.id === characterId);
+  const me = battle?.fighters.find(f => f.id === characterId), active = battle?.fighters.find(f => f.id === battle.activeId);
+  const myTurn = !!me && battle?.status === 'active' && battle.activeId === me.id;
+  const refresh = useCallback(async () => {
+    try { const [c, r, co] = await Promise.all([api<Character[]>('/characters'), api<Battle[]>('/battles'), api<Content>('/content')]); setCharacters(c); setRooms(r); setContent(co); } catch (e) { setError((e as Error).message + '. Проверьте, что сервер и базы запущены.'); }
+  }, []);
+  const updateBattle = useCallback((value: Battle) => { setBattle(current => !current || current.id !== value.id || value.version >= current.version ? value : current); }, []);
+  useEffect(() => { void refresh(); socket.connect(); const connect = () => { setConnected(true); void refresh(); }; const disconnect = () => setConnected(false); socket.on('connect', connect); socket.on('disconnect', disconnect); socket.on('rooms-changed', refresh); return () => { socket.off('connect', connect); socket.off('disconnect', disconnect); socket.off('rooms-changed', refresh); socket.disconnect(); }; }, [refresh]);
+  useEffect(() => {
+    setBattle(null); setSelected(null); if (!roomId) return;
+    let cancelled = false;
+    const sync = () => socket.emit('watch', roomId, () => { void api<Battle>(`/battles/${roomId}`).then(b => { if (!cancelled) updateBattle(b); }).catch(e => { if (!cancelled) setError(e.message); }); });
+    const receive = (b: Battle) => { if (b.id === roomId) updateBattle(b); };
+    socket.on('battle', receive); socket.on('connect', sync); if (socket.connected) sync();
+    return () => { cancelled = true; socket.off('battle', receive); socket.off('connect', sync); };
+  }, [roomId, updateBattle]);
+  useEffect(() => { setSelected(null); }, [battle?.version]);
+  useEffect(() => {
+    if (!battle) return;
+    if (!battle.fighters.some(f => f.id === targetId && f.hp > 0 && f.team !== me?.team)) setTargetId(battle.fighters.find(f => f.hp > 0 && f.team !== me?.team)?.id ?? '');
+  }, [battle, me?.team, targetId]);
+  const openRoom = (id: string) => { setScreen('arena'); location.hash = id; setRoomId(id); setError(''); };
+  useEffect(() => { const change = () => { const hash = location.hash.slice(1); setScreen(hash === 'skills' ? 'skills' : 'arena'); setRoomId(hash === 'skills' ? '' : hash); }; window.addEventListener('hashchange', change); return () => window.removeEventListener('hashchange', change); }, []);
+  async function perform(task: () => Promise<void>) { if (busy) return; setBusy(true); setError(''); try { await task(); } catch (e) { setError((e as Error).message); if (roomId) { const b = await api<Battle>(`/battles/${roomId}`).catch(() => null); if (b) updateBattle(b); } await refresh(); } finally { setBusy(false); } }
+  const command = (action: Action) => perform(async () => { if (!battle) return; const updated = await api<Battle>(`/battles/${battle.id}/actions`, { characterId, version: battle.version, action }); updateBattle(updated); if (updated.status === 'finished') await refresh(); });
+  function tileClick(row: number, col: number) {
+    if (!myTurn || battle?.phase !== 'before' || busy) return;
+    if (!selected) { setSelected({ row, col }); return; }
+    if (row === selected.row && col === selected.col) { setSelected(null); return; }
+    if (Math.abs(row - selected.row) + Math.abs(col - selected.col) !== 1) { setSelected({ row, col }); return; }
+    void command({ type: 'swap', from: selected, to: { row, col }, targetId }); setSelected(null);
+  }
+  const chooseCharacter = (id: string) => { selectCharacter(id); sessionStorage.setItem('character', id); };
+  const nextLevelExperience = character && content ? experienceToNextLevel(character.level, content.balance.progression) : 0;
+  const openSkills = () => { location.hash = 'skills'; setScreen('skills'); setRoomId(''); setError(''); };
+  const learn = (skillId: string) => void perform(async () => { const updated = await api<Character>(`/characters/${characterId}/skills`, { skillId }); setCharacters(current => current.map(c => c.id === updated.id ? updated : c)); });
+  const skills = battle?.content.skills ?? content?.skills ?? [];
+  const healTarget = battle?.fighters.find(f => f.id === allyId && f.hp > 0 && f.team === me?.team)?.id ?? me?.id;
+  return <div className="app">
+    <header className="topbar"><a className="brand" href="#" onClick={() => openRoom('')}><span className="brand-mark">✦</span><span>СТИХИИ<span className="brand-sub">TACTICAL MATCH–3</span></span></a><nav><button onClick={() => openRoom('')} className={screen === 'arena' ? 'nav-active' : ''}>Арена</button><button onClick={openSkills} className={screen === 'skills' ? 'nav-active' : ''}>Навыки</button></nav><div className="connection"><i className={connected ? 'online' : ''}/>{connected ? 'Сервер подключён' : 'Нет соединения'}</div></header>
+    <main>
+      <div className="page-heading"><div><div className="eyebrow">СОБИРАЙ. НАПОЛНЯЙ. ПОБЕЖДАЙ.</div><h1>{screen === 'skills' ? 'Выбери свой путь.' : battle ? battle.name : 'Каждый ход имеет значение.'}</h1><p>{screen === 'skills' ? 'Развивай героя и открывай новые возможности пяти стихий.' : battle ? `${kindNames[battle.kind]} · ${ruleNames[battle.rule]} · ${battle.kind === 'dungeon' ? `Волна ${battle.wave} из ${battle.totalWaves}` : 'Две команды — одно поле'}` : 'Пять стихий. Общее поле. Твоя тактика.'}</p></div>{battle && <button className="ghost" onClick={() => openRoom('')}>← Все комнаты</button>}</div>
+      {error && <div className="error" role="alert">{error}<button onClick={() => setError('')} aria-label="Закрыть ошибку">×</button></div>}
+      <div className="layout">
+        <aside className="sidebar">
+          <section className="panel"><div className="section-label">01 / ПЕРСОНАЖ</div><h2>Выбери героя</h2><label>Активный персонаж<select value={characterId} onChange={e => chooseCharacter(e.target.value)}><option value="">Выберите персонажа</option>{characters.map(c => <option key={c.id} value={c.id}>{c.name} · ур. {c.level}</option>)}</select></label>
+            <form className="inline-form" onSubmit={e => { e.preventDefault(); void perform(async () => { const c = await api<Character>('/characters', { name }); chooseCharacter(c.id); setName(''); await refresh(); }); }}><input placeholder="Имя нового героя" aria-label="Имя нового героя" value={name} onChange={e => setName(e.target.value)} minLength={2} maxLength={24} required/><button className="square" disabled={busy} title="Создать персонажа">+</button></form>
+            {character ? <><div className="hero-card"><div className="avatar">{character.name[0].toUpperCase()}</div><div><strong>{character.name}</strong><span>Странник · уровень {character.level}</span></div></div><div className="character-progress"><div><span>Опыт</span><b>{character.experience} / {nextLevelExperience}</b></div><progress aria-label="Опыт" value={character.experience} max={nextLevelExperience || 1}/><button className="ghost" onClick={openSkills}>Очки навыков: {character.skillPoints} <span>↗</span></button></div><div className="stats"><div><span>Здоровье</span><b>{character.stats.maxHp}</b></div><div><span>Атака</span><b>{character.stats.attack}</b></div><div><span>Защита</span><b>{character.stats.defense}</b></div><div><span>Лимит энергии</span><b>{character.stats.maxEnergy}</b></div></div><div className="inventory-label">ИНВЕНТАРЬ {me ? 'В БОЮ' : ''}</div>{(me?.inventory ?? character.inventory).map(i => <div className="inventory" key={i.itemId}><span>✚ {content?.items.find(v => v.id === i.itemId)?.name ?? i.itemId}</span><b>×{i.quantity}</b></div>)}</> : <p className="hint">Создай персонажа или выбери любого из списка. Регистрация не нужна.</p>}
+          </section>
+          <section className="panel legend"><div className="section-label">ПЯТЬ ИСТОЧНИКОВ СИЛЫ</div>{elements.map(e => <div key={e}><span className={`element-icon ${e}`}>{symbols[e]}</span><span>{elementNames[e]}</span><b>{me?.energy[e] ?? character?.energy[e] ?? 0}<small> / {me?.stats.maxEnergy ?? character?.stats.maxEnergy ?? 30}</small></b></div>)}<p className="hint">Каждая удалённая фишка даёт +1 энергии своей стихии. Энергия расходуется на навыки.</p></section>
+        </aside>
+        {screen === 'skills' ? <SkillTree character={character} content={content} busy={busy} onLearn={learn}/> : !battle ? <div className="main-column"><section className="panel create-room"><div className="section-label">02 / НАЧНИ НОВОЕ СРАЖЕНИЕ</div><h2>Собери свою тактику</h2><div className="mode-tabs">{(['duel', 'team', 'dungeon'] as const).map(k => <button className={kind === k ? 'chosen' : ''} onClick={() => setKind(k)} key={k}><span>{k === 'duel' ? '⚔' : k === 'team' ? '⚑' : '⬡'}</span>{kindNames[k]}<small>{k === 'duel' ? '1 на 1' : k === 'team' ? 'до 3 на 3' : '1–3 игрока · 3 волны'}</small></button>)}</div><div className="form-grid"><label>Название комнаты<input value={roomName} onChange={e => setRoomName(e.target.value)} maxLength={48}/></label><label>Правила применения навыков<select value={rule} onChange={e => setRule(e.target.value as Rule)}>{Object.entries(ruleNames).map(([key, text]) => <option key={key} value={key}>{text}</option>)}</select></label></div><p className="rule-note">{rule === 'before' ? 'Один навык до перестановки. Собранные фишки наносят урон, затем ход переходит сопернику.' : rule === 'before-after' ? 'Один навык за ход: до или после перестановки. Урон от фишек — сразу. Заверши ход кнопкой.' : 'Сначала собери фишки, затем обязательно выбери навык. Количество фишек усиливает его действие.'}</p><button className="primary" disabled={!character || busy || roomName.trim().length < 2} onClick={() => void perform(async () => { const b = await api<Battle>('/battles', { name: roomName, characterId, kind, rule }); openRoom(b.id); await refresh(); })}>Создать комнату <span>↗</span></button></section>
+          <section className="panel rooms"><div className="section-label">03 / ОБЩЕЕ ЛОББИ</div><div className="section-heading"><h2>Комнаты сражений</h2><button className="ghost" onClick={() => void refresh()}>Обновить ↻</button></div>{rooms.length === 0 ? <div className="empty"><span>⚑</span><h3>Первый ход за тобой</h3><p>Создай комнату и пригласи соперника.<br/>Или отправляйся в подземелье один.</p></div> : rooms.map(r => <button className="room-row" key={r.id} onClick={() => openRoom(r.id)}><span className="room-symbol">{r.kind === 'dungeon' ? '⬡' : '⚔'}</span><span><strong>{r.name}</strong><small>{kindNames[r.kind]} · {ruleNames[r.rule]} · {r.fighters.filter(f => !f.npc).length} игроков</small></span><span className={`status ${r.status}`}>{r.status === 'waiting' ? 'Ожидание' : r.status === 'active' ? 'В бою' : 'Завершён'}</span><span>↗</span></button>)}</section>
+        </div> : <div className="main-column">
+          <section className="panel battle-top"><div className="section-heading"><div><div className="section-label">БОЕВОЙ ИНСТАНС · ХОД {battle.turn || '—'}</div><h2>{battle.status === 'waiting' ? 'Сбор участников' : battle.status === 'finished' ? `Победа команды ${(battle.winner ?? 0) + 1}` : myTurn ? 'Твой ход' : `Ход: ${active?.name}`}</h2></div><button className="ghost" onClick={() => void perform(async () => { await navigator.clipboard.writeText(location.href); })}>Скопировать приглашение ↗</button></div>
+            <BattleRewards battle={battle} characterId={characterId}/><div className="fighters">{battle.fighters.map(f => <button key={f.id} onClick={() => { if (f.team !== me?.team && f.hp > 0) setTargetId(f.id); }} className={`fighter ${f.id === battle.activeId ? 'acting' : ''} ${f.id === targetId ? 'target' : ''} ${f.hp === 0 ? 'dead' : ''}`}><div><span>{f.npc ? '⬡' : '◈'} {f.name}</span><small>Команда {f.team + 1}{f.id === me?.id ? ' · ты' : ''}{f.id === targetId ? ' · цель' : ''}</small></div><b>{f.hp}<small> / {f.stats.maxHp}</small></b><div className="hp-track"><i style={{ width: `${100 * f.hp / f.stats.maxHp}%` }}/></div></button>)}</div>
+            {battle.status === 'waiting' && <div className="lobby-actions">{!me ? <>{[0, 1].filter(t => battle.kind !== 'dungeon' || t === 0).map(team => <button key={team} disabled={!character || busy} onClick={() => void perform(async () => updateBattle(await api<Battle>(`/battles/${battle.id}/join`, { characterId, team })))}>Вступить в команду {team + 1}</button>)}</> : <button className="primary" disabled={busy} onClick={() => void perform(async () => updateBattle(await api<Battle>(`/battles/${battle.id}/start`, { characterId, version: battle.version })))}>Начать бой →</button>}<p className="hint">{battle.kind === 'dungeon' ? 'Можно играть одному или пригласить ещё двух героев.' : 'Другой игрок открывает приглашение и выбирает своего персонажа.'}</p></div>}
+          </section>
+          <div className="combat-grid"><section className="panel board-panel"><div className="section-heading"><div className="section-label">ПОЛЕ СТИХИЙ · 8 × 8</div><span className="turn-badge">{battle.status === 'active' ? battle.phase === 'choose' ? 'Выбери навык' : battle.phase === 'after' ? 'Заверши ход' : 'Собери три в ряд' : 'Общее поле'}</span></div><div className={`board ${!myTurn || battle.phase !== 'before' ? 'inactive' : ''}`} aria-label="Игровое поле">{battle.board.flatMap((row, r) => row.map((e, c) => <button key={`${r}-${c}`} className={`tile ${e} ${selected?.row === r && selected?.col === c ? 'selected' : ''}`} aria-label={`${elementNames[e]}, строка ${r + 1}, столбец ${c + 1}`} aria-pressed={selected?.row === r && selected?.col === c} disabled={!myTurn || busy || battle.phase !== 'before'} onClick={() => tileClick(r, c)}><span>{symbols[e]}</span></button>))}</div><p className="hint board-help">Нажми две соседние фишки. Линии от трёх и каскады заполняют энергию.</p></section>
+            <section className="panel skill-panel"><div className="section-label">АРСЕНАЛ</div><h2>Навыки</h2><p className="hint">{battle.rule === 'on-match' ? `Усиление от фишек: +${battle.pendingMatch * battle.content.balance.damagePerTile}` : 'Один навык или зелье за ход.'}</p>{me && <label className="heal-target">Цель лечения<select value={healTarget} onChange={e => setAllyId(e.target.value)}>{battle.fighters.filter(f => f.hp > 0 && f.team === me.team).map(f => <option key={f.id} value={f.id}>{f.name}{f.id === me.id ? ' (ты)' : ''}</option>)}</select></label>}{skills.filter(s => !me || me.skillIds.includes(s.id)).map(s => { const cd = me?.cooldowns[s.id] ?? 0; const enabled = myTurn && !battle.usedSkill && (battle.rule !== 'on-match' || battle.phase === 'choose') && (me?.energy[s.element] ?? 0) >= s.cost && cd === 0; return <button key={s.id} title={s.description} className="skill" disabled={!enabled || busy} onClick={() => void command({ type: 'skill', skillId: s.id, targetId: s.effect === 'heal' ? healTarget! : targetId })}><span className={`element-icon ${s.element}`}>{symbols[s.element]}</span><span><strong>{s.name}</strong><small>{s.effect === 'heal' ? 'Лечение себя' : 'Урон по цели'} · сила {s.power}{cd > 0 ? ` · КД ${cd}` : ''}</small></span><b>{s.cost}</b></button>; })}{me && <button className="ghost potion" disabled={!myTurn || busy || battle.usedSkill || battle.phase !== 'before' || battle.rule === 'on-match' || me.hp === me.stats.maxHp || !me.inventory.some(i => i.itemId === 'potion' && i.quantity > 0)} onClick={() => void command({ type: 'item', itemId: 'potion' })}>✚ Выпить зелье · +35 HP</button>}<button className="primary end-turn" disabled={!myTurn || busy || battle.phase !== 'after'} onClick={() => void command({ type: 'end' })}>Завершить ход →</button></section></div>
+          <section className="panel journal"><div className="section-label">ЖУРНАЛ БОЯ</div>{[...battle.log].reverse().slice(0, 30).map((line, index) => <div key={`${battle.log.length}-${index}`}><span>{String(battle.log.length - index).padStart(2, '0')}</span>{line}</div>)}</section>
+        </div>}
+      </div><footer><span>СТИХИИ / ТАКТИЧЕСКАЯ АРЕНА</span><span>Состояние боя рассчитывает сервер · Без авторизации</span></footer>
+    </main>
+  </div>;
+}
+createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);

@@ -1,0 +1,11 @@
+{
+  "name": "elemental-tactics", "private": true, "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @game/server --filter @game/web dev",
+    "start": "docker compose up --build",
+    "infra": "docker compose up -d postgres mongo",
+    "build": "pnpm -r build", "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": { "typescript": "~5.7.3", "@types/node": "^22.10.0" }
+}

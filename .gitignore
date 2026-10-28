@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.corepack/
+.corepack-bin/
+.pnpm-store/
+*.log
+coverage/
+.local/
