@@ -78,7 +78,7 @@ export const contentSchema = z.object({
 export const rules = ['before', 'before-after', 'on-match'] as const;
 export type Rule = typeof rules[number];
 export type BattleKind = 'duel' | 'bot' | 'team' | 'dungeon';
-export interface Fighter { id: string; characterId?: string; name: string; team: number; npc: boolean; stats: Stats; hp: number; energy: Energy; inventory: ItemStack[]; cooldowns: Record<string, number>; skillIds: string[]; skillLevels?: Record<string, number>; guardDefense?: number }
+export interface Fighter { id: string; characterId?: string; name: string; team: number; npc: boolean; stats: Stats; hp: number; energy: Energy; skillEnergy?: number; inventory: ItemStack[]; cooldowns: Record<string, number>; skillIds: string[]; skillLevels?: Record<string, number>; guardDefense?: number }
 export type Board = TileType[][];
 export interface SkillChoice { skillId: string; enabled: boolean; reason?: string }
 export interface Battle {
@@ -88,7 +88,10 @@ export interface Battle {
   phase: 'before' | 'after' | 'choose'; usedSkill: boolean; pendingMatch: number;
   wave: number; totalWaves: number; winner: number | null; log: string[]; content: Content; createdAt: string;
   rewards?: { characterId: string; experience: number; levelsGained: number }[];
+  playback?: BattleFrame[];
 }
+/** Committed presentation checkpoints; never accepted as commands from the client. */
+export type BattleFrame = Pick<Battle, 'board' | 'fighters' | 'activeId' | 'turn' | 'phase' | 'status' | 'usedSkill' | 'pendingMatch' | 'matchedElements' | 'skillChoices' | 'boardMoves' | 'log' | 'wave' | 'winner'>;
 export const createCharacterSchema = z.object({ name: z.string().trim().min(2).max(24), templateId: contentId.optional() }).strict();
 export const battlefieldOptionsSchema = z.object({
   size: z.union([z.number().int(), z.object({ rows: z.number().int(), cols: z.number().int() }).strict()]).optional(),

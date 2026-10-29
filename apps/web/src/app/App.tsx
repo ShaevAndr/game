@@ -26,7 +26,7 @@ export function App() {
   const [content, setContent] = useState<Content | null>(null);
   const [error, setError] = useState('');
   const { rooms, refreshRooms } = useRooms(screen === 'arena' && !roomId, setError);
-  const { battle, connected, updateBattle, refreshBattle } = useBattle(roomId, setError);
+  const { battle, connected, updateBattle, refreshBattle, animating, fieldMotion } = useBattle(roomId, setError);
   const recover = useCallback(async () => {
     await Promise.allSettled([refreshCharacters(), refreshBattle(), refreshRooms()]);
   }, [refreshCharacters, refreshBattle, refreshRooms]);
@@ -79,7 +79,7 @@ export function App() {
         {screen === 'inventory' ? <InventoryPage key={characterId} ownerId={characterId} characters={characters} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters}/> : screen === 'skills' ? <SkillTree character={character} content={content} busy={busy}
           onUpgrade={(skillId, level) => void perform(async () => updateCharacter(await skillsApi.upgrade(characterId, skillId, level)))}
           onLearn={skillId => void perform(async () => updateCharacter(await skillsApi.learn(characterId, skillId)))}/>
-          : roomId ? battle ? <BattleScreen key={battle.id} battle={battle} characterId={characterId} hasCharacter={!!character} busy={busy}
+          : roomId ? battle ? <BattleScreen key={battle.id} battle={battle} characterId={characterId} hasCharacter={!!character} busy={busy || animating} animating={animating} fieldMotion={fieldMotion}
             onCommand={action => void perform(async () => updateBattle(await battlesApi.command(battle.id, characterId, battle.version, action)))}
             onJoin={team => void perform(async () => updateBattle(await battlesApi.join(battle.id, characterId, team)))}
             onStart={() => void perform(async () => updateBattle(await battlesApi.start(battle.id, characterId, battle.version)))}

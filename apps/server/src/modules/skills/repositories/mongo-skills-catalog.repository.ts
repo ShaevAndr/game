@@ -13,6 +13,7 @@ export class MongoSkillsCatalogRepository extends SkillsCatalogRepository implem
       await collection.updateOne({ id: value.id }, { $setOnInsert: value }, { upsert: true });
     }
     await collection.updateOne({ id: 'strike', cost: 0 }, { $set: { cost: 3, description: seedContent.skills.find(skill => skill.id === 'strike')!.description } });
+    await collection.updateOne({ id: 'strike', description: 'Базовая атака за 3 физической энергии. Известна всем персонажам.' }, { $set: { description: seedContent.skills.find(skill => skill.id === 'strike')!.description } });
     for (const skill of seedContent.skills) {
       await collection.updateOne({ id: skill.id, learning: { $exists: false } }, { $set: { learning: skill.learning } });
     }

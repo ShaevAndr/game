@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Battle } from '@game/core';
 import { io } from 'socket.io-client';
 import { battlesApi } from '../api/battles.api';
+import { useBattlePlayback } from './useBattlePlayback';
 
 /** REST loads and recovers snapshots. The socket exists only while viewing a battle. */
 export function useBattle(roomId: string, onError: (message: string) => void) {
@@ -64,5 +65,6 @@ export function useBattle(roomId: string, onError: (message: string) => void) {
     };
   }, [roomId, onError, updateBattle]);
 
-  return { battle: snapshot?.id === roomId ? snapshot : null, connected, updateBattle, refreshBattle };
+  const playback = useBattlePlayback(snapshot?.id === roomId ? snapshot : null);
+  return { ...playback, connected, updateBattle, refreshBattle };
 }

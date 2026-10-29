@@ -47,6 +47,10 @@ test('direct removal and regeneration cascades return independently counted type
   assert.deepEqual(result.total, { count: 6, byType: { A: 3, B: 3, C: 0 } });
   assert.deepEqual(result.board, [['A', 'C', 'A'], ['B', 'C', 'B'], ['C', 'B', 'C']]);
   assert.equal(result.cascades, 1); assert.equal(result.steps.length, 2); assert.equal(result.shuffled, false);
+  assert.deepEqual(result.steps[0].cells, [{ row: 2, col: 0 }, { row: 2, col: 1 }, { row: 2, col: 2 }]);
+  assert.deepEqual(result.steps[0].boardAfter, [['B', 'B', 'B'], ['B', 'C', 'B'], ['C', 'B', 'C']]);
+  assert.deepEqual(result.steps[1].cells, [{ row: 0, col: 0 }, { row: 0, col: 1 }, { row: 0, col: 2 }]);
+  assert.deepEqual(result.steps[1].boardAfter, result.board);
   assert.deepEqual(original, before);
 });
 

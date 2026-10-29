@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { Battle, applyAction, characterFighter, commandSchema, createBattleSchema, elements, joinBattle, joinBattleSchema, newBattle, runNpcTurns, startBattle } from '@game/core';
+import { Battle, BattleFrame, applyAction, characterFighter, commandSchema, createBattleSchema, elements, joinBattle, joinBattleSchema, newBattle, runNpcTurns, startBattle } from '@game/core';
 import { z } from 'zod';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
 import { CharactersService } from '../../characters/application/characters.service';
@@ -54,8 +54,18 @@ export class BattlesService {
       const state = row.battle;
       const wasFinished = state.status === 'finished';
       state.boardMoves = [];
+      state.playback = [];
+      const frames: BattleFrame[] = [];
+      let recordedMoves = 0;
+      const checkpoint = () => {
+        const { board, fighters, activeId, turn, phase, status, usedSkill, pendingMatch, matchedElements, skillChoices, boardMoves, log, wave, winner } = state;
+        frames.push(structuredClone({ board, fighters, activeId, turn, phase, status, usedSkill, pendingMatch, matchedElements, skillChoices, boardMoves: boardMoves?.slice(recordedMoves), log, wave, winner }));
+        recordedMoves = boardMoves?.length ?? 0;
+      };
       await change(state, context);
-      domainAction(() => runNpcTurns(state, this.battlefield));
+      if (state.combatVersion === 2) checkpoint();
+      domainAction(() => runNpcTurns(state, this.battlefield, checkpoint));
+      state.playback = frames;
       const finished = !wasFinished && state.status === 'finished';
       if (finished) await this.rewards.award(state, await this.content.get(), context);
       state.version = row.version + 1;

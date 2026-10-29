@@ -15,6 +15,6 @@ export function applyAction(battle: Battle, actorId: string, action: Action, ran
     ? applyMatchedAction(battle, actorId, action, random, fieldEngine)
     : applyLegacyAction(battle, actorId, action, random, fieldEngine);
 }
-export function runNpcTurns(battle: Battle, fieldEngine: BattlefieldEngine = defaultBattlefieldEngine) {
-  return battle.combatVersion === 2 ? runMatchedNpcTurns(battle, fieldEngine) : runLegacyNpcTurns(battle, fieldEngine);
+export function runNpcTurns(battle: Battle, fieldEngine: BattlefieldEngine = defaultBattlefieldEngine, onAction?: () => void) {
+  return battle.combatVersion === 2 ? runMatchedNpcTurns(battle, fieldEngine, onAction) : runLegacyNpcTurns(battle, fieldEngine);
 }

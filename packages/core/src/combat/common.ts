@@ -1,12 +1,12 @@
 import { Battle, Character, Content, Fighter, emptyEnergy, tileTypes } from '../types';
 import { effectiveStats } from '../skills';
-import { ENERGY_CAP } from './rules';
+import { ENERGY_CAP, totalEnergy } from './rules';
 
 export function characterFighter(character: Character, team: number, content: Content): Fighter {
   const stats = effectiveStats(character); stats.maxEnergy = Math.min(ENERGY_CAP, stats.maxEnergy);
   const energy = emptyEnergy();
   for (const type of tileTypes) energy[type] = Math.min(ENERGY_CAP, Math.max(0, character.energy[type] ?? 0));
-  return { id: character.id, characterId: character.id, name: character.name, team, npc: false, stats, hp: stats.maxHp, energy, guardDefense: 0, inventory: structuredClone(character.inventory), cooldowns: {}, skillLevels: { ...character.skillLevels }, skillIds: content.skills.filter(s => character.learnedSkillIds.includes(s.id) || s.learning?.starter).map(s => s.id) };
+  return { id: character.id, characterId: character.id, name: character.name, team, npc: false, stats, hp: stats.maxHp, energy, skillEnergy: totalEnergy(energy), guardDefense: 0, inventory: structuredClone(character.inventory), cooldowns: {}, skillLevels: { ...character.skillLevels }, skillIds: content.skills.filter(s => character.learnedSkillIds.includes(s.id) || s.learning?.starter).map(s => s.id) };
 }
 export function addLog(battle: Battle, message: string) { battle.log.push(message); battle.log = battle.log.slice(-100); }
 export function spawnWave(b: Battle) {
@@ -15,7 +15,7 @@ export function spawnWave(b: Battle) {
   const enemy = enemies.find(e => e.id === b.content.balance.dungeonWaves[b.wave - 1]);
   if (!enemy) throw new Error('Не настроен противник для волны');
   b.fighters = b.fighters.filter(f => !f.npc);
-  b.fighters.push({ id: `npc-${b.wave}`, name: enemy.name, npc: true, team: 1, stats: { ...enemy.stats, ...(b.combatVersion === 2 ? { maxEnergy: ENERGY_CAP } : {}) }, hp: enemy.stats.maxHp, energy: emptyEnergy(), guardDefense: 0, inventory: [], cooldowns: {}, skillIds: [...enemy.skillIds] });
+  b.fighters.push({ id: `npc-${b.wave}`, name: enemy.name, npc: true, team: 1, stats: { ...enemy.stats, ...(b.combatVersion === 2 ? { maxEnergy: ENERGY_CAP } : {}) }, hp: enemy.stats.maxHp, energy: emptyEnergy(), skillEnergy: 0, guardDefense: 0, inventory: [], cooldowns: {}, skillIds: [...enemy.skillIds] });
   addLog(b, `Волна ${b.wave}/${b.totalWaves}: ${enemy.name}`);
 }
 export function joinBattle(b: Battle, character: Character, team: number) {
@@ -32,7 +32,7 @@ export function startBattle(b: Battle) {
   if (b.kind === 'bot') {
     if (b.fighters.length !== 1 || b.fighters[0].npc || b.fighters[0].team !== 0) throw new Error('Для боя с ботом нужен один игрок');
     const hero = b.fighters[0];
-    b.fighters.push({ id: 'bot-opponent', name: `Бот: ${hero.name}`, team: 1, npc: true, stats: { ...hero.stats }, hp: hero.stats.maxHp, energy: emptyEnergy(), guardDefense: 0, inventory: [], cooldowns: {}, skillIds: [...hero.skillIds], skillLevels: { ...hero.skillLevels } });
+    b.fighters.push({ id: 'bot-opponent', name: `Бот: ${hero.name}`, team: 1, npc: true, stats: { ...hero.stats }, hp: hero.stats.maxHp, energy: emptyEnergy(), skillEnergy: 0, guardDefense: 0, inventory: [], cooldowns: {}, skillIds: [...hero.skillIds], skillLevels: { ...hero.skillLevels } });
     addLog(b, 'Бот готов: характеристики и навыки соответствуют вашему герою.');
   }
   if (b.kind === 'dungeon') spawnWave(b);

@@ -14,7 +14,11 @@ export interface BattlefieldOptions<T extends string = BattlefieldElement> {
 export interface BattlefieldConfig<T extends string = BattlefieldElement> { size: FieldSize; elementTypes: T[] }
 export interface Battlefield<T extends string = BattlefieldElement> { board: T[][]; config: BattlefieldConfig<T> }
 export interface RemovedElements<T extends string = BattlefieldElement> { count: number; byType: Partial<Record<T, number>> }
-export interface RemovalStep<T extends string = BattlefieldElement> { source: 'direct' | 'generated'; removed: RemovedElements<T> }
+export interface RemovalStep<T extends string = BattlefieldElement> {
+  source: 'direct' | 'generated'; removed: RemovedElements<T>;
+  /** Exact server result for animation; optional for pre-existing reports. */
+  cells?: Cell[]; boardAfter?: T[][];
+}
 export interface BattlefieldMoveReport<T extends string = BattlefieldElement> {
   direct: RemovedElements<T>;
   generated: RemovedElements<T>;

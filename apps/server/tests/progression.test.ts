@@ -223,6 +223,27 @@ test('matched combat only rewards the finishing skill and rejects its duplicate 
   assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
   const finished = f.state().battles[battleId].data;
   assert.equal(finished.status, 'finished'); assert.deepEqual(finished.boardMoves, []);
-  assert.equal(finished.fighters[0].energy.physical, moved.fighters[0].energy.physical - 3);
+  assert.equal(finished.fighters[0].skillEnergy, moved.fighters[0].skillEnergy! - 3);
   assert.equal(f.state().receipts.length, 1); assert.deepEqual(f.state().outbox[battleId], finished);
+});
+
+test('committed playback preserves player, bot swap and bot skill checkpoints for REST recovery', async () => {
+  const f = fixture('bot', { size: { rows: 6, cols: 10 }, elementTypes: ['physical', 'water', 'defense'] });
+  const state = f.state().battles[battleId].data;
+  state.combatVersion = 2; state.rule = 'on-match'; state.content = structuredClone(seedContent);
+  for (const fighter of state.fighters) { fighter.stats.attack = 8; fighter.stats.maxHp = 100000; fighter.hp = 100000; }
+  state.board = Array.from({ length: 6 }, (_, row) => Array.from({ length: 10 }, (_, col) => (row + col) % 2 ? 'water' : 'physical'));
+  const moved = await f.service.command(battleId, { characterId: winnerId, version: 0, action: { type: 'swap', from: { row: 1, col: 8 }, to: { row: 1, col: 9 } } });
+  assert.equal(moved.playback?.length, 1);
+  assert.equal(moved.playback[0].activeId, winnerId);
+  assert.equal(moved.playback[0].phase, 'choose');
+  const next = await f.service.command(battleId, { characterId: winnerId, version: moved.version, action: { type: 'end' } });
+  assert.equal(next.playback?.[0].activeId, 'bot-opponent');
+  assert.equal(next.playback?.[0].phase, 'before');
+  assert.ok(next.playback!.length >= 2);
+  assert.equal(next.playback!.at(-1)!.activeId, winnerId);
+  assert.equal(next.playback!.at(-1)!.phase, 'before');
+  assert.deepEqual(f.state().battles[battleId].data.playback, next.playback);
+  assert.deepEqual(next.playback!.at(-1)!.board, next.board);
+  assert.ok(next.boardMoves!.every(report => report.steps.every(step => step.cells?.length === step.removed.count && step.boardAfter)));
 });

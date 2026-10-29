@@ -38,12 +38,12 @@ export function moveBattlefield<T extends string = BattlefieldElement>(field: Ba
     const source = steps.length === 0 ? 'direct' : 'generated';
     addCounts(source === 'direct' ? direct : generated, removed);
     addCounts(total, removed);
-    steps.push({ source, removed });
     for (let col = 0; col < size.cols; col++) {
       const remaining = board.map(row => row[col]).filter((_, row) => !removedCells.has(row * size.cols + col));
       while (remaining.length < size.rows) remaining.unshift(config.elementTypes[randomIndex(config.elementTypes.length, random)]);
       for (let row = 0; row < size.rows; row++) board[row][col] = remaining[row];
     }
+    steps.push({ source, removed, cells: cells.map(cell => ({ ...cell })), boardAfter: board.map(row => [...row]) });
     cells = findBattlefieldMatches(board);
   }
   if (!regeneration && !findBattlefieldMove(board)) regeneration = 'no-moves';

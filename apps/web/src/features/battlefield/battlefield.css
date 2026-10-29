@@ -3,3 +3,5 @@
 @media(max-width:720px){.tile>span{font-size:26px}.board{gap:5px}.board-panel{padding:14px}}
 
 .defense{color:#dcecff;background:#344257}.guard-status{color:#c6ddff!important}
+.board{display:block;overflow:hidden}.board-surface{position:relative;overflow:hidden;width:100%}.board-surface .tile{position:absolute;aspect-ratio:auto;will-change:transform,opacity}.board-surface .tile.selected{transform:none;outline:2px solid #edffd0;outline-offset:-2px}.board-surface .tile:hover:not(:disabled){transform:none}
+@media(prefers-reduced-motion:reduce){.tile.removing{opacity:0}.hp-track i{transition:none}}

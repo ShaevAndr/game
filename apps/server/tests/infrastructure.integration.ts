@@ -142,10 +142,13 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.equal(moved.board.length, 6);
     assert.ok(moved.board.every(row => row.length === 10));
     assert.deepEqual((await request<Battle>(`/battles/${room.id}`)).boardMoves, moved.boardMoves);
+    assert.deepEqual((await request<Battle>(`/battles/${room.id}`)).playback, moved.playback);
+    assert.equal(moved.playback?.[0].phase, 'choose');
+    assert.ok(move.steps.every(step => step.cells?.length === step.removed.count && step.boardAfter?.length === 6));
     await request(`/battles/${room.id}/actions`, { characterId: character.id, version: started.version, action }, 409);
     const result = await request<Battle>(`/battles/${room.id}/actions`, { characterId: character.id, version: moved.version, action: { type: 'skill', skillId: 'strike', targetId: 'bot-opponent' } });
     assert.equal(result.status, 'finished');
-    assert.equal(result.fighters[0].energy.physical, moved.fighters[0].energy.physical - 3);
+    assert.equal(result.fighters[0].skillEnergy, moved.fighters[0].skillEnergy! - 3);
     assert.equal((await request<Character>(`/characters/${character.id}`)).level, 2);
     assert.equal((await database.sql.selectFrom('battle_rewards').selectAll().execute()).length, 1);
     await eventually(async () => snapshots.some(value => value.id === room.id && value.version === result.version));
