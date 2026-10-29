@@ -61,9 +61,9 @@ export function App() {
     <main>
       <div className="page-heading"><div><div className="eyebrow">СОБИРАЙ. НАПОЛНЯЙ. ПОБЕЖДАЙ.</div><h1>{heading}</h1><p>{description}</p></div>{roomId && <button className="ghost" onClick={() => openRoom('')}>← Все комнаты</button>}</div>
       {error && <div className="error" role="alert">{error}<button onClick={() => setError('')} aria-label="Закрыть ошибку">×</button></div>}
-      <div className="layout">
+      <div className={`layout${screen === 'inventory' ? ' inventory-layout' : ''}`}>
         <aside className="sidebar">
-          <CharacterPanel characters={characters} characterId={characterId} character={character} content={content} fighter={fighter} busy={busy} onChoose={chooseCharacter} onSkills={openSkills} onInventory={() => { setError(''); navigation.openInventory(); }}
+          <CharacterPanel compact={screen === 'inventory'} characters={characters} characterId={characterId} character={character} content={content} fighter={fighter} busy={busy} onChoose={chooseCharacter} onSkills={openSkills} onInventory={() => { setError(''); navigation.openInventory(); }}
             onCreate={async (name, templateId) => {
               let created = false;
               await perform(async () => {
@@ -74,7 +74,7 @@ export function App() {
               });
               return created;
             }}/>
-          <EnergyPanel character={character} fighter={fighter} legacy={!!battle && battle.combatVersion !== 2}/>
+          {screen !== 'inventory' && <EnergyPanel character={character} fighter={fighter} legacy={!!battle && battle.combatVersion !== 2}/>}
         </aside>
         {screen === 'inventory' ? <InventoryPage key={characterId} ownerId={characterId} characters={characters} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters}/> : screen === 'skills' ? <SkillTree character={character} content={content} busy={busy}
           onUpgrade={(skillId, level) => void perform(async () => updateCharacter(await skillsApi.upgrade(characterId, skillId, level)))}

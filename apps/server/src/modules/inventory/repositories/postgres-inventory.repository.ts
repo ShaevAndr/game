@@ -58,7 +58,9 @@ export class PostgresInventoryRepository extends InventoryRepository {
       await tx.insertInto('inventories').values({ id: inventory.id, owner_id: inventory.ownerId, name: inventory.name, capacity: inventory.capacity, is_primary: inventory.primary })
         .onConflict(conflict => conflict.column('id').doUpdateSet({ name: inventory.name, capacity: inventory.capacity })).execute();
     }
-    for (const item of items) {
+    // Release previous equipment slots before filling them: the unique index is immediate.
+    const ordered = [...items].sort((left, right) => Number(!!left.equippedSlot) - Number(!!right.equippedSlot));
+    for (const item of ordered) {
       const row = { id: item.id, owner_id: item.ownerId, inventory_id: item.inventoryId, item_id: item.itemId, quantity: item.quantity, equipped_slot: item.equippedSlot };
       await tx.insertInto('item_instances').values(row).onConflict(conflict => conflict.column('id').doUpdateSet(row)).execute();
     }

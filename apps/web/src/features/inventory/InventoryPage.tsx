@@ -10,7 +10,7 @@ export function InventoryPage({ ownerId, characters, busy, onError, run, onChang
   const current = useInventory(ownerId, onError);
   const target = useInventory(recipientId === ownerId ? '' : recipientId, onError);
   if (!ownerId) return <section className="panel"><h2>Инвентарь</h2><p>Выберите персонажа.</p></section>;
-  if (!current.view) return <section className="panel" role="status">Загрузка инвентарей…</section>;
+  if (!current.view) return <section className="panel" role="status">Загрузка инвентаря…</section>;
   return <InventoryScreen view={current.view} characters={characters} recipientId={recipientId} onRecipient={setRecipientId}
     destinations={recipientId === ownerId ? current.view.inventories : target.view?.inventories ?? []} busy={busy}
     onExecute={command => void run(() => current.execute(command, async () => { await target.refresh(); await onChanged(); }))}

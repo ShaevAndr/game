@@ -1,7 +1,7 @@
 import { newLegacyBattle as newBattle } from './helpers/legacy';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { InventoryCommand, InventoryState, applyAction, applyInventoryCommand, characterFighter, contentSchema, createCharacter, defaultItemGroups, effectiveStats, equipmentBonuses, grantSkill, normalizeCharacter, seedContent, skillLevel, skillPower, startBattle, upgradeSkill } from '../src';
+import { InventoryCommand, InventoryState, applyAction, applyInventoryCommand, availableItemActions, backpackStacks, characterFighter, contentSchema, createCharacter, defaultItemGroups, effectiveStats, equipmentBonuses, grantSkill, normalizeCharacter, seedContent, skillLevel, skillPower, startBattle, upgradeSkill } from '../src';
 
 function hero() { return createCharacter('hero', 'Герой', seedContent); }
 function inventories(): InventoryState[] {
@@ -105,6 +105,38 @@ test('equipped items grant bonuses and must be unequipped before moving or destr
   assert.throws(() => apply(equipped.states, { type: 'transfer', instanceId: 'sword', targetInventoryId: 'chest', quantity: 1 }), /снимите/);
   const unequipped = apply(equipped.states, { type: 'unequip', instanceId: 'sword' });
   assert.deepEqual(equipmentBonuses(unequipped.states[0], seedContent.items), {});
+});
+
+test('equipping frees a backpack cell; a full bag blocks unequip until a cell is freed', () => {
+  const state = inventories();
+  state[0].inventories[0].capacity = 3;
+  const equipped = apply(state, { type: 'equip', instanceId: 'sword' }).states;
+  assert.ok(!backpackStacks(equipped[0]).some(stack => stack.itemId === 'iron-sword'));
+  const filled = apply(equipped, { type: 'receive', ownerId: 'a', itemId: 'potion', quantity: 1 }).states;
+  const sword = filled[0].items.find(item => item.id === 'sword')!;
+  const action = availableItemActions(sword, filled[0], seedContent.items.find(item => item.id === sword.itemId)!, defaultItemGroups).find(action => action.id === 'unequip')!;
+  assert.equal(action.enabled, false);
+  assert.match(action.reason!, /место в рюкзаке/);
+  const before = structuredClone(filled);
+  assert.throws(() => apply(filled, { type: 'unequip', instanceId: 'sword' }), /заполнен/);
+  assert.deepEqual(filled, before);
+  const freed = apply(filled, { type: 'delete', instanceId: 'ore', quantity: 8 }).states;
+  const unequipped = apply(freed, { type: 'unequip', instanceId: 'sword' }).states;
+  assert.ok(backpackStacks(unequipped[0]).some(stack => stack.itemId === 'iron-sword'));
+});
+
+test('equipment replacement in a full backpack is atomic and preserves both item identities', () => {
+  const state = apply(inventories(), { type: 'equip', instanceId: 'sword' }).states;
+  state[0].items.push({ id: 'second-sword', ownerId: 'a', inventoryId: 'bag-a', itemId: 'iron-sword', quantity: 1, equippedSlot: null });
+  state[0].inventories[0].capacity = 3;
+  const replacement = state[0].items.find(item => item.id === 'second-sword')!;
+  assert.equal(availableItemActions(replacement, state[0], seedContent.items.find(item => item.id === replacement.itemId)!, defaultItemGroups).find(action => action.id === 'equip')?.enabled, true);
+  const changed = apply(state, { type: 'equip', instanceId: 'second-sword' });
+  assert.equal(changed.states[0].items.find(item => item.id === 'sword')?.equippedSlot, null);
+  assert.equal(changed.states[0].items.find(item => item.id === 'second-sword')?.equippedSlot, 'main-hand');
+  assert.deepEqual(new Set(changed.result.itemIds), new Set(['sword', 'second-sword']));
+  assert.deepEqual(equipmentBonuses(changed.states[0], seedContent.items), { attack: 3 });
+  assert.equal(changed.states[0].items.length, state[0].items.length);
 });
 
 test('scroll consumption emits a grant effect and unsupported item actions fail', () => {

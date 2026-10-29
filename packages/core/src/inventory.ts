@@ -21,7 +21,7 @@ function positive(value: number) {
 export function backpackStacks(state: InventoryState): ItemStack[] {
   const primary = state.inventories.find(inventory => inventory.primary);
   const totals = new Map<string, number>();
-  for (const item of state.items.filter(item => item.inventoryId === primary?.id)) totals.set(item.itemId, (totals.get(item.itemId) ?? 0) + item.quantity);
+  for (const item of state.items.filter(item => item.inventoryId === primary?.id && !item.equippedSlot)) totals.set(item.itemId, (totals.get(item.itemId) ?? 0) + item.quantity);
   return [...totals].map(([itemId, quantity]) => ({ itemId, quantity }));
 }
 export function equipmentBonuses(state: InventoryState, definitions: Item[]): Partial<Stats> {
@@ -121,7 +121,8 @@ export function applyInventoryCommand(input: InventoryState[], command: Inventor
           if (!item.equipSlot || instance.quantity !== 1) throw new Error('Предмет нельзя экипировать');
           if (instance.equippedSlot) throw new Error('Предмет уже экипирован');
           if (!state.inventories.find(inventory => inventory.id === instance.inventoryId)?.primary) throw new Error('Экипировать можно только из рюкзака');
-          if (state.items.some(other => other.equippedSlot === item.equipSlot)) throw new Error('Слот занят; сначала снимите текущий предмет');
+          const previous = state.items.find(other => other.equippedSlot === item.equipSlot);
+          if (previous) { previous.equippedSlot = null; result.itemIds.push(previous.id); }
           instance.equippedSlot = item.equipSlot; result.itemIds.push(instance.id);
         },
         unequip: () => {
@@ -144,7 +145,7 @@ export function applyInventoryCommand(input: InventoryState[], command: Inventor
   for (const state of states) {
     if (state.items.length > 5000) throw new Error('Достигнут лимит предметов владельца');
     for (const inventory of state.inventories) {
-      if (state.items.filter(item => item.inventoryId === inventory.id).length > inventory.capacity) throw new Error(`Инвентарь «${inventory.name}» заполнен`);
+      if (state.items.filter(item => item.inventoryId === inventory.id && !item.equippedSlot).length > inventory.capacity) throw new Error(`Инвентарь «${inventory.name}» заполнен`);
     }
     for (const instance of state.items) {
       positive(instance.quantity);
@@ -167,12 +168,14 @@ export function availableItemActions(instance: ItemInstance, state: InventorySta
   ];
   for (const action of groups.find(group => group.id === item.groupId)?.actions ?? []) {
     let enabled = false;
-    if (action === 'equip') enabled = primary && !equipped && !!item.equipSlot && !state.items.some(other => other.equippedSlot === item.equipSlot);
-    if (action === 'unequip') enabled = equipped;
+    if (action === 'equip') enabled = primary && !equipped && !!item.equipSlot;
+    if (action === 'unequip') enabled = equipped && state.items.filter(other => other.inventoryId === instance.inventoryId && !other.equippedSlot).length < (state.inventories.find(inventory => inventory.id === instance.inventoryId)?.capacity ?? 0);
     if (action === 'read') enabled = primary && !!item.grantedSkillId;
     if (action === 'split') enabled = !equipped && instance.quantity > 1;
     if (action === 'merge') enabled = !equipped && state.items.some(other => other.id !== instance.id && other.itemId === instance.itemId && other.inventoryId === instance.inventoryId && !other.equippedSlot && other.quantity + instance.quantity <= item.stackLimit);
-    actions.push({ id: action, label: itemActionNames[action], enabled, ...(action === 'use-in-battle' ? { reason: 'Применяется в активном бою' } : {}) });
+    actions.push({ id: action, label: itemActionNames[action], enabled,
+      ...(action === 'use-in-battle' ? { reason: 'Применяется в активном бою' } : action === 'unequip' && equipped && !enabled ? { reason: 'Освободите место в рюкзаке' } : {}),
+    });
   }
   return actions;
 }

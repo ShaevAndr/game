@@ -83,6 +83,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     await request('/battles/not-a-uuid', undefined, 400);
     const character = await request<Character>('/characters', { name: 'Интеграционный герой' });
     assert.equal(character.skillPoints, 4); assert.deepEqual(character.learnedSkillIds, ['strike']);
+    await verifyCharacterCreation(character, request, app);
     assert.equal((await request<Character>(`/characters/${character.id}`)).id, character.id);
     assert.equal((await request<object[]>(`/characters/${character.id}/inventory`)).length, 5);
     const learned = await request<Character>(`/characters/${character.id}/skills`, { skillId: 'ember' });
@@ -241,6 +242,39 @@ test('unavailable Redis does not block cache reads, enqueue retries or shutdown'
 });
 
 type TestRequest = <T>(path: string, body?: object, status?: number, method?: string) => Promise<T>;
+async function verifyCharacterCreation(character: Character, request: TestRequest, app: INestApplication) {
+  const database = app.get(Database);
+  // Inspect storage before the first inventory GET: creation must already have persisted everything.
+  const containers = await database.sql.selectFrom('inventories').selectAll().where('owner_id', '=', character.id).execute();
+  assert.equal(containers.length, 1);
+  assert.equal(containers[0].is_primary, true);
+  assert.equal(containers[0].capacity, 50);
+  const items = await database.sql.selectFrom('item_instances').selectAll().where('owner_id', '=', character.id).execute();
+  assert.ok(items.every(item => item.inventory_id === containers[0].id));
+  const totals = (rows: typeof items) => Object.fromEntries(character.inventory.map(stack => [stack.itemId, rows.filter(item => item.item_id === stack.itemId).reduce((sum, item) => sum + item.quantity, 0)]));
+  assert.deepEqual(totals(items), Object.fromEntries(character.inventory.map(stack => [stack.itemId, stack.quantity])));
+  const views = await Promise.all([0, 1].map(() => request<InventoryView>(`/characters/${character.id}/inventories`)));
+  for (const view of views) assert.deepEqual(view.items.map(item => item.id).sort(), items.map(item => item.id).sort());
+
+  const before = {
+    characters: (await database.sql.selectFrom('characters').select('id').execute()).length,
+    containers: (await database.sql.selectFrom('inventories').select('id').execute()).length,
+    items: (await database.sql.selectFrom('item_instances').select('id').execute()).length,
+  };
+  const repository = app.get(InventoryRepository), ensurePrimary = repository.ensurePrimary;
+  repository.ensurePrimary = async (...args) => {
+    await ensurePrimary.apply(repository, args);
+    throw new Error('simulated starting inventory persistence failure');
+  };
+  try { await request('/characters', { name: 'Откат создания' }, 500); }
+  finally { repository.ensurePrimary = ensurePrimary; }
+  assert.equal((await database.sql.selectFrom('characters').select('id').execute()).length, before.characters);
+  assert.equal((await database.sql.selectFrom('inventories').select('id').execute()).length, before.containers);
+  assert.equal((await database.sql.selectFrom('item_instances').select('id').execute()).length, before.items);
+  const retry = await request<Character>('/characters', { name: 'Откат создания' });
+  assert.equal((await database.sql.selectFrom('inventories').select('id').where('owner_id', '=', retry.id).execute()).length, 1);
+}
+
 async function verifyOperations(character: Character, request: TestRequest, app: INestApplication) {
   const owner = character.id;
   const view = () => request<InventoryView>(`/characters/${owner}/inventories`);
@@ -275,7 +309,6 @@ async function verifyOperations(character: Character, request: TestRequest, app:
 
   const recipient = await request<Character>('/characters', { name: 'Получатель' });
   const recipientView = () => request<InventoryView>(`/characters/${recipient.id}/inventories`);
-  await recipientView();
   await action(sword.id, { action: 'equip' });
   assert.equal((await request<Character>(`/characters/${owner}`)).equipmentBonuses?.attack, 3);
   await transfer(sword.id, recipient.id, 1, randomUUID(), 400);
@@ -340,4 +373,19 @@ async function verifyOperations(character: Character, request: TestRequest, app:
   assert.equal(ranked.skillLevels?.strike, 10); assert.equal(ranked.skillPoints, 12);
   assert.equal((await request<{ id: string; level: number }[]>(`/characters/${owner}/skills`)).find(skill => skill.id === 'strike')?.level, 10);
   await action(sword.id, { action: 'equip' });
+  const equippedCharacter = await request<Character>(`/characters/${owner}`);
+  assert.ok(!equippedCharacter.inventory.some(stack => stack.itemId === 'iron-sword'));
+  const replacement = await inventory.receive(owner, 'iron-sword', 1, randomUUID());
+  await action(replacement.itemIds[0], { action: 'equip' });
+  const replaced = await view();
+  assert.equal(replaced.items.find(item => item.id === sword.id)?.equippedSlot, null);
+  assert.equal(replaced.items.find(item => item.id === replacement.itemIds[0])?.equippedSlot, 'main-hand');
+  const afterReplacement = await request<Character>(`/characters/${owner}`);
+  assert.equal(afterReplacement.equipmentBonuses?.attack, 3);
+  assert.equal(afterReplacement.inventory.find(stack => stack.itemId === 'iron-sword')?.quantity, 1);
+  // Swap both directions so correctness cannot depend on which random UUID sorts first.
+  await action(sword.id, { action: 'equip' });
+  const switchedBack = await view();
+  assert.equal(switchedBack.items.find(item => item.id === sword.id)?.equippedSlot, 'main-hand');
+  assert.equal(switchedBack.items.find(item => item.id === replacement.itemIds[0])?.equippedSlot, null);
 }

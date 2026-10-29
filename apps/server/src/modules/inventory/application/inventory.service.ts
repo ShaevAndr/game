@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { InventoryCommand, InventoryState, ItemInstance, applyInventoryCommand, availableItemActions, backpackStacks, equipmentBonuses } from '@game/core';
+import { Content, InventoryCommand, InventoryState, ItemInstance, applyInventoryCommand, availableItemActions, backpackStacks, equipmentBonuses } from '@game/core';
 import { z } from 'zod';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
 import { CharactersService } from '../../characters/application/characters.service';
@@ -17,6 +17,12 @@ export class InventoryService {
     @Inject(ContentService) private readonly content: ContentService,
     @Inject(SkillsService) private readonly skills: SkillsService,
   ) {}
+
+  /** Creates the owner's backpack and starting items in the character creation transaction. */
+  async initialize(ownerId: string, content: Content, context: TransactionContext) {
+    const character = await this.characters.get(ownerId, content, context, true);
+    await this.repository.ensurePrimary(ownerId, character.inventory, Object.fromEntries(content.items.map(item => [item.id, item.stackLimit])), context);
+  }
 
   async get(ownerId: string) {
     const content = await this.content.get(true);

@@ -16,8 +16,8 @@ export class PostgresCharactersRepository extends CharactersRepository {
     }
     return (await query.executeTakeFirst())?.data;
   }
-  async create(character: Character) {
-    await this.db.sql.insertInto('characters').values({ id: character.id, data: JSON.stringify(character) }).execute();
+  async create(character: Character, context: TransactionContext) {
+    await this.db.session(context).insertInto('characters').values({ id: character.id, data: JSON.stringify(character) }).execute();
   }
   async save(character: Character, context: TransactionContext) {
     await this.db.session(context).updateTable('characters').set({ data: JSON.stringify(character) }).where('id', '=', character.id).execute();

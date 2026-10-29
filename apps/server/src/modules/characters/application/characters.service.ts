@@ -23,13 +23,12 @@ export class CharactersService {
     return normalizeCharacter(character, content ?? await this.content.get());
   }
 
-  async create(input: unknown) {
+  async create(input: unknown, content: Content, context: TransactionContext) {
     const { name, templateId } = createCharacterSchema.parse(input);
-    const content = await this.content.get(true);
     let character: Character;
     try { character = createCharacter(randomUUID(), name, content, templateId); }
     catch (error) { throw new BadRequestException((error as Error).message); }
-    await this.repository.create(character);
+    await this.repository.create(character, context);
     return character;
   }
 
