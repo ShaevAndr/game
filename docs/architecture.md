@@ -12,7 +12,8 @@
 | `skills` | Каталог навыков, требования и сценарии изучения, улучшения и выдачи | MongoDB `skills`; изменение персонажа через `CharactersService` |
 | `items` | Определения предметов, описание и свойства | MongoDB `items` |
 | `inventory` | Контейнеры, экземпляры, переносы, экипировка и расход свитков | PostgreSQL `inventories`, `item_instances`, `inventory_operations`; проекции персонажа через сервис characters |
-| `crafting` | Каталог рецептов, крафт по известным рецептам и слепой эксперимент | MongoDB `recipes`, PostgreSQL `crafting_operations`; имущество меняется через сервис инвентаря |
+| `effects` | Общие определения параметризованных модификаторов для навыков и допов | MongoDB `modifierDefinitions`; временные экземпляры остаются в бою |
+| `crafting` | Профессии, профили распределения рангов, каталог рецептов, крафт по известным рецептам и слепой эксперимент | MongoDB `recipes`, `professions`, `rankProfiles`; PostgreSQL `crafting_operations`; имущество меняется через сервис инвентаря |
 | `battlefield` | Генерация, совпадения, падение, заполнение и раздельная статистика прямых сокращений/каскадов | Чистый модуль; поле и конфигурация сохраняются агрегатом боя |
 | `battles` | Лобби боя, старт, команды, версии, изолированный боевой инвентарь и NPC | PostgreSQL `battles` |
 | `rewards` | Награды победителям и защита от повторного начисления | PostgreSQL `battle_rewards`; изменение персонажей через сервис characters |
@@ -235,3 +236,8 @@ AOF с настройками Redis по умолчанию не гаранти�
 Официальные справочники: [очереди NestJS](https://docs.nestjs.com/techniques/queues),
 [подключения BullMQ](https://docs.bullmq.io/guide/connections),
 [идемпотентные задачи](https://docs.bullmq.io/patterns/idempotent-jobs).
+
+Ранговый крафт сохраняет снимок ранга и допов в JSONB `item_instances.quality`
+через `InventoryService`; `characters.data.craftingProfessionXp` меняется через
+`CharactersService` в той же транзакции с материалами, предметом и квитанцией.
+`itemRanks` принадлежит `items`, общий leaf-каталог эффектов — `effects`.

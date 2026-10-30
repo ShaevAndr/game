@@ -48,7 +48,7 @@ services:
       redis: { condition: service_healthy }
   web:
     build: { context: ., target: web }
-    ports: ["${GAME_WEB_PORT:-8088}:80"]
+    ports: ["${GAME_WEB_PORT:-8089}:80"]
     depends_on: [server]
 volumes:
   postgres_data:

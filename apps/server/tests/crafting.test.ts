@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Character, CraftingResult, createCharacter, seedContent, InventoryState } from '@game/core';
+import { Character, Content, defaultItemRanks, defaultProfessions, defaultRankProfiles, defaultModifierDefinitions, defaultStatDefinitions, CraftingResult, createCharacter, seedContent, InventoryState } from '@game/core';
 import { CharactersService } from '../src/modules/characters/application/characters.service';
 import { CharactersRepository } from '../src/modules/characters/ports/characters.repository';
 import { ContentService } from '../src/modules/content/application/content.service';
@@ -13,7 +13,7 @@ import { CraftingService } from '../src/modules/crafting/application/crafting.se
 import { CraftingOperationsRepository } from '../src/modules/crafting/ports/crafting-operations.repository';
 import { TransactionContext, UnitOfWork } from '../src/shared/application/unit-of-work';
 
-function fixture(roll: (maxExclusive: number) => number = () => 0) {
+function fixture(roll: (maxExclusive: number) => number = () => 0, catalog: Content = seedContent) {
   type Draft = { characters: Record<string, Character>; states: Record<string, InventoryState>; receipts: Record<string, { signature: string; result: CraftingResult | null }> };
   let state: Draft = { characters: {}, states: {}, receipts: {} };
   const drafts = new Map<TransactionContext, Draft>();
@@ -34,12 +34,12 @@ function fixture(roll: (maxExclusive: number) => number = () => 0) {
       } finally { drafts.delete(context); }
     },
   };
-  const content = { get: async () => structuredClone(seedContent) } as ContentService;
+  const content = { get: async () => structuredClone(catalog) } as ContentService;
   const charactersRepository = {
     async create(character: Character, context: TransactionContext) { draft(context).characters[character.id] = structuredClone(character); },
-    async find(id: string, context: TransactionContext, lock: boolean) {
-      assert.equal(lock, true);
-      return structuredClone(draft(context).characters[id]);
+    async find(id: string, context?: TransactionContext, lock?: boolean) {
+      if (context) assert.equal(lock, true);
+      return structuredClone((context ? draft(context) : state).characters[id]);
     },
     async save(character: Character, context: TransactionContext) { draft(context).characters[character.id] = structuredClone(character); },
   } as unknown as CharactersRepository;
@@ -70,9 +70,9 @@ function fixture(roll: (maxExclusive: number) => number = () => 0) {
       draft(context).receipts[id] = { ...draft(context).receipts[id], result: structuredClone(result) };
     },
   } as unknown as CraftingOperationsRepository;
-  const crafting = new CraftingService(transactions, content, inventory, operations, roll);
+  const crafting = new CraftingService(transactions, content, inventory, operations, characters, roll);
   const seed = async (name: string, stacks: [string, number][]) => {
-    const character = createCharacter(randomUUID(), name, seedContent);
+    const character = createCharacter(randomUUID(), name, catalog);
     character.inventory = stacks.map(([itemId, quantity]) => ({ itemId, quantity }));
     await transactions.run(async context => { draft(context).characters[character.id] = structuredClone(character); });
     return character;
@@ -82,7 +82,7 @@ function fixture(roll: (maxExclusive: number) => number = () => 0) {
     if (inventory) return inventory.items.filter(item => item.itemId === itemId).reduce((sum, item) => sum + item.quantity, 0);
     return state.characters[ownerId]?.inventory.find(stack => stack.itemId === itemId)?.quantity ?? 0;
   };
-  return { crafting, seed, totals, character: (id: string) => state.characters[id], state: () => state };
+  return { crafting, seed, totals, character: (id: string) => state.characters[id], state: () => state, inventory, setXp: async (ownerId: string, xp: number) => { await transactions.run(context => characters.update(ownerId, catalog, value => { value.craftingProfessionXp = { blacksmith: xp }; }, context)); } };
 }
 
 test('apply crafts a known recipe atomically and refreshes the character projection', async () => {
@@ -165,4 +165,54 @@ test('blind experiment failure loses materials per the roll and replays without 
   const replay = await f.crafting.blind(hero.id, { operationId, materials: [{ itemId: 'healing-herb', quantity: 3 }, { itemId: 'iron-ore', quantity: 2 }] });
   assert.deepEqual(replay, result);
   assert.equal(f.totals(hero.id, 'healing-herb'), 0);
+});
+
+function progressionContent(): Content {
+  return { ...seedContent, statDefinitions: defaultStatDefinitions, itemRanks: defaultItemRanks, professions: defaultProfessions,
+    rankProfiles: defaultRankProfiles, modifierDefinitions: defaultModifierDefinitions,
+    recipes: [{ ...seedContent.recipes!.find(recipe => recipe.id === 'craft-iron-sword')!, professionId: 'blacksmith',
+      outputs: [{ itemId: 'iron-sword', quantity: 1, rankPolicy: { mode: 'profession', profileId: 'standard' } }] }] };
+}
+
+test('ranked craft awards XP once, replays without rerolling and catalog reflects level before next craft', async () => {
+  let rolls = 0;
+  const content = progressionContent();
+  const f = fixture(max => { rolls++; return max - 1; }, content);
+  const hero = await f.seed('Мастер', [['iron-ore', 12]]);
+  await f.setXp(hero.id, 90);
+  const before = await f.crafting.catalog(hero.id);
+  assert.equal(before.professions.find(profession => profession.id === 'blacksmith')!.level, 1);
+  const operationId = randomUUID();
+  const result = await f.crafting.apply(hero.id, 'craft-iron-sword', { operationId });
+  assert.equal(result.createdItems![0].quality!.rank.id, 'rare');
+  assert.equal(result.createdItems![0].quality!.affixes.length, 3);
+  assert.equal(f.character(hero.id).craftingProfessionXp!.blacksmith, 100);
+  const rollsAfter = rolls;
+  const replay = await f.crafting.apply(hero.id, 'craft-iron-sword', { operationId });
+  assert.deepEqual(replay, result); assert.equal(rolls, rollsAfter);
+  assert.equal(f.character(hero.id).craftingProfessionXp!.blacksmith, 100);
+  const after = await f.crafting.catalog(hero.id);
+  assert.equal(after.professions.find(profession => profession.id === 'blacksmith')!.level, 2);
+  assert.notDeepEqual(after.recipes[0].rankPreviews, before.recipes[0].rankPreviews);
+});
+
+test('fixed recipe ignores profession rank roll; persistence failure rolls back quality, XP and receipt', async () => {
+  const content = progressionContent();
+  content.recipes![0].outputs[0].rankPolicy = { mode: 'fixed', rankId: 'rare' };
+  const maxima: number[] = [];
+  const f = fixture(max => { maxima.push(max); return 0; }, content);
+  const hero = await f.seed('Кузнец', [['iron-ore', 12]]);
+  const operationId = randomUUID();
+  const commit = f.inventory.commit;
+  f.inventory.commit = async (...args) => { await commit.apply(f.inventory, args); throw new Error('save failed'); };
+  await assert.rejects(f.crafting.apply(hero.id, 'craft-iron-sword', { operationId }), /save failed/);
+  assert.equal(f.totals(hero.id, 'iron-ore'), 12); assert.equal(f.totals(hero.id, 'iron-sword'), 0);
+  assert.equal(f.character(hero.id).craftingProfessionXp?.blacksmith, undefined);
+  assert.deepEqual(f.state().receipts, {});
+  f.inventory.commit = commit;
+  await f.setXp(hero.id, 1_000_000);
+  const result = await f.crafting.apply(hero.id, 'craft-iron-sword', { operationId });
+  assert.equal(result.createdItems![0].quality!.rank.id, 'rare');
+  assert.equal(result.createdItems![0].quality!.affixes.length, 3);
+  assert.ok(!maxima.includes(10000));
 });

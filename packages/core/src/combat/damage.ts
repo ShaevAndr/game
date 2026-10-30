@@ -20,7 +20,7 @@ export function damage(b: Battle, actor: Fighter, victim: Fighter, power: number
     const bonus = critical ? actor.attributes!.effective.criticalBonusBps : 0;
     // Existing skill power is a coefficient relative to the reference power 8, never free damage.
     const reference = b.content.balance.attributes?.skillReferencePower ?? 8;
-    const amount = Math.max(1, Number(BigInt(attack) * BigInt(reference + power) * BigInt(10000 + bonus) / (BigInt(reference) * 10000n)) - defense - guard);
+    const amount = Math.max(1, Number(BigInt(attack) * BigInt(reference + power) * BigInt(10000 + bonus) / (BigInt(reference) * 10000n)) - defense - guard + (element === 'physical' ? actor.attributes?.effective.physicalDamageFlat ?? 0 : 0));
     victim.hp = Math.max(0, victim.hp - amount);
     addLog(b, `${actor.name} → ${victim.name}: ${amount} урона (${element}${critical ? ', критический' : ''})`);
     return;
@@ -35,7 +35,7 @@ export function applyResolvedDamage(battle: Battle, actor: Fighter, target: Figh
   const critical = canCrit && criticalRoll(battle) < (actor.attributes?.effective.criticalChanceBps ?? 0);
   const bonus = critical ? actor.attributes?.effective.criticalBonusBps ?? 0 : 0;
   const defense = target.attributes?.effective[element === 'physical' ? 'physicalResistance' : `${element}Resistance`] ?? target.stats.defense;
-  const amount = Math.max(1, Number(BigInt(raw) * BigInt(10000 + bonus) / 10000n) - defense - (target.guardDefense ?? 0));
+  const amount = Math.max(1, Number(BigInt(raw) * BigInt(10000 + bonus) / 10000n) - defense - (target.guardDefense ?? 0) + (element === 'physical' ? actor.attributes?.effective.physicalDamageFlat ?? 0 : 0));
   const actual = Math.min(target.hp, amount);
   target.hp = Math.max(0, target.hp - amount);
   addLog(battle, `${actor.name} → ${target.name}: ${actual} урона (${element}${critical ? ', критический' : ''})`);

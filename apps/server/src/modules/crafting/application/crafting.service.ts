@@ -1,6 +1,7 @@
+import { CharactersService } from '../../characters/application/characters.service';
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomInt, randomUUID } from 'node:crypto';
-import { applyCraftRecipe, defaultBlindCraftRules, knownRecipes, matchingCraftRecipes, resolveBlindCraft, type BlindCraftReceipt, type InventoryResult } from '@game/core';
+import { applyCraftRecipe, defaultBlindCraftRules, knownRecipes, matchingCraftRecipes, resolveBlindCraft, type BlindCraftReceipt, type InventoryResult, professionProgress, recipeProfession } from '@game/core';
 import { z } from 'zod';
 import { UnitOfWork } from '../../../shared/application/unit-of-work';
 import { ContentService } from '../../content/application/content.service';
@@ -21,12 +22,29 @@ export class CraftingService {
     @Inject(ContentService) private readonly content: ContentService,
     @Inject(InventoryService) private readonly inventory: InventoryService,
     @Inject(CraftingOperationsRepository) private readonly operations: CraftingOperationsRepository,
+    @Inject(CharactersService) private readonly characters: CharactersService,
     private readonly roll: (maxExclusive: number) => number = max => randomInt(0, max),
   ) {}
 
-  async catalog() {
+  async catalog(ownerId?: string) {
     const content = await this.content.get(true);
-    return { recipes: knownRecipes(content.recipes ?? []), blind: content.balance.crafting?.blind ?? defaultBlindCraftRules };
+    const character = ownerId ? await this.characters.get(ownerId, content) : undefined;
+    const professions = (content.professions ?? []).map(profession => ({ ...profession, ...professionProgress(character?.craftingProfessionXp?.[profession.id] ?? 0) }));
+    return {
+      recipes: knownRecipes(content.recipes ?? []).map(recipe => {
+        const profession = recipeProfession(recipe, content.items, content);
+        const progress = professions.find(entry => entry.id === profession?.id);
+        return { ...recipe, professionId: profession?.id, available: (progress?.level ?? 1) >= (recipe.requiredLevel ?? 1),
+          rankPreviews: recipe.outputs.map(output => {
+            const policy = output.rankPolicy;
+            const chances = policy?.mode === 'fixed' ? [{ rankId: policy.rankId, chanceBps: 10000 }]
+              : policy?.mode === 'profession' ? content.rankProfiles?.find(profile => profile.id === policy.profileId)?.levels.find(entry => entry.level === (progress?.level ?? 1))?.chances ?? [] : [];
+            return { itemId: output.itemId, fixed: policy?.mode === 'fixed', chances };
+          }),
+        };
+      }),
+      professions, ranks: content.itemRanks ?? [], blind: content.balance.crafting?.blind ?? defaultBlindCraftRules,
+    };
   }
 
   async apply(ownerId: string, recipeId: string, input: unknown) {
@@ -41,10 +59,13 @@ export class CraftingService {
       if (!recipe) throw new NotFoundException('Рецепт не найден');
       if (!knownRecipes(content.recipes ?? []).some(value => value.id === recipeId)) throw new BadRequestException('Рецепт неизвестен персонажу');
       const state = await this.inventory.state(ownerId, content, context);
+      const character = await this.characters.get(ownerId, content, context, true);
+      const xp = { ...character?.craftingProfessionXp };
       let applied: ReturnType<typeof applyCraftRecipe>;
-      try { applied = applyCraftRecipe(state, recipe, content.items, randomUUID); }
+      try { applied = applyCraftRecipe(state, recipe, content.items, randomUUID, { content, xp, roll: this.roll }); }
       catch (error) { throw new BadRequestException((error as Error).message); }
       await this.inventory.commit([applied.state], content, context);
+      await this.characters.update(ownerId, content, value => { value.craftingProfessionXp = xp; }, context);
       await this.operations.finishOperation(operationId, applied.result, context);
       return applied.result;
     });
@@ -62,13 +83,16 @@ export class CraftingService {
       const recipes = content.recipes ?? [];
       if (matchingCraftRecipes(materials, knownRecipes(recipes)).length) throw new BadRequestException('Этим материалам уже соответствует известный рецепт');
       const state = await this.inventory.state(ownerId, content, context);
+      const character = await this.characters.get(ownerId, content, context, true);
+      const xp = { ...character?.craftingProfessionXp };
       let outcome: ReturnType<typeof resolveBlindCraft>;
-      try { outcome = resolveBlindCraft(state, materials, recipes, content.items, content.balance.crafting?.blind ?? defaultBlindCraftRules, randomUUID, this.roll); }
+      try { outcome = resolveBlindCraft(state, materials, recipes, content.items, content.balance.crafting?.blind ?? defaultBlindCraftRules, randomUUID, this.roll, { content, xp, roll: this.roll }); }
       catch (error) { throw new BadRequestException((error as Error).message); }
       const result: BlindCraftReceipt = outcome.outcome === 'crafted'
-        ? { outcome: 'crafted', itemIds: outcome.result.itemIds, deletedItemIds: outcome.result.deletedItemIds }
+        ? { ...outcome.result, outcome: 'crafted' }
         : { outcome: 'nothing', materialsReturned: outcome.materialsReturned };
       if (outcome.state) await this.inventory.commit([outcome.state], content, context);
+      if (outcome.outcome === 'crafted') await this.characters.update(ownerId, content, value => { value.craftingProfessionXp = xp; }, context);
       await this.operations.finishOperation(operationId, result, context);
       return result;
     });

@@ -1,8 +1,10 @@
+import type { CraftingCatalog } from '../model/types';
+import { RankPreview } from './RankPreview';
 import { BlindCraftRules, CraftingRecipe, InventoryView, backpackStacks, matchingCraftRecipes } from '@game/core';
 import { ItemIcon } from '../../inventory/components/ItemIcon';
 
 interface Props {
-  view: InventoryView; catalog: { recipes: CraftingRecipe[]; blind: BlindCraftRules }; selection: Record<string, number>; busy: boolean;
+  view: InventoryView; catalog: CraftingCatalog; selection: Record<string, number>; busy: boolean;
   onQuantity: (itemId: string, quantity: number) => void; onCraft: (recipeId: string) => void; onExperiment: () => void;
 }
 
@@ -30,9 +32,9 @@ export function ExperimentWorkshop({ view, catalog, selection, busy, onQuantity,
     </section>
     <section className="craft-panel" aria-label="Результаты эксперимента">
       <div className="craft-panel-heading"><h3>Результаты</h3></div>
-      {matches.map(recipe => <div key={recipe.id} className="recipe-card matched"><h4>{recipe.name}</h4><p>{recipe.description}</p>
+      {matches.map(recipe => <div key={recipe.id} className="recipe-card matched"><h4>{recipe.name}</h4><p>{recipe.description}</p><RankPreview recipe={recipe} ranks={catalog.ranks}/>
         <dl className="recipe-ingredients"><div><dt>Нужно</dt><dd>{recipe.inputs.map(input => `${input.quantity} × ${name(input.itemId)}`).join(', ')}</dd></div><div><dt>Получите</dt><dd>{recipe.outputs.map(output => `${output.quantity} × ${name(output.itemId)}`).join(', ')}</dd></div></dl>
-        <button className="primary" disabled={busy || !valid} onClick={() => onCraft(recipe.id)}>Создать</button>
+        <button className="primary" disabled={busy || !valid || !recipe.available} onClick={() => onCraft(recipe.id)}>Создать</button>
       </div>)}
       {selected.length > 0 && !matches.length && <div className="experiment-card"><h4>Эксперимент</h4>
         <p>Известного рецепта для этого набора нет. Можно попробовать вслепую: сервер выберет случайный подходящий рецепт каталога.</p>

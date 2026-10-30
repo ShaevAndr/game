@@ -26,6 +26,7 @@ test('fresh database migrates, seeds level 10 heroes and preserves progress on r
     assert.ok(initial.every(row => row.data.level === 10 && row.data.learnedSkillIds.length >= 6));
     assert.equal((await database.sql.selectFrom('crafting_operations').selectAll().execute()).length, 0);
     const materials = await database.sql.selectFrom('item_instances').selectAll().where('owner_id', 'in', initial.map(character => character.id)).execute();
+    assert.ok(materials.every(item => item.quality === null));
     for (const character of initial) {
       for (const itemId of ['iron-ore', 'healing-herb', 'leather']) {
         assert.ok(materials.some(item => item.owner_id === character.id && item.item_id === itemId), `${character.id} lacks test material ${itemId}`);

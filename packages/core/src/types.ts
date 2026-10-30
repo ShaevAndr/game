@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { itemRankSchema, professionSchema, rankProfileSchema, modifierDefinitionSchema, validateCraftingProgression } from './item-progression';
+import type { ItemRank, CraftingProfession, RankProfile, ModifierDefinition } from './item-progression';
 import { elements, tileTypes, MAX_FIELD_SIDE } from './battlefield/types';
 import type { BattlefieldConfig, BattlefieldMoveEvent } from './battlefield/types';
 import { normalizeBattlefieldOptions } from './battlefield/config';
@@ -23,6 +25,7 @@ export type Item = ItemDefinition;
 export interface ItemStack { itemId: string; quantity: number }
 export interface Character { id: string; name: string; templateId?: string; level: number; experience: number; skillPoints: number; learnedSkillIds: string[]; skillLevels?: Record<string, number>; equipmentBonuses?: Partial<Stats>; stats: Stats; energy: Energy; inventory: ItemStack[]; createdAt: string;
   attributeVersion?: 1; baseAttributes?: Record<string, number>; attributePoints?: number; attributeRevision?: number; attributes?: AttributeCalculation;
+  craftingProfessionXp?: Record<string, number>;
   equipmentModifiers?: StatModifier[]; equipmentScaling?: ScaledEquipmentBonus[];
 }
 export interface CharacterTemplate { id: string; name: string; description: string; element: Element; skillId: string }
@@ -33,12 +36,14 @@ export interface Enemy { id: string; name: string; stats: Stats; skillIds: strin
 export interface Progression { baseExperience: number; experiencePerLevel: number; startingSkillPoints: number; skillPointsPerLevel: number; statGrowth: Stats; victoryExperience: Record<BattleKind, number> }
 export interface CombatRules { version: 2; energyCap: 30; energyPerTile: 1; defensePerTile: number }
 export interface Balance { combat?: CombatRules; characterStats: Stats; starterItems: ItemStack[]; damagePerTile: number; energyPerTile: number; teamSize: number; dungeonWaves: string[]; progression: Progression; crafting?: { blind: BlindCraftRules }; attributes?: { skillReferencePower: number } }
-export interface Content { itemGroups?: ItemGroup[]; skills: Skill[]; items: Item[]; enemies: Enemy[]; characterTemplates: CharacterTemplate[]; balance: Balance; recipes?: CraftingRecipe[]; statDefinitions?: StatDefinition[]; effectsVersion?: 1 }
+export interface Content { itemRanks?: ItemRank[]; professions?: CraftingProfession[]; rankProfiles?: RankProfile[]; modifierDefinitions?: ModifierDefinition[]; itemGroups?: ItemGroup[]; skills: Skill[]; items: Item[]; enemies: Enemy[]; characterTemplates: CharacterTemplate[]; balance: Balance; recipes?: CraftingRecipe[]; statDefinitions?: StatDefinition[]; effectsVersion?: 1 }
 const statsSchema = z.object({ maxHp: z.number().int().positive().max(100000), attack: z.number().int().nonnegative().max(10000), defense: z.number().int().nonnegative().max(10000), maxEnergy: z.number().int().positive().max(10000) });
 const contentId = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 const learningSchema = z.object({ pointCost: z.number().int().min(1).max(100), level: z.number().int().min(1).max(1000), prerequisites: z.array(contentId).max(20), stats: statsSchema.partial(), starter: z.boolean(), requirements: z.record(z.string(), z.number().int().min(0).max(1_000_000)).optional() });
 export const progressionSchema = z.object({ baseExperience: z.number().int().min(1).max(1000000), experiencePerLevel: z.number().int().min(0).max(1000000), startingSkillPoints: z.number().int().min(0).max(1000), skillPointsPerLevel: z.number().int().min(1).max(100), statGrowth: z.object({ maxHp: z.number().int().min(0).max(1000), attack: z.number().int().min(0).max(1000), defense: z.number().int().min(0).max(1000), maxEnergy: z.number().int().min(0).max(1000) }), victoryExperience: z.object({ duel: z.number().int().positive().max(1000000), bot: z.number().int().positive().max(1000000).default(100), team: z.number().int().positive().max(1000000), dungeon: z.number().int().positive().max(1000000) }) });
 export const contentSchema = z.object({
+  itemRanks: z.array(itemRankSchema).optional(), professions: z.array(professionSchema).optional(),
+  rankProfiles: z.array(rankProfileSchema).optional(), modifierDefinitions: z.array(modifierDefinitionSchema).optional(),
   effectsVersion: z.literal(1).optional(),
   statDefinitions: statDefinitionsSchema.optional(),
   characterTemplates: z.array(z.object({ id: contentId, name: z.string().min(1).max(80), description: z.string().max(500), element: z.enum(elements), skillId: contentId })).default([]),
@@ -50,8 +55,14 @@ export const contentSchema = z.object({
   balance: z.object({ characterStats: statsSchema, starterItems: z.array(z.object({ itemId: contentId, quantity: z.number().int().nonnegative().max(1000) })), damagePerTile: z.number().int().positive().max(100), energyPerTile: z.number().int().positive().max(100), teamSize: z.number().int().min(1).max(10), dungeonWaves: z.array(contentId).min(1).max(100), progression: progressionSchema, crafting: z.object({ blind: blindCraftRulesSchema }).optional(), combat: z.object({ version: z.literal(2), energyCap: z.literal(30), energyPerTile: z.literal(1), defensePerTile: z.number().int().min(1).max(100) }).optional(), attributes: z.object({ skillReferencePower: z.number().int().min(1).max(10000) }).optional() }),
 }).superRefine((content, ctx) => {
   const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
+  try { validateCraftingProgression(content); } catch (error) { fail((error as Error).message); }
   if (content.effectsVersion === 1 && !content.statDefinitions) fail('Эффекты требуют реестр характеристик');
   try { validateSkillEffects(content.skills, content.statDefinitions ?? []); } catch (error) { fail((error as Error).message); }
+  for (const skill of content.skills) for (const effect of skill.effects ?? []) {
+    if (effect.kind !== 'stat_modifier' || !effect.modifierDefinitionId) continue;
+    const definition = content.modifierDefinitions?.find(value => value.id === effect.modifierDefinitionId);
+    if (!definition?.allowSkill || definition.statId !== effect.statId || definition.operation !== effect.operation) fail(`Недопустимый общий эффект навыка ${skill.id}:${effect.id}`);
+  }
   for (const skill of content.skills) if (['modifier', 'dispel'].includes(skill.effect) && !skill.effects?.length) fail(`Навык ${skill.id} требует массив эффектов`);
   if (content.statDefinitions) {
     const required: Record<string, string> = { strength: 'points', dexterity: 'points', intelligence: 'points', vitality: 'points', luck: 'points', maxHp: 'hp', physicalPower: 'points', magicPower: 'points', healingPower: 'points', physicalResistance: 'points', fireResistance: 'points', waterResistance: 'points', earthResistance: 'points', airResistance: 'points', criticalChanceBps: 'basis_points', criticalBonusBps: 'basis_points', guardPerCell: 'points_per_cell' };

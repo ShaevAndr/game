@@ -1,3 +1,4 @@
+import { qualityStyle } from './ItemQuality';
 import { Character, InventoryView, effectiveStats } from '@game/core';
 import { ItemIcon } from './ItemIcon';
 
@@ -25,8 +26,8 @@ export function EquipmentPanel({ view, character, selectedId, selectedSlot, onSe
         const instance = view.items.find(item => item.equippedSlot === slot);
         const definition = view.definitions.find(item => item.id === instance?.itemId);
         const label = slotNames[slot] ?? slot;
-        return <button key={slot} className={`equipment-slot ${instance ? 'occupied' : ''} ${instance?.id === selectedId || selectedSlot === slot ? 'selected' : ''}`}
-          title={`${label}: ${definition?.name ?? 'Пусто'}`} aria-label={`${label}: ${definition?.name ?? 'Пусто'}`} aria-pressed={instance ? instance.id === selectedId : selectedSlot === slot}
+        return <button key={slot} style={qualityStyle(instance)} className={`equipment-slot ${instance ? 'occupied' : ''} ${instance?.id === selectedId || selectedSlot === slot ? 'selected' : ''}`}
+          title={`${label}: ${definition?.name ?? 'Пусто'}${instance?.quality ? ` · ${instance.quality.rank.name}` : ''}`} aria-label={`${label}: ${definition?.name ?? 'Пусто'}${instance?.quality ? ` · ${instance.quality.rank.name}` : ''}`} aria-pressed={instance ? instance.id === selectedId : selectedSlot === slot}
           onClick={() => instance ? onSelect(instance.id) : onSlot(slot)} onDoubleClick={() => { if (instance) onQuickAction(instance.id); }}>
           <ItemIcon item={definition} slot={slot}/><span>{label}</span>
         </button>;

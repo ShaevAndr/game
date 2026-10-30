@@ -12,6 +12,7 @@ export type SkillTargeting =
   | { kind: 'ally_single' | 'allies_all'; includeSelf?: boolean };
 interface EffectBase { id: string; name?: string; recipient: 'selected' | 'caster' }
 export interface StatModifierEffect extends EffectBase {
+  modifierDefinitionId?: string;
   kind: 'stat_modifier'; polarity: 'buff' | 'debuff' | 'neutral'; statId: string;
   operation: StatModifier['operation']; magnitude: EffectExpression;
   durationTurns: number | EffectExpression; tags?: string[]; dispellable?: boolean;

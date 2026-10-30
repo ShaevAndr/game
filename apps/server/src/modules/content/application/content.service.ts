@@ -1,3 +1,4 @@
+import { ModifierDefinitionsService } from '../../effects/application/modifier-definitions.service';
 import { Inject, Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { Content, contentSchema } from '@game/core';
 import { Cache } from '../../../shared/application/cache.port';
@@ -19,6 +20,7 @@ export class ContentService implements OnApplicationBootstrap {
     @Inject(CharacterTemplatesService) private readonly templates: CharacterTemplatesService,
     @Inject(RecipesCatalogService) private readonly recipes: RecipesCatalogService,
     @Inject(Cache) private readonly cache: Cache,
+    @Inject(ModifierDefinitionsService) private readonly modifierDefinitions: ModifierDefinitionsService,
     @Inject(CharacteristicsCatalogService) private readonly characteristics: CharacteristicsCatalogService,
   ) {}
 
@@ -33,10 +35,10 @@ export class ContentService implements OnApplicationBootstrap {
       const parsed = contentSchema.safeParse(cached);
       if (parsed.success) return parsed.data;
     }
-    const [settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions] = await Promise.all([
-      this.settings.get(), this.skills.list(), this.items.list(), this.templates.list(), this.items.groups(), this.recipes.list(), this.characteristics.list(),
+    const [settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions, itemRanks, progression, modifierDefinitions] = await Promise.all([
+      this.settings.get(), this.skills.list(), this.items.list(), this.templates.list(), this.items.groups(), this.recipes.list(), this.characteristics.list(), this.items.ranks(), this.recipes.progression(), this.modifierDefinitions.list(),
     ]);
-    const content = contentSchema.parse({ ...settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions, effectsVersion: 1 });
+    const content = contentSchema.parse({ ...settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions, itemRanks, ...progression, modifierDefinitions, effectsVersion: 1 });
     await this.cache.set(cacheKey, content, 30);
     return content;
   }

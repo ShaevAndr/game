@@ -1,3 +1,5 @@
+import { rankedItemDefinition } from '@game/core';
+import { ItemQuality, qualityStyle } from '../../inventory/components/ItemQuality';
 import { useState } from 'react';
 import { Character, InventoryView } from '@game/core';
 import { EquipmentPanel, slotNames, statNames } from '../../inventory/components/EquipmentPanel';
@@ -35,9 +37,10 @@ export function EquipmentScreen({ view, character, busy, onExecute, onRefresh, o
         onSlot={setSlot} onQuickAction={quickAction}/>
       <section className="equipment-choices" aria-label="Подбор экипировки">
         <div className="inventory-panel-heading"><h3>{slotNames[slot] ?? slot}</h3><span>Рюкзак: {occupied} / {primary?.capacity ?? 0}</span></div>
-        <div className="equipped-item">
+        <div className="equipped-item" style={qualityStyle(equipped)}>
           <h4>Сейчас надето</h4>
           {equipped ? <><div className="equipment-item-heading"><ItemIcon item={definition(equipped.itemId)}/><strong>{definition(equipped.itemId)?.name ?? equipped.itemId}</strong></div>
+            <ItemQuality item={equipped}/>
             <button className="ghost" disabled={busy || !unequip?.enabled} onClick={() => onExecute({ type: 'unequip', instanceId: equipped.id })}>Снять в рюкзак</button>
             {!unequip?.enabled && <p className="inventory-notice" role="status">{unequip?.reason ?? 'Снять предмет сейчас нельзя.'}</p>}</>
             : <p className="hint">Слот пуст. Выберите вещь из рюкзака ниже.</p>}
@@ -45,10 +48,12 @@ export function EquipmentScreen({ view, character, busy, onExecute, onRefresh, o
         <h4>Подходящие вещи в рюкзаке</h4>
         {!candidates.length && <p className="hint equipment-empty">Для этого слота вещей нет. Создайте снаряжение в крафте или откройте инвентарь.</p>}
         <div className="equipment-candidates">{candidates.map(item => {
-          const details = definition(item.itemId);
+          const original = definition(item.itemId);
+          const details = original && rankedItemDefinition(original, item);
           const action = item.actions.find(action => action.id === 'equip');
-          return <article className="equipment-candidate" key={item.id}>
+          return <article className="equipment-candidate" key={item.id} style={qualityStyle(item)}>
             <div className="equipment-item-heading"><ItemIcon item={details}/><strong>{details?.name ?? item.itemId}</strong></div>
+            <ItemQuality item={item}/>
             <p>{details?.description}</p>
             <dl className="item-bonuses">{Object.entries(details?.bonuses ?? {}).map(([key, value]) => <div key={key}><dt>{statNames[key] ?? key}</dt><dd>+{value}</dd></div>)}</dl>
             {!!details?.bonuses?.attack && view.statDefinitions && <p className="hint">Мощь оружия усиливается характеристиками героя. Итоговый вклад — в таблице параметров ниже.</p>}

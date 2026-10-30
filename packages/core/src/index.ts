@@ -19,3 +19,5 @@ export * from './targeting';
 export * from './battlefield';
 export * from './combat/rules';
 export { skillChoices } from './combat/matched';
+
+export * from './item-progression';

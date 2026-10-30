@@ -1,3 +1,4 @@
+import { CraftingOperationsRepository } from '../src/modules/crafting/ports/crafting-operations.repository';
 import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -89,6 +90,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.equal(character.skillPoints, 4); assert.deepEqual(character.learnedSkillIds, ['strike']);
     await verifyCharacterCreation(character, request, app);
     await verifyCharacterAttributes(request, app, catalog);
+    await verifyRankedCrafting(request, app);
     await verifyBattleEffects(request, app);
     assert.equal((await request<Character>(`/characters/${character.id}`)).id, character.id);
     assert.equal((await request<object[]>(`/characters/${character.id}/inventory`)).length, character.inventory.length);
@@ -306,7 +308,7 @@ async function verifyOperations(character: Character, request: TestRequest, app:
   const mergeId = randomUUID();
   const merged = await action(part, { action: 'merge', targetInstanceId: ore.id }, mergeId);
   assert.deepEqual(await action(part, { action: 'merge', targetInstanceId: ore.id }, mergeId), merged);
-  assert.equal((await view()).items.find(item => item.id === ore.id)?.quantity, 8);
+  assert.equal((await view()).items.find(item => item.id === ore.id)?.quantity, seedContent.balance.starterItems.find(stack => stack.itemId === 'iron-ore')!.quantity);
   await action(ore.id, { action: 'split', quantity: 1 }, mergeId, 409);
 
   const detached = await action(ore.id, { action: 'remove', quantity: 2 });
@@ -324,13 +326,13 @@ async function verifyOperations(character: Character, request: TestRequest, app:
   await action(sword.id, { action: 'unequip' });
   await transfer(ore.id, recipient.id, 5);
   const sum = (state: InventoryView) => state.items.filter(item => item.itemId === 'iron-ore').reduce((total, item) => total + item.quantity, 0);
-  assert.equal(sum(await view()) + sum(await recipientView()), 16); // Eight starting ore for each owner.
+  assert.equal(sum(await view()) + sum(await recipientView()), 2 * seedContent.balance.starterItems.find(stack => stack.itemId === 'iron-ore')!.quantity);
 
   const removeId = randomUUID();
   const removeBody = { quantity: 1, operationId: removeId };
   const deletion = await request<InventoryResult>(`/item-instances/${ore.id}`, removeBody, 200, 'DELETE');
   assert.deepEqual(await request(`/item-instances/${ore.id}`, removeBody, 200, 'DELETE'), deletion);
-  assert.equal(sum(await view()) + sum(await recipientView()), 15);
+  assert.equal(sum(await view()) + sum(await recipientView()), 2 * seedContent.balance.starterItems.find(stack => stack.itemId === 'iron-ore')!.quantity - 1);
 
   await action(scroll.id, { action: 'read' }, randomUUID(), 400);
   assert.ok((await view()).items.some(item => item.id === scroll.id));
@@ -501,4 +503,55 @@ async function verifyBattleEffects(request: TestRequest, app: INestApplication) 
   assert.equal(caster.activeEffects!.length, 0);
   assert.equal(caster.attributes!.effective.strength, 10);
   assert.equal(caster.attributeState!.temporaryModifiers.length, 0);
+}
+
+async function verifyRankedCrafting(request: TestRequest, app: INestApplication) {
+  const hero = await request<Character>('/characters', { name: 'Мастер крафта' });
+  const inventory = app.get(InventoryService);
+  await inventory.receive(hero.id, 'iron-ore', 150, randomUUID());
+  const catalog = await request<{ recipes: { id: string; rankPreviews: unknown[] }[]; professions: { id: string; level: number; totalXp: number }[] }>(`/characters/${hero.id}/crafting`);
+  assert.equal(catalog.professions.find(profession => profession.id === 'blacksmith')!.level, 1);
+  assert.ok(catalog.recipes.find(recipe => recipe.id === 'craft-rare-sword')!.rankPreviews.length);
+  const operationId = randomUUID();
+  const craft = (id = operationId, status = 201) => request<InventoryResult>(`/characters/${hero.id}/crafting/recipes/craft-rare-sword/apply`, { operationId: id }, status);
+  const [first, replay] = await Promise.all([craft(), craft()]);
+  assert.deepEqual(replay, first);
+  const item = first.createdItems![0];
+  assert.equal(item.quality!.rank.id, 'rare'); assert.equal(item.quality!.affixes.length, 3);
+  let view = await inventory.get(hero.id);
+  assert.deepEqual(view.items.find(value => value.id === item.id)!.quality, item.quality);
+  assert.equal((await request<Character>(`/characters/${hero.id}`)).craftingProfessionXp!.blacksmith, 10);
+  const equipId = randomUUID();
+  await request(`/item-instances/${item.id}/actions`, { action: 'equip', operationId: equipId });
+  const equipped = await request<Character>(`/characters/${hero.id}`);
+  assert.equal(equipped.equipmentModifiers!.filter(modifier => modifier.id.includes(':affix:')).length, 3);
+  assert.ok(equipped.attributes!.effective.physicalPower > equipped.attributes!.base.physicalPower);
+  await request(`/item-instances/${item.id}/actions`, { action: 'unequip', operationId: randomUUID() });
+  view = await inventory.get(hero.id);
+  assert.deepEqual(view.items.find(value => value.id === item.id)!.quality, item.quality);
+  const recipient = await request<Character>('/characters', { name: 'Получатель допов' });
+  await request('/inventory-transfers', { operationId: randomUUID(), instanceId: item.id, targetInventoryId: recipient.id, quantity: 1 });
+  assert.deepEqual((await inventory.get(recipient.id)).items.find(value => value.id === item.id)!.quality, item.quality);
+
+  const before = await inventory.get(hero.id);
+  const repository = app.get(CraftingOperationsRepository), finish = repository.finishOperation;
+  repository.finishOperation = async () => { throw new Error('simulated receipt failure'); };
+  const retryId = randomUUID();
+  try { await craft(retryId, 500); } finally { repository.finishOperation = finish; }
+  assert.deepEqual(await inventory.get(hero.id), before);
+  assert.equal((await request<Character>(`/characters/${hero.id}`)).craftingProfessionXp!.blacksmith, 10);
+  await craft(retryId);
+  assert.equal((await request<Character>(`/characters/${hero.id}`)).craftingProfessionXp!.blacksmith, 20);
+
+  // Profile choice uses the level BEFORE this operation's experience award.
+  const service = app.get(CharactersService);
+  const content = await request<Content>('/content');
+  await app.get(UnitOfWork).run(context => service.update(hero.id, content, character => { character.craftingProfessionXp = { blacksmith: 90 }; }, context));
+  const normal = await request<InventoryResult>(`/characters/${hero.id}/crafting/recipes/craft-iron-sword/apply`, { operationId: randomUUID() });
+  assert.ok(normal.createdItems![0].quality);
+  const after = await request<{ professions: { id: string; level: number; totalXp: number }[] }>(`/characters/${hero.id}/crafting`);
+  assert.equal(after.professions.find(profession => profession.id === 'blacksmith')!.level, 2);
+  assert.equal(after.professions.find(profession => profession.id === 'blacksmith')!.totalXp, 100);
+  // Mongo enforces the separate boolean applicability flags.
+  await assert.rejects(app.get(MongoDatabase).db.collection('modifierDefinitions').insertOne({ id: 'invalid-flags', allowSkill: true, allowWeapon: 1, allowArmor: false }));
 }

@@ -1,7 +1,8 @@
+import type { CraftingCatalog } from './types';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CraftingResult, InventoryView, RecipeIngredient } from '@game/core';
 import { inventoryApi } from '../../inventory/api/inventory.api';
-import { craftingApi, CraftingCatalog } from '../api/crafting.api';
+import { craftingApi } from '../api/crafting.api';
 import { ApiError } from '../../../shared/api/http';
 import { operationId } from '../../../shared/api/operation-id';
 
@@ -12,14 +13,17 @@ export function useCrafting(ownerId: string, onError: (message: string) => void)
   const attempts = useRef(new Map<string, { id: string; committed: boolean; result?: CraftingResult }>());
 
   const refresh = useCallback(async () => {
-    if (ownerId) setView(await inventoryApi.get(ownerId));
+    if (ownerId) {
+      const [inventory, recipes] = await Promise.all([inventoryApi.get(ownerId), craftingApi.catalog(ownerId)]);
+      setView(inventory); setCatalog(recipes);
+    }
   }, [ownerId]);
 
   useEffect(() => {
-    setView(null); setSelection({});
+    setView(null); setCatalog(null); setSelection({}); attempts.current.clear();
     if (!ownerId) return;
     let cancelled = false;
-    void Promise.all([inventoryApi.get(ownerId), craftingApi.catalog()]).then(([inventory, recipes]) => {
+    void Promise.all([inventoryApi.get(ownerId), craftingApi.catalog(ownerId)]).then(([inventory, recipes]) => {
       if (!cancelled) { setView(inventory); setCatalog(recipes); }
     }).catch(error => { if (!cancelled) onError(error.message); });
     return () => { cancelled = true; };

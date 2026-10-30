@@ -1,3 +1,4 @@
+import { EffectsCatalogModule } from '../effects/effects-catalog.module';
 import { Module } from '@nestjs/common';
 import { MongoModule } from '../../infrastructure/mongo/mongo.module';
 import { RedisModule } from '../../infrastructure/redis/redis.module';
@@ -12,7 +13,7 @@ import { MongoContentSettingsRepository } from './repositories/mongo-content-set
 import { CharacteristicsCatalogModule } from '../characters/characteristics-catalog.module';
 
 @Module({
-  imports: [MongoModule, RedisModule, CharacterTemplatesModule, SkillsCatalogModule, ItemsModule, CraftingCatalogModule, CharacteristicsCatalogModule],
+  imports: [EffectsCatalogModule, MongoModule, RedisModule, CharacterTemplatesModule, SkillsCatalogModule, ItemsModule, CraftingCatalogModule, CharacteristicsCatalogModule],
   controllers: [ContentController],
   providers: [ContentService, { provide: ContentSettingsRepository, useClass: MongoContentSettingsRepository }],
   exports: [ContentService],

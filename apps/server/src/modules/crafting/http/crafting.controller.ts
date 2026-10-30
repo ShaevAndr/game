@@ -11,6 +11,8 @@ export class CraftingController {
 
   @Get('crafting/recipes') catalog() { return this.service.catalog(); }
 
+  @Get('characters/:id/crafting') characterCatalog(@Param('id') ownerId: string) { return this.service.catalog(id.parse(ownerId)); }
+
   @Post('characters/:id/crafting/recipes/:recipeId/apply')
   apply(@Param('id') ownerId: string, @Param('recipeId') recipeId: string, @Body() body: unknown) {
     return this.service.apply(id.parse(ownerId), contentId.parse(recipeId), body);

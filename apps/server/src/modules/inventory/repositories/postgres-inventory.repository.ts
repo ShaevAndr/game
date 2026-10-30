@@ -1,13 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { InventoryResult, InventoryState, ItemInstance, ItemStack } from '@game/core';
+import { InventoryResult, InventoryState, ItemQuality, ItemInstance, ItemStack } from '@game/core';
 import { Database } from '../../../infrastructure/database/database.service';
 import { TransactionContext } from '../../../shared/application/unit-of-work';
 import { InventoryRepository } from '../ports/inventory.repository';
 
-type ItemRow = { id: string; owner_id: string; inventory_id: string | null; item_id: string; quantity: number; equipped_slot: string | null };
+type ItemRow = { quality?: ItemQuality | null; id: string; owner_id: string; inventory_id: string | null; item_id: string; quantity: number; equipped_slot: string | null };
 function instance(row: ItemRow): ItemInstance {
-  return { id: row.id, ownerId: row.owner_id, inventoryId: row.inventory_id, itemId: row.item_id, quantity: row.quantity, equippedSlot: row.equipped_slot };
+  return { ...(row.quality ? { quality: row.quality } : {}), id: row.id, ownerId: row.owner_id, inventoryId: row.inventory_id, itemId: row.item_id, quantity: row.quantity, equippedSlot: row.equipped_slot };
 }
 
 @Injectable()
@@ -28,7 +28,7 @@ export class PostgresInventoryRepository extends InventoryRepository {
         remaining -= quantity;
       }
     }
-    if (rows.length) await tx.insertInto('item_instances').values(rows).execute();
+    if (rows.length) await tx.insertInto('item_instances').values(rows.map(({ quality, ...row }) => row)).execute();
     if (rows.length > 50) await tx.updateTable('inventories').set({ capacity: rows.length }).where('id', '=', ownerId).execute();
   }
 
@@ -61,7 +61,7 @@ export class PostgresInventoryRepository extends InventoryRepository {
     // Release previous equipment slots before filling them: the unique index is immediate.
     const ordered = [...items].sort((left, right) => Number(!!left.equippedSlot) - Number(!!right.equippedSlot));
     for (const item of ordered) {
-      const row = { id: item.id, owner_id: item.ownerId, inventory_id: item.inventoryId, item_id: item.itemId, quantity: item.quantity, equipped_slot: item.equippedSlot };
+      const row = { quality: item.quality ? JSON.stringify(item.quality) : null, id: item.id, owner_id: item.ownerId, inventory_id: item.inventoryId, item_id: item.itemId, quantity: item.quantity, equipped_slot: item.equippedSlot };
       await tx.insertInto('item_instances').values(row).onConflict(conflict => conflict.column('id').doUpdateSet(row)).execute();
     }
   }

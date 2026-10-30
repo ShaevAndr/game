@@ -18,6 +18,7 @@ export const defaultStatDefinitions: StatDefinition[] = [
   primary('luck', 'Удача', 'Шанс и дополнительная сила критического урона.', 4),
   derived('maxHp', 'Максимум здоровья', 'hp', [['vitality', 120000]], 10, 1),
   derived('physicalPower', 'Физическая мощь', 'points', [['strength', 6000], ['dexterity', 2000]], 11),
+  derived('physicalDamageFlat', 'Прибавка к физическому урону', 'points', [], 14),
   derived('magicPower', 'Магическая мощь', 'points', [['intelligence', 8000]], 12),
   derived('healingPower', 'Сила лечения', 'points', [['intelligence', 6000], ['vitality', 2000]], 13),
   derived('physicalResistance', 'Физическая защита', 'points', [['vitality', 2000], ['dexterity', 1000]], 20),

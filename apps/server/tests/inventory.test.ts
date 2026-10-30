@@ -104,14 +104,14 @@ test('inventory service persists transfers for both owners and replays deletion 
   const f = fixture(), source = f.seed('Даритель'), target = f.seed('Получатель');
   const ore = (await f.inventory.get(source.id)).items.find(item => item.itemId === 'iron-ore')!;
   const moved = await f.inventory.execute({ type: 'transfer', instanceId: ore.id, targetInventoryId: target.id, quantity: 3 }, randomUUID());
-  assert.equal(f.state().characters[source.id].inventory.find(stack => stack.itemId === 'iron-ore')?.quantity, 5);
-  assert.equal(f.state().characters[target.id].inventory.find(stack => stack.itemId === 'iron-ore')?.quantity, 11);
+  assert.equal(f.state().characters[source.id].inventory.find(stack => stack.itemId === 'iron-ore')?.quantity, seedContent.balance.starterItems.find(stack => stack.itemId === 'iron-ore')!.quantity - 3);
+  assert.equal(f.state().characters[target.id].inventory.find(stack => stack.itemId === 'iron-ore')?.quantity, seedContent.balance.starterItems.find(stack => stack.itemId === 'iron-ore')!.quantity + 3);
   assert.equal((await f.inventory.get(target.id)).items.find(item => item.id === moved.itemIds[0])?.ownerId, target.id);
   const operationId = randomUUID(), command = { type: 'delete' as const, instanceId: moved.itemIds[0], quantity: 3 };
   const removed = await f.inventory.execute(command, operationId);
   assert.deepEqual(await f.inventory.execute(command, operationId), removed);
   assert.ok(!(await f.inventory.get(target.id)).items.some(item => item.id === moved.itemIds[0]));
-  assert.equal(f.state().characters[target.id].inventory.find(stack => stack.itemId === 'iron-ore')?.quantity, 8);
+  assert.equal(f.state().characters[target.id].inventory.find(stack => stack.itemId === 'iron-ore')?.quantity, seedContent.balance.starterItems.find(stack => stack.itemId === 'iron-ore')!.quantity);
 });
 
 test('a failed scroll save rolls back the skill and item, then a retry consumes the scroll exactly once', async () => {

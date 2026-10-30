@@ -1,3 +1,4 @@
+import { CharactersModule } from '../characters/characters.module';
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../infrastructure/database/database.module';
 import { ContentModule } from '../content/content.module';
@@ -9,7 +10,7 @@ import { CraftingOperationsRepository } from './ports/crafting-operations.reposi
 import { PostgresCraftingOperationsRepository } from './repositories/postgres-crafting-operations.repository';
 
 @Module({
-  imports: [DatabaseModule, ContentModule, InventoryModule, CraftingCatalogModule],
+  imports: [CharactersModule, DatabaseModule, ContentModule, InventoryModule, CraftingCatalogModule],
   controllers: [CraftingController],
   providers: [CraftingService, { provide: CraftingOperationsRepository, useClass: PostgresCraftingOperationsRepository }],
   exports: [CraftingService],

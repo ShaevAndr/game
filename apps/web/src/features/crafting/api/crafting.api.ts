@@ -1,10 +1,10 @@
-import { BlindCraftReceipt, BlindCraftRules, CraftingRecipe, InventoryResult } from '@game/core';
+import { BlindCraftReceipt, InventoryResult } from '@game/core';
 import { request } from '../../../shared/api/http';
 
-export interface CraftingCatalog { recipes: CraftingRecipe[]; blind: BlindCraftRules }
+import type { CraftingCatalog } from '../model/types';
 
 export const craftingApi = {
-  catalog: () => request<CraftingCatalog>('/crafting/recipes'),
+  catalog: (ownerId: string) => request<CraftingCatalog>(`/characters/${ownerId}/crafting`),
   apply: (characterId: string, recipeId: string, operationId: string) =>
     request<InventoryResult>(`/characters/${characterId}/crafting/recipes/${recipeId}/apply`, { body: { operationId } }),
   blind: (characterId: string, materials: { itemId: string; quantity: number }[], operationId: string) =>

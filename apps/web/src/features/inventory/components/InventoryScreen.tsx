@@ -1,3 +1,4 @@
+import { qualityStyle } from './ItemQuality';
 import { useState } from 'react';
 import { Character, InventoryCommand, InventoryContainer, InventoryView } from '@game/core';
 import { EquipmentPanel } from './EquipmentPanel';
@@ -47,7 +48,7 @@ export function InventoryScreen({ view, characters, busy, recipientId, destinati
         <div className="backpack-grid" aria-label="Ячейки рюкзака">{Array.from({ length: cells }, (_, index) => {
           const item = visible[index];
           const definition = item && view.definitions.find(definition => definition.id === item.itemId);
-          return item ? <button key={item.id} className={`bag-cell occupied ${item.id === selectedId ? 'selected' : ''}`} aria-label={`${name(item.itemId)}, ${item.quantity} шт.`} aria-pressed={item.id === selectedId} title={`${name(item.itemId)}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`} onClick={() => select(item.id)} onDoubleClick={() => quickAction(item.id)}><ItemIcon item={definition}/>{item.quantity > 1 && <span className="stack-count">{item.quantity}</span>}</button>
+          return item ? <button key={item.id} style={qualityStyle(item)} className={`bag-cell occupied ${item.id === selectedId ? 'selected' : ''}`} aria-label={`${name(item.itemId)}, ${item.quality?.rank.name ?? 'Обычный'}, ${item.quantity} шт.`} aria-pressed={item.id === selectedId} title={`${name(item.itemId)}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`} onClick={() => select(item.id)} onDoubleClick={() => quickAction(item.id)}><ItemIcon item={definition}/>{item.quantity > 1 && <span className="stack-count">{item.quantity}</span>}</button>
             : <div key={`empty-${index}`} className="bag-cell empty-cell" aria-hidden="true"><i/></div>;
         })}</div>
         {filtered && !visible.length && <p className="bag-empty" role="status">Подходящих предметов нет.</p>}
@@ -55,7 +56,7 @@ export function InventoryScreen({ view, characters, busy, recipientId, destinati
       </section>
       <ItemDetails key={selectedId} view={view} selectedId={selectedId} characters={characters} busy={busy} recipientId={recipientId} destinations={destinations} onRecipient={onRecipient} onExecute={onExecute}/>
     </div>
-    {!!saved.length && <details className="saved-items"><summary>Другие сохранённые предметы <span>{saved.length}</span></summary><p className="hint">Вещи из прежних контейнеров. Выберите предмет и верните его в рюкзак.</p><div className="saved-items-list">{saved.map(item => <button key={item.id} className={item.id === selectedId ? 'selected' : ''} onClick={() => select(item.id)}><ItemIcon item={view.definitions.find(definition => definition.id === item.itemId)}/><span>{name(item.itemId)}{item.quantity > 1 ? ` ×${item.quantity}` : ''}<small>{view.inventories.find(inventory => inventory.id === item.inventoryId)?.name ?? 'Вне рюкзака'}</small></span></button>)}</div></details>}
+    {!!saved.length && <details className="saved-items"><summary>Другие сохранённые предметы <span>{saved.length}</span></summary><p className="hint">Вещи из прежних контейнеров. Выберите предмет и верните его в рюкзак.</p><div className="saved-items-list">{saved.map(item => <button key={item.id} style={qualityStyle(item)} className={item.id === selectedId ? 'selected' : ''} onClick={() => select(item.id)}><ItemIcon item={view.definitions.find(definition => definition.id === item.itemId)}/><span>{name(item.itemId)}{item.quantity > 1 ? ` ×${item.quantity}` : ''}<small>{view.inventories.find(inventory => inventory.id === item.inventoryId)?.name ?? 'Вне рюкзака'}</small></span></button>)}</div></details>}
     <p className="inventory-footnote">Двойной щелчок — надеть или снять вещь. Экипировка не занимает места в рюкзаке. Изменения снаряжения действуют со следующего боя.</p>
   </section>;
 }

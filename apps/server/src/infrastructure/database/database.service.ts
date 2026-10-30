@@ -1,3 +1,5 @@
+import { craftingMaterialsMigration } from './migrations/009-crafting-materials';
+import { itemQualityMigration } from './migrations/008-item-quality';
 import { Injectable, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import { Kysely, Migrator, PostgresDialect, Transaction } from 'kysely';
 import { Pool } from 'pg';
@@ -42,6 +44,8 @@ export class Database extends UnitOfWork implements OnModuleInit, OnApplicationS
       '005_inventories': inventoriesMigration,
       '006_matched_combat': matchedCombatMigration,
       '007_crafting': craftingMigration,
+      '008_item_quality': itemQualityMigration,
+      '009_crafting_materials': craftingMaterialsMigration,
     }) } });
     const result = await migrator.migrateToLatest();
     if (result.error) throw result.error;

@@ -1,3 +1,5 @@
+import { rankedItemDefinition } from '@game/core';
+import { ItemQuality, qualityStyle } from './ItemQuality';
 import { useState } from 'react';
 import { Character, InventoryCommand, InventoryContainer, InventoryView } from '@game/core';
 import { ItemIcon } from './ItemIcon';
@@ -13,7 +15,8 @@ export function ItemDetails({ view, selectedId, characters, busy, recipientId, d
   const [amount, setAmount] = useState(1);
   const selected = view.items.find(item => item.id === selectedId);
   if (!selected) return <aside className="item-details empty-item-details"><span aria-hidden="true">◇</span><div><h3>Выберите предмет</h3><p>Нажмите на ячейку рюкзака или на надетую вещь, чтобы увидеть свойства и действия.</p></div></aside>;
-  const definition = view.definitions.find(item => item.id === selected.itemId);
+  const originalDefinition = view.definitions.find(item => item.id === selected.itemId);
+  const definition = originalDefinition && rankedItemDefinition(originalDefinition, selected);
   const primary = view.inventories.find(inventory => inventory.primary);
   const can = (action: string) => selected.actions.some(value => value.id === action && value.enabled);
   const equipped = !!selected.equippedSlot;
@@ -25,9 +28,10 @@ export function ItemDetails({ view, selectedId, characters, busy, recipientId, d
   const destination = destinations.find(inventory => inventory.primary);
   const unequipAction = selected.actions.find(action => action.id === 'unequip');
 
-  return <aside className="item-details" aria-label="Свойства предмета">
+  return <aside className="item-details" style={qualityStyle(selected)} aria-label="Свойства предмета">
     <div className="item-description">
       <div className="item-title"><span className="item-large-icon"><ItemIcon item={definition}/></span><div><span className="item-category">{definition?.equipSlot ? slotNames[definition.equipSlot] ?? definition.equipSlot : view.groups.find(group => group.id === definition?.groupId)?.name}</span><h3>{definition?.name ?? selected.itemId}</h3><span className={`item-location ${equipped ? 'is-equipped' : ''}`}>{equipped ? '● Надето на персонажа' : inBackpack ? 'В рюкзаке' : 'В сохранённых предметах'}{selected.quantity > 1 ? ` · ${selected.quantity} шт.` : ''}</span></div></div>
+      <ItemQuality item={selected}/>
       <p>{definition?.description ?? 'Описание предмета недоступно.'}</p>
       {!!definition?.bonuses && <dl className="item-bonuses">{Object.entries(definition.bonuses).map(([key, value]) => <div key={key}><dt>{statNames[key] ?? key}</dt><dd>+{value}</dd></div>)}</dl>}
       {!!definition?.bonuses?.attack && view.statDefinitions && <p className="hint">Мощь оружия усиливается характеристиками героя. Итоговый вклад показан в расчёте параметров на экране экипировки.</p>}

@@ -1,16 +1,18 @@
-import { CraftingRecipe, InventoryView, backpackStacks } from '@game/core';
+import type { CraftingRecipeView, ProfessionView } from '../model/types';
+import { RankPreview } from './RankPreview';
+import { InventoryView, ItemRank, backpackStacks } from '@game/core';
 import { ItemIcon } from '../../inventory/components/ItemIcon';
 
 interface Props {
-  view: InventoryView; recipes: CraftingRecipe[]; recipeId: string; busy: boolean;
+  view: InventoryView; recipes: CraftingRecipeView[]; ranks: ItemRank[]; professions: ProfessionView[]; recipeId: string; busy: boolean;
   onRecipe: (id: string) => void; onCraft: (id: string) => void;
 }
 
-export function RecipeWorkshop({ view, recipes, recipeId, busy, onRecipe, onCraft }: Props) {
+export function RecipeWorkshop({ view, recipes, ranks, professions, recipeId, busy, onRecipe, onCraft }: Props) {
   const totals = new Map(backpackStacks(view).map(item => [item.itemId, item.quantity]));
   const definition = (itemId: string) => view.definitions.find(item => item.id === itemId);
   const name = (itemId: string) => definition(itemId)?.name ?? itemId;
-  const ready = (recipe: CraftingRecipe) => recipe.inputs.every(input => (totals.get(input.itemId) ?? 0) >= input.quantity);
+  const ready = (recipe: CraftingRecipeView) => recipe.available && recipe.inputs.every(input => (totals.get(input.itemId) ?? 0) >= input.quantity);
   const recipe = recipes.find(recipe => recipe.id === recipeId);
 
   return <div className="crafting-grid">
@@ -28,6 +30,8 @@ export function RecipeWorkshop({ view, recipes, recipeId, busy, onRecipe, onCraf
       {recipe ? <>
         <div className="craft-panel-heading"><h3>{recipe.name}</h3></div>
         <p>{recipe.description}</p>
+        <p className="hint">{professions.find(entry => entry.id === recipe.professionId)?.name ?? 'Ремесло'} · требуется уровень {recipe.requiredLevel ?? 1}</p>
+        <RankPreview recipe={recipe} ranks={ranks}/>
         <h4>Необходимые предметы</h4>
         <div className="ingredient-slots" role="list" aria-label="Ингредиенты">{recipe.inputs.map(input => {
           const available = totals.get(input.itemId) ?? 0;
@@ -42,7 +46,7 @@ export function RecipeWorkshop({ view, recipes, recipeId, busy, onRecipe, onCraf
         <p className="hint">Ингредиенты подставляются из рюкзака автоматически и расходуются при нажатии «Создать».</p>
         <h4>Результат</h4>
         <div className="recipe-outputs">{recipe.outputs.map(output => <div className="recipe-output" key={output.itemId}><ItemIcon item={definition(output.itemId)}/><span>{name(output.itemId)} <b>×{output.quantity}</b></span></div>)}</div>
-        <p className={`recipe-availability ${ready(recipe) ? 'recipe-ready' : ''}`} role="status">{ready(recipe) ? 'Все ингредиенты готовы к крафту.' : 'Соберите недостающие предметы в основном рюкзаке.'}</p>
+        <p className={`recipe-availability ${ready(recipe) ? 'recipe-ready' : ''}`} role="status">{ready(recipe) ? 'Все ингредиенты готовы к крафту.' : !recipe.available ? `Нужен уровень профессии ${recipe.requiredLevel}` : 'Соберите недостающие предметы в основном рюкзаке.'}</p>
         <button className="primary" disabled={busy || !ready(recipe)} onClick={() => onCraft(recipe.id)}>Создать</button>
       </> : <div className="recipe-placeholder"><span aria-hidden="true">◇</span><h3>Выберите известный рецепт</h3><p>Здесь появятся ячейки ингредиентов, их количество и результат крафта.</p></div>}
     </section>

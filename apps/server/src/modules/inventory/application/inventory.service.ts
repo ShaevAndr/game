@@ -45,7 +45,9 @@ export class InventoryService {
             const read = actions.find(action => action.id === 'read');
             if (read) { read.enabled = false; read.reason = 'Навык уже известен'; }
           }
-          return { ...instance, actions };
+          const common = content.itemRanks?.find(rank => rank.order === 1);
+          const quality = instance.quality ?? (definition?.equipSlot && common ? { rank: common, affixes: [] } : undefined);
+          return { ...instance, ...(quality ? { quality } : {}), actions };
         }),
       };
     });

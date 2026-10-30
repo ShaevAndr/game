@@ -12,7 +12,7 @@ test('five primaries produce HP, separate powers, five resistances, luck and gua
   assert.equal(definitions.filter(definition => definition.kind === 'primary').length, 5);
   const result = calculateAttributes({ definitions, baseAttributes });
   assert.deepEqual(Object.fromEntries(Object.entries(result.effective).filter(([id]) => !Object.keys(baseAttributes).includes(id))), {
-    maxHp: 120, physicalPower: 8, magicPower: 8, healingPower: 8, physicalResistance: 3,
+    maxHp: 120, physicalPower: 8, physicalDamageFlat: 0, magicPower: 8, healingPower: 8, physicalResistance: 3,
     fireResistance: 3, waterResistance: 3, earthResistance: 3, airResistance: 3,
     criticalChanceBps: 500, criticalBonusBps: 5000, guardPerCell: 10,
   });

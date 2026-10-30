@@ -23,7 +23,7 @@ export const targetingSchema = z.discriminatedUnion('kind', [
 ]);
 const base = { id, name: z.string().min(1).max(80).optional(), recipient: z.enum(['selected', 'caster']) };
 export const skillEffectSchema = z.discriminatedUnion('kind', [
-  z.object({ ...base, kind: z.literal('stat_modifier'), polarity: z.enum(['buff', 'debuff', 'neutral']), statId: statIdSchema,
+  z.object({ ...base, modifierDefinitionId: id.optional(), kind: z.literal('stat_modifier'), polarity: z.enum(['buff', 'debuff', 'neutral']), statId: statIdSchema,
     operation: z.enum(['add_flat', 'add_percent', 'multiply', 'set']), magnitude: effectExpressionSchema,
     durationTurns: z.union([z.number().int().min(1).max(20), effectExpressionSchema]), tags: z.array(id).max(16).optional(), dispellable: z.boolean().optional(),
     stackKey: id.optional(), stacking: z.enum(['refresh', 'replace_if_stronger', 'stack', 'independent']).optional(), maxStacks: z.number().int().min(1).max(20).optional(), priority: integer.optional(),

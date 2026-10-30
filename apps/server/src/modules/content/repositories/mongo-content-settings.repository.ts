@@ -15,6 +15,16 @@ export class MongoContentSettingsRepository extends ContentSettingsRepository im
     await settings.updateOne({ id: 'balance', 'progression.victoryExperience.bot': { $exists: false } }, { $set: { 'progression.victoryExperience.bot': seedContent.balance.progression.victoryExperience.bot } });
     await settings.updateOne({ id: 'balance', attributes: { $exists: false } }, { $set: { attributes: { skillReferencePower: 8 } } });
     await settings.updateOne({ id: 'balance', 'combat.version': { $ne: 2 } }, { $set: { combat: defaultCombatRules, 'progression.startingSkillPoints': 4, 'progression.statGrowth.maxEnergy': 0, 'characterStats.maxEnergy': 30 } });
+    const current = await settings.findOne({ id: 'balance' });
+    if (current && current.craftingMaterialsVersion !== 1) {
+      const starterItems = [...(current.starterItems ?? [])] as { itemId: string; quantity: number }[];
+      for (const [itemId, quantity] of [['iron-ore', 60], ['leather', 40], ['healing-herb', 40]] as const) {
+        const existing = starterItems.find(item => item.itemId === itemId);
+        if (existing) existing.quantity = Math.max(existing.quantity, quantity);
+        else starterItems.push({ itemId, quantity });
+      }
+      await settings.updateOne({ id: 'balance', craftingMaterialsVersion: { $ne: 1 } }, { $set: { starterItems, craftingMaterialsVersion: 1 } });
+    }
     const enemies = this.mongo.db.collection<Enemy>('enemies');
     await enemies.createIndex({ id: 1 }, { unique: true });
     for (const enemy of seedContent.enemies) {

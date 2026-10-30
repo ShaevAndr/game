@@ -1,13 +1,15 @@
+import { rankedItemDefinition } from './item-progression';
+import type { ItemQuality } from './item-progression';
 import type { Item, ItemStack, Stats } from './types';
 import { defaultItemGroups, ItemGroup, itemActionNames, ItemActionId } from './items';
 import { legacyEquipmentAttributes } from './attributes/equipment';
 import type { ScaledEquipmentBonus, StatDefinition, StatModifier } from './attributes/types';
 
 export interface InventoryContainer { id: string; ownerId: string; name: string; capacity: number; primary: boolean }
-export interface ItemInstance { id: string; ownerId: string; inventoryId: string | null; itemId: string; quantity: number; equippedSlot: string | null }
+export interface ItemInstance { quality?: ItemQuality; id: string; ownerId: string; inventoryId: string | null; itemId: string; quantity: number; equippedSlot: string | null }
 export interface InventoryState { ownerId: string; inventories: InventoryContainer[]; items: ItemInstance[] }
 export interface InventoryView extends InventoryState { items: (ItemInstance & { actions: AvailableItemAction[] })[]; definitions: Item[]; groups: ItemGroup[]; statDefinitions?: StatDefinition[] }
-export interface InventoryResult { itemIds: string[]; deletedItemIds: string[]; inventoryId?: string }
+export interface InventoryResult { createdItems?: ItemInstance[]; itemIds: string[]; deletedItemIds: string[]; inventoryId?: string }
 export interface InventoryEffect { ownerId: string; skillId: string }
 export type InventoryCommand =
   | { type: 'receive'; ownerId: string; itemId: string; quantity: number; inventoryId?: string | null }
@@ -29,7 +31,7 @@ export function backpackStacks(state: InventoryState): ItemStack[] {
 export function equipmentBonuses(state: InventoryState, definitions: Item[]): Partial<Stats> {
   const result: Partial<Stats> = {};
   for (const item of state.items.filter(item => item.equippedSlot)) {
-    for (const [key, value] of Object.entries(definitions.find(definition => definition.id === item.itemId)?.bonuses ?? {}) as [keyof Stats, number][]) result[key] = (result[key] ?? 0) + value;
+    for (const [key, value] of Object.entries(rankedItemDefinition(definitions.find(definition => definition.id === item.itemId)!, item).bonuses ?? {}) as [keyof Stats, number][]) result[key] = (result[key] ?? 0) + value;
   }
   return result;
 }
@@ -37,8 +39,10 @@ export function equipmentBonuses(state: InventoryState, definitions: Item[]): Pa
 export function equipmentAttributeSources(state: InventoryState, definitions: Item[]) {
   const modifiers: StatModifier[] = [], scaling: ScaledEquipmentBonus[] = [];
   for (const instance of state.items.filter(item => item.equippedSlot)) {
-    const definition = definitions.find(item => item.id === instance.itemId);
-    if (!definition) throw new Error('Описание экипировки не найдено');
+    const original = definitions.find(item => item.id === instance.itemId);
+    if (!original) throw new Error('Описание экипировки не найдено');
+    const definition = rankedItemDefinition(original, instance);
+    for (const [index, affix] of (instance.quality?.affixes ?? []).entries()) modifiers.push({ statId: affix.statId, operation: affix.operation, value: affix.value, id: `${instance.id}:affix:${index}`, sourceId: instance.id });
     const legacy = legacyEquipmentAttributes(definition.bonuses ?? {}, instance.id);
     modifiers.push(...legacy.modifiers); scaling.push(...legacy.scaling);
     for (const [index, modifier] of (definition.statModifiers ?? []).entries()) modifiers.push({ ...modifier, id: `${instance.id}:modifier:${index}`, sourceId: instance.id });
@@ -132,6 +136,7 @@ export function applyInventoryCommand(input: InventoryState[], command: Inventor
           const target = find(command.targetInstanceId).instance;
           movable(target);
           if (target.id === instance.id || target.ownerId !== instance.ownerId || target.inventoryId !== instance.inventoryId || target.itemId !== instance.itemId) throw new Error('Объединять можно одинаковые предметы в одном инвентаре');
+          if (JSON.stringify(target.quality) !== JSON.stringify(instance.quality)) throw new Error('Качество предметов не совпадает');
           if (target.quantity + instance.quantity > definition(instance.itemId).stackLimit) throw new Error('Превышен размер стэка');
           target.quantity += instance.quantity; state.items = state.items.filter(item => item.id !== instance.id);
           result.itemIds.push(target.id); result.deletedItemIds.push(instance.id);
