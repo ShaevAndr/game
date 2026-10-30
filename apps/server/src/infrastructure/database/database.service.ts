@@ -9,6 +9,7 @@ import { progressionRewardsMigration } from './migrations/002-progression-reward
 import { demoCharactersMigration } from './migrations/003-demo-characters';
 import { inventoriesMigration } from './migrations/005-inventories';
 import { battleArchiveOutboxMigration } from './migrations/004-battle-archive-outbox';
+import { craftingMigration } from './migrations/007-crafting';
 
 @Injectable()
 export class Database extends UnitOfWork implements OnModuleInit, OnApplicationShutdown {
@@ -40,6 +41,7 @@ export class Database extends UnitOfWork implements OnModuleInit, OnApplicationS
       '004_battle_archive_outbox': battleArchiveOutboxMigration,
       '005_inventories': inventoriesMigration,
       '006_matched_combat': matchedCombatMigration,
+      '007_crafting': craftingMigration,
     }) } });
     const result = await migrator.migrateToLatest();
     if (result.error) throw result.error;

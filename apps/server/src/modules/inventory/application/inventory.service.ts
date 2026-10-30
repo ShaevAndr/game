@@ -65,6 +65,28 @@ export class InventoryService {
     return this.execute({ type: 'receive', ownerId, itemId, quantity, inventoryId }, operationId);
   }
 
+  /**
+   * Loads one owner's state inside a caller's transaction, locking the character and
+   * initializing the primary backpack exactly once. Exported for trusted modules such
+   * as crafting; never called by controllers directly.
+   */
+  async state(ownerId: string, content: Content, context: TransactionContext): Promise<InventoryState> {
+    const character = await this.characters.get(ownerId, content, context, true);
+    await this.repository.ensurePrimary(ownerId, character.inventory, this.limits(content), context);
+    return this.repository.load(ownerId, context);
+  }
+
+  /** Persists states and refreshes the owner character projections in the caller's transaction. */
+  async commit(states: InventoryState[], content: Content, context: TransactionContext) {
+    await this.repository.save(states, context);
+    for (const state of states) {
+      await this.characters.update(state.ownerId, content, character => {
+        character.inventory = backpackStacks(state);
+        character.equipmentBonuses = equipmentBonuses(state, content.items);
+      }, context);
+    }
+  }
+
   async execute(command: InventoryCommand, operationId: string) {
     z.string().uuid().parse(operationId);
     const signature = JSON.stringify(Object.fromEntries(Object.entries(command).sort(([left], [right]) => left.localeCompare(right))));
@@ -77,9 +99,7 @@ export class InventoryService {
       const states: InventoryState[] = [];
       // Every inventory mutation locks character owners first, in the same order as rewards.
       for (const ownerId of [...new Set(ownerIds)].sort()) {
-        const character = await this.characters.get(ownerId, content, context, true);
-        await this.repository.ensurePrimary(ownerId, character.inventory, Object.fromEntries(content.items.map(item => [item.id, item.stackLimit])), context);
-        states.push(await this.repository.load(ownerId, context));
+        states.push(await this.state(ownerId, content, context));
       }
       if ('instanceId' in command && !states.some(state => state.items.some(item => item.id === command.instanceId))) throw new ConflictException('Предмет перемещён. Повторите действие.');
       let changed: ReturnType<typeof applyInventoryCommand>;
@@ -89,16 +109,14 @@ export class InventoryService {
         const granted = await this.skills.grant(effect.ownerId, effect.skillId, context);
         if (!granted.granted) throw new BadRequestException('Навык уже известен; свиток не потрачен');
       }
-      await this.repository.save(changed.states, context);
-      for (const state of changed.states) {
-        await this.characters.update(state.ownerId, content, character => {
-          character.inventory = backpackStacks(state);
-          character.equipmentBonuses = equipmentBonuses(state, content.items);
-        }, context);
-      }
+      await this.commit(states, content, context);
       await this.repository.finishOperation(operationId, changed.result, context);
       return changed.result;
     });
+  }
+
+  private limits(content: Content) {
+    return Object.fromEntries(content.items.map(item => [item.id, item.stackLimit]));
   }
 
   private async owners(command: InventoryCommand, context: TransactionContext) {

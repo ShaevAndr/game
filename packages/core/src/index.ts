@@ -6,6 +6,7 @@ export * from './progression';
 export * from './items';
 export * from './skills';
 export * from './inventory';
+export * from './crafting';
 export * from './battlefield';
 export * from './combat/rules';
 export { skillChoices } from './combat/matched';

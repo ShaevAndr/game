@@ -5,6 +5,8 @@ import { normalizeBattlefieldOptions } from './battlefield/config';
 export { elements, tileTypes } from './battlefield/types';
 import { itemDefinitionSchema, itemGroupSchema, defaultItemGroups } from './items';
 import type { ItemDefinition, ItemGroup } from './items';
+import { blindCraftRulesSchema, craftingRecipeSchema } from './crafting';
+import type { BlindCraftRules, CraftingRecipe } from './crafting';
 
 export type Element = typeof elements[number];
 export type TileType = typeof tileTypes[number];
@@ -23,8 +25,8 @@ export interface SkillProgression { maxLevel: number; pointCost: number; powerPe
 export interface Enemy { id: string; name: string; stats: Stats; skillIds: string[] }
 export interface Progression { baseExperience: number; experiencePerLevel: number; startingSkillPoints: number; skillPointsPerLevel: number; statGrowth: Stats; victoryExperience: Record<BattleKind, number> }
 export interface CombatRules { version: 2; energyCap: 30; energyPerTile: 1; defensePerTile: number }
-export interface Balance { combat?: CombatRules; characterStats: Stats; starterItems: ItemStack[]; damagePerTile: number; energyPerTile: number; teamSize: number; dungeonWaves: string[]; progression: Progression }
-export interface Content { itemGroups?: ItemGroup[]; skills: Skill[]; items: Item[]; enemies: Enemy[]; characterTemplates: CharacterTemplate[]; balance: Balance }
+export interface Balance { combat?: CombatRules; characterStats: Stats; starterItems: ItemStack[]; damagePerTile: number; energyPerTile: number; teamSize: number; dungeonWaves: string[]; progression: Progression; crafting?: { blind: BlindCraftRules } }
+export interface Content { itemGroups?: ItemGroup[]; skills: Skill[]; items: Item[]; enemies: Enemy[]; characterTemplates: CharacterTemplate[]; balance: Balance; recipes?: CraftingRecipe[] }
 const statsSchema = z.object({ maxHp: z.number().int().positive().max(100000), attack: z.number().int().nonnegative().max(10000), defense: z.number().int().nonnegative().max(10000), maxEnergy: z.number().int().positive().max(10000) });
 const contentId = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 const learningSchema = z.object({ pointCost: z.number().int().min(1).max(100), level: z.number().int().min(1).max(1000), prerequisites: z.array(contentId).max(20), stats: statsSchema.partial(), starter: z.boolean() });
@@ -34,8 +36,9 @@ export const contentSchema = z.object({
   skills: z.array(z.object({ id: contentId, name: z.string().min(1).max(80), description: z.string().max(500), element: z.enum(elements), cost: z.number().int().nonnegative().max(10000), power: z.number().int().nonnegative().max(10000), effect: z.enum(['damage', 'heal']), cooldown: z.number().int().nonnegative().max(100), learning: learningSchema, progression: z.object({ maxLevel: z.number().int().min(1).max(10), pointCost: z.number().int().min(1).max(100), powerPerLevel: z.number().int().min(0).max(10000) }).optional() })).min(1),
   itemGroups: z.array(itemGroupSchema).default(defaultItemGroups),
   items: z.array(itemDefinitionSchema),
+  recipes: z.array(craftingRecipeSchema).default([]),
   enemies: z.array(z.object({ id: contentId, name: z.string().min(1).max(80), stats: statsSchema, skillIds: z.array(contentId).min(1) })).min(1),
-  balance: z.object({ characterStats: statsSchema, starterItems: z.array(z.object({ itemId: contentId, quantity: z.number().int().nonnegative().max(1000) })), damagePerTile: z.number().int().positive().max(100), energyPerTile: z.number().int().positive().max(100), teamSize: z.number().int().min(1).max(10), dungeonWaves: z.array(contentId).min(1).max(100), progression: progressionSchema, combat: z.object({ version: z.literal(2), energyCap: z.literal(30), energyPerTile: z.literal(1), defensePerTile: z.number().int().min(1).max(100) }).optional() }),
+  balance: z.object({ characterStats: statsSchema, starterItems: z.array(z.object({ itemId: contentId, quantity: z.number().int().nonnegative().max(1000) })), damagePerTile: z.number().int().positive().max(100), energyPerTile: z.number().int().positive().max(100), teamSize: z.number().int().min(1).max(10), dungeonWaves: z.array(contentId).min(1).max(100), progression: progressionSchema, crafting: z.object({ blind: blindCraftRulesSchema }).optional(), combat: z.object({ version: z.literal(2), energyCap: z.literal(30), energyPerTile: z.literal(1), defensePerTile: z.number().int().min(1).max(100) }).optional() }),
 }).superRefine((content, ctx) => {
   const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
   const starters = content.skills.filter(skill => skill.learning.starter);
@@ -50,6 +53,13 @@ export const contentSchema = z.object({
   for (const item of content.items) {
     if (!groups.has(item.groupId)) fail(`Неизвестная группа предмета ${item.id}`);
     if (item.grantedSkillId && !content.skills.some(skill => skill.id === item.grantedSkillId)) fail(`Неизвестный навык свитка ${item.id}`);
+  }
+  const recipeIds = new Set(content.recipes.map(recipe => recipe.id));
+  if (recipeIds.size !== content.recipes.length) fail('ID рецептов должны быть уникальными');
+  for (const recipe of content.recipes) {
+    for (const ingredient of [...recipe.inputs, ...recipe.outputs]) {
+      if (!content.items.some(item => item.id === ingredient.itemId)) fail(`Неизвестный предмет рецепта ${recipe.id}: ${ingredient.itemId}`);
+    }
   }
   const skills = new Map(content.skills.map(s => [s.id, s]));
   if (skills.size !== content.skills.length) fail('ID навыков должны быть уникальными');

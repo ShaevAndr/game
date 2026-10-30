@@ -24,6 +24,13 @@ test('fresh database migrates, seeds level 10 heroes and preserves progress on r
     const initial = await database.sql.selectFrom('characters').selectAll().execute();
     assert.equal(initial.length, 10);
     assert.ok(initial.every(row => row.data.level === 10 && row.data.learnedSkillIds.length >= 6));
+    assert.equal((await database.sql.selectFrom('crafting_operations').selectAll().execute()).length, 0);
+    const materials = await database.sql.selectFrom('item_instances').selectAll().where('owner_id', 'in', initial.map(character => character.id)).execute();
+    for (const character of initial) {
+      for (const itemId of ['iron-ore', 'healing-herb', 'leather']) {
+        assert.ok(materials.some(item => item.owner_id === character.id && item.item_id === itemId), `${character.id} lacks test material ${itemId}`);
+      }
+    }
     const progressed = { ...initial[0].data, name: 'Сохранённый герой', experience: 77 };
     await database.sql.updateTable('characters').set({ data: JSON.stringify(progressed) }).where('id', '=', progressed.id).execute();
     const custom = createCharacter(randomUUID(), 'Свой герой', seedContent);
@@ -81,9 +88,13 @@ test('upgrading the previous schema keeps battle snapshots and stages existing v
     assert.equal((await database.sql.selectFrom('battles').selectAll().execute()).length, 2);
     assert.equal((await database.sql.selectFrom('characters').selectAll().execute()).length, 10);
     const migratedItems = await database.sql.selectFrom('item_instances').selectAll().where('owner_id', '=', character.id).execute();
-    assert.equal(migratedItems.length, 3);
-    assert.equal(migratedItems.reduce((total, item) => total + item.quantity, 0), 250);
-    assert.ok(migratedItems.every(item => item.quantity <= 99 && item.inventory_id === character.id));
+    const migratedPotions = migratedItems.filter(item => item.item_id === 'potion');
+    assert.equal(migratedPotions.length, 3);
+    assert.equal(migratedPotions.reduce((total, item) => total + item.quantity, 0), 250);
+    assert.ok(migratedPotions.every(item => item.quantity <= 99 && item.inventory_id === character.id));
+    for (const itemId of ['iron-ore', 'healing-herb', 'leather']) {
+      assert.ok(migratedItems.some(item => item.item_id === itemId), `legacy hero lacks test material ${itemId}`);
+    }
     const expected = structuredClone(character); expected.skillPoints += 2; expected.stats.maxEnergy = 30;
     expected.energy = { ...expected.energy, fire: 30, water: 0, defense: 0 };
     const getCharacter = async () => (await database!.sql.selectFrom('characters').select('data').where('id', '=', character.id).executeTakeFirstOrThrow()).data;
