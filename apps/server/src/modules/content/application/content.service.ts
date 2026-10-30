@@ -36,7 +36,7 @@ export class ContentService implements OnApplicationBootstrap {
     const [settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions] = await Promise.all([
       this.settings.get(), this.skills.list(), this.items.list(), this.templates.list(), this.items.groups(), this.recipes.list(), this.characteristics.list(),
     ]);
-    const content = contentSchema.parse({ ...settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions });
+    const content = contentSchema.parse({ ...settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions, effectsVersion: 1 });
     await this.cache.set(cacheKey, content, 30);
     return content;
   }

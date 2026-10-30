@@ -8,6 +8,7 @@ import { BattleSkills } from './BattleSkills';
 import { SkillEnergy } from '../../../shared/ui/SkillEnergy';
 import { FieldMotion } from '../../battlefield/model/field-playback';
 import { CharacterAttributes } from '../../characters/components/CharacterAttributes';
+import { ActiveEffects } from './ActiveEffects';
 
 interface Props {
   battle: Battle; characterId: string; hasCharacter: boolean; busy: boolean;
@@ -33,13 +34,13 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, animatin
         <h2>{battle.status === 'waiting' ? 'Сбор участников' : battle.status === 'finished' ? `Победа команды ${(battle.winner ?? 0) + 1}` : myTurn ? 'Твой ход' : `Ход: ${active?.name}`}</h2>
       </div><button className="ghost" onClick={onCopy}>Скопировать приглашение ↗</button></div>
       <BattleRewards battle={battle} characterId={characterId}/>
-      <div className="fighters">{battle.fighters.map(fighter => <button key={fighter.id}
+      <div className="fighters">{battle.fighters.map(fighter => <div className="fighter-card" key={fighter.id}><button
         onClick={() => { if (fighter.team !== me?.team && fighter.hp > 0) controls.setTargetId(fighter.id); }}
         className={`fighter ${fighter.id === battle.activeId ? 'acting' : ''} ${fighter.id === targetId ? 'target' : ''} ${fighter.hp === 0 ? 'dead' : ''}`}>
         <div><span>{fighter.npc ? '⬡' : '◈'} {fighter.name}</span><small>Команда {fighter.team + 1}{fighter.id === me?.id ? ' · ты' : ''}{fighter.id === targetId ? ' · цель' : ''}</small>{(fighter.guardDefense ?? 0) > 0 && <small className="guard-status">⛨ Защита +{fighter.guardDefense} до своего хода</small>}</div>
         <b>{fighter.hp}<small> / {fighter.stats.maxHp}</small></b><div className="hp-track"><i style={{ width: `${100 * fighter.hp / fighter.stats.maxHp}%` }}/></div>
         {battle.combatVersion === 2 && <SkillEnergy value={skillEnergy(fighter)}/>}
-      </button>)}</div>
+      </button><ActiveEffects effects={fighter.activeEffects ?? []} fighters={battle.fighters} definitions={battle.content.statDefinitions ?? []}/></div>)}</div>
       {me?.attributes && battle.content.statDefinitions && <details className="battle-character-stats"><summary>Параметры в этом бою</summary><CharacterAttributes attributes={me.attributes} definitions={battle.content.statDefinitions}/></details>}
       {battle.status === 'waiting' && <div className="lobby-actions">
         {!me ? <>{(battle.kind === 'bot' ? [] : [0, 1]).filter(team => battle.kind !== 'dungeon' || team === 0).map(team =>

@@ -1,5 +1,7 @@
 import { Action, Battle, Fighter, isBattleConsumable, skillPower } from '@game/core';
 import { symbols } from '../../../shared/ui/game-labels';
+import { EffectSkillOption } from './EffectSkillOption';
+import '../effects.css';
 
 interface Props { battle: Battle; me?: Fighter; myTurn: boolean; busy: boolean; targetId: string; healTarget?: string; onAlly: (id: string) => void; onEnemy?: (id: string) => void; onCommand: (action: Action) => void; choiceOnly?: boolean }
 export function BattleSkills({ battle, me, myTurn, busy, targetId, healTarget, onAlly, onEnemy, onCommand, choiceOnly = false }: Props) {
@@ -15,10 +17,10 @@ export function BattleSkills({ battle, me, myTurn, busy, targetId, healTarget, o
       ? 'Совместите клетки. После всех каскадов появятся навыки только типов прямого совпадения.'
       : 'Энергия уже начислена. Выберите один навык или сохраните энергию и завершите ход.'
       : battle.rule === 'on-match' ? `Усиление от фишек: +${battle.pendingMatch * battle.content.balance.damagePerTile}` : 'Один навык или зелье за ход.'}</p>
-    {choiceOnly && me && visible.some(skill => skill.effect === 'damage') && <label className="heal-target">Цель атаки<select value={targetId} onChange={event => onEnemy?.(event.target.value)}>
+    {battle.effectsVersion !== 1 && choiceOnly && me && visible.some(skill => skill.effect === 'damage') && <label className="heal-target">Цель атаки<select value={targetId} onChange={event => onEnemy?.(event.target.value)}>
       {battle.fighters.filter(fighter => fighter.hp > 0 && fighter.team !== me.team).map(fighter => <option key={fighter.id} value={fighter.id}>{fighter.name} · {fighter.hp} HP</option>)}
     </select></label>}
-    {me && visible.some(skill => skill.effect === 'heal') && <label className="heal-target">Цель лечения<select value={healTarget} onChange={event => onAlly(event.target.value)}>
+    {battle.effectsVersion !== 1 && me && visible.some(skill => skill.effect === 'heal') && <label className="heal-target">Цель лечения<select value={healTarget} onChange={event => onAlly(event.target.value)}>
       {battle.fighters.filter(fighter => fighter.hp > 0 && fighter.team === me.team).map(fighter => <option key={fighter.id} value={fighter.id}>{fighter.name}{fighter.id === me.id ? ' (ты)' : ''}</option>)}
     </select></label>}
     {visible.map(skill => {
@@ -27,6 +29,7 @@ export function BattleSkills({ battle, me, myTurn, busy, targetId, healTarget, o
       const choice = battle.skillChoices?.find(choice => choice.skillId === skill.id);
       const enabled = myTurn && !battle.usedSkill && (modern ? battle.phase === 'choose' && !!choice?.enabled
         : (battle.rule !== 'on-match' || battle.phase === 'choose') && (me?.energy[skill.element] ?? 0) >= skill.cost && cooldown === 0);
+      if (battle.effectsVersion === 1 && me && choice) return <EffectSkillOption key={`${skill.id}:${battle.turn}`} battle={battle} actor={me} skill={skill} choice={choice} busy={busy} enabled={enabled} preferredTargetId={skill.effect === 'heal' || choice.targeting?.kind === 'ally_single' ? healTarget ?? me.id : targetId} onCommand={onCommand}/>;
       return <button key={skill.id} title={choice?.reason ?? skill.description} className="skill" disabled={!enabled || busy}
         onClick={() => onCommand({ type: 'skill', skillId: skill.id, targetId: skill.effect === 'heal' ? healTarget! : targetId })}>
         <span className={`element-icon ${skill.element}`}>{symbols[skill.element]}</span>

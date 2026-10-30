@@ -95,6 +95,8 @@ export class BattlesService {
       }
       state.combatVersion = 2; state.rule = 'on-match'; state.skillChoices = []; state.matchedElements = [];
       state.content = await this.content.get(true);
+      state.effectsVersion = state.content.effectsVersion;
+      if (state.effectsVersion === 1) state.effectSequence = 0;
       state.totalWaves = state.kind === 'dungeon' ? state.content.balance.dungeonWaves.length : 1;
       for (const fighter of [...state.fighters].filter(f => !f.npc).sort((a, b) => a.id.localeCompare(b.id))) {
         const character = await this.characters.get(fighter.id, state.content, context, true);

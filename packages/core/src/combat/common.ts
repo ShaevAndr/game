@@ -1,7 +1,11 @@
-import { Battle, Character, Content, Element, Fighter, emptyEnergy, tileTypes } from '../types';
+import { Battle, Character, Content, Fighter, emptyEnergy, tileTypes } from '../types';
 import { effectiveStats } from '../skills';
 import { ENERGY_CAP, totalEnergy } from './rules';
 import { projectCharacterAttributes } from '../attributes/character';
+import { addLog } from './log';
+import { endEffectTurn, initializeEffectFighter, removeDeadEffects } from '../effects/lifecycle';
+export { addLog } from './log';
+export { damage } from './damage';
 
 export function characterFighter(character: Character, team: number, content: Content): Fighter {
   character = projectCharacterAttributes(character, content);
@@ -11,7 +15,6 @@ export function characterFighter(character: Character, team: number, content: Co
   return { id: character.id, characterId: character.id, name: character.name, team, npc: false, stats, hp: stats.maxHp, energy, skillEnergy: totalEnergy(energy), guardDefense: 0, inventory: structuredClone(character.inventory), cooldowns: {}, skillLevels: { ...character.skillLevels }, skillIds: content.skills.filter(s => character.learnedSkillIds.includes(s.id) || s.learning?.starter).map(s => s.id),
     ...(content.statDefinitions && character.attributes ? { attributes: structuredClone(character.attributes), attributeState: { baseAttributes: { ...character.baseAttributes }, equipmentModifiers: structuredClone(character.equipmentModifiers ?? []), equipmentScaling: structuredClone(character.equipmentScaling ?? []), temporaryModifiers: [] } } : {}) };
 }
-export function addLog(battle: Battle, message: string) { battle.log.push(message); battle.log = battle.log.slice(-100); }
 export function spawnWave(b: Battle) {
   const enemies = b.content.enemies;
   if (!enemies.length) throw new Error('В MongoDB не настроены противники');
@@ -19,6 +22,7 @@ export function spawnWave(b: Battle) {
   if (!enemy) throw new Error('Не настроен противник для волны');
   b.fighters = b.fighters.filter(f => !f.npc);
   b.fighters.push({ id: `npc-${b.wave}`, name: enemy.name, npc: true, team: 1, stats: { ...enemy.stats, ...(b.combatVersion === 2 ? { maxEnergy: ENERGY_CAP } : {}) }, hp: enemy.stats.maxHp, energy: emptyEnergy(), skillEnergy: 0, guardDefense: 0, inventory: [], cooldowns: {}, skillIds: [...enemy.skillIds] });
+  initializeEffectFighter(b, b.fighters[b.fighters.length - 1]);
   addLog(b, `Волна ${b.wave}/${b.totalWaves}: ${enemy.name}`);
 }
 export function joinBattle(b: Battle, character: Character, team: number) {
@@ -44,6 +48,7 @@ export function startBattle(b: Battle) {
   const teams = [b.fighters.filter(f => f.team === 0), b.fighters.filter(f => f.team === 1)];
   b.fighters = Array.from({ length: Math.max(...teams.map(t => t.length)) }, (_, i) => teams.flatMap(t => t[i] ? [t[i]] : [])).flat();
   b.status = 'active'; b.turn = 1; b.activeId = b.fighters[0].id;
+  if (b.effectsVersion === 1) { for (const fighter of b.fighters) initializeEffectFighter(b, fighter); b.fighters[0].turnsStarted = 1; }
   addLog(b, `Бой начался. Ход: ${b.fighters[0].name}`);
 }
 export function finishOrWave(b: Battle): boolean {
@@ -55,6 +60,11 @@ export function finishOrWave(b: Battle): boolean {
   addLog(b, b.winner === null ? 'Ничья' : `Победила команда ${b.winner + 1}`); return true;
 }
 export function nextTurn(b: Battle) {
+  if (b.effectsVersion === 1) {
+    const current = b.fighters.find(fighter => fighter.id === b.activeId);
+    if (current) endEffectTurn(b, current);
+    removeDeadEffects(b);
+  }
   const currentIndex = b.fighters.findIndex(f => f.id === b.activeId);
   if (finishOrWave(b)) return;
   // A wave may replace the enemy but keeps the player roster in order.
@@ -64,6 +74,7 @@ export function nextTurn(b: Battle) {
     const next = b.fighters[(start + i) % b.fighters.length];
     if (next.hp <= 0) continue;
     if (b.combatVersion === 2) { next.guardDefense = 0; b.skillChoices = []; b.matchedElements = []; }
+    if (b.effectsVersion === 1) { initializeEffectFighter(b, next); next.turnsStarted = (next.turnsStarted ?? 0) + 1; }
     b.activeId = next.id; b.turn++; b.phase = 'before'; b.usedSkill = false; b.pendingMatch = 0;
     for (const id of Object.keys(next.cooldowns)) next.cooldowns[id] = Math.max(0, next.cooldowns[id] - 1);
     addLog(b, `Ход ${b.turn}: ${next.name}`); return;
@@ -73,31 +84,4 @@ export function target(b: Battle, actor: Fighter, id: string, ally = false): Fig
   const value = b.fighters.find(f => f.id === id && f.hp > 0 && (ally ? f.team === actor.team : f.team !== actor.team));
   if (!value) throw new Error(ally ? 'Выберите живого союзника' : 'Выберите живого противника');
   return value;
-}
-function criticalRoll(battle: Battle): number {
-  if (battle.attributeRngState === undefined) {
-    let seed = 2166136261;
-    for (const character of battle.id) seed = Math.imul(seed ^ character.charCodeAt(0), 16777619);
-    battle.attributeRngState = seed >>> 0;
-  }
-  battle.attributeRngState = (Math.imul(battle.attributeRngState, 1664525) + 1013904223) >>> 0;
-  return battle.attributeRngState / 4294967296 * 10000;
-}
-
-export function damage(b: Battle, actor: Fighter, victim: Fighter, power: number, element: Element = 'physical') {
-  const guard = b.combatVersion === 2 ? victim.guardDefense ?? 0 : 0;
-  if (b.content.statDefinitions) {
-    const attack = actor.attributes?.effective[element === 'physical' ? 'physicalPower' : 'magicPower'] ?? actor.stats.attack;
-    const defense = victim.attributes?.effective[element === 'physical' ? 'physicalResistance' : `${element}Resistance`] ?? victim.stats.defense;
-    const critical = criticalRoll(b) < (actor.attributes?.effective.criticalChanceBps ?? 0);
-    const bonus = critical ? actor.attributes!.effective.criticalBonusBps : 0;
-    // Existing skill power is a coefficient relative to the reference power 8, never free damage.
-    const reference = b.content.balance.attributes?.skillReferencePower ?? 8;
-    const amount = Math.max(1, Number(BigInt(attack) * BigInt(reference + power) * BigInt(10000 + bonus) / (BigInt(reference) * 10000n)) - defense - guard);
-    victim.hp = Math.max(0, victim.hp - amount);
-    addLog(b, `${actor.name} → ${victim.name}: ${amount} урона (${element}${critical ? ', критический' : ''})`);
-    return;
-  }
-  const amount = Math.max(1, Math.floor(power + actor.stats.attack - victim.stats.defense - guard));
-  victim.hp = Math.max(0, victim.hp - amount); addLog(b, `${actor.name} → ${victim.name}: ${amount} урона`);
 }

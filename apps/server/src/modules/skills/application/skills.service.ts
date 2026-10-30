@@ -26,7 +26,7 @@ export class SkillsService {
     return content.skills.filter(skill => skillLevel(character, skill.id) > 0).map(skill => ({
       ...skill, level: skillLevel(character, skill.id),
       power: skillPower(skill, skillLevel(character, skill.id)), progression: skillProgression(skill),
-      ...(character.attributes ? { magnitude: skillMagnitude(skill, skillLevel(character, skill.id), character.attributes.effective, content.balance.attributes?.skillReferencePower) } : {}),
+      ...(character.attributes && !skill.effects?.length ? { magnitude: skillMagnitude(skill, skillLevel(character, skill.id), character.attributes.effective, content.balance.attributes?.skillReferencePower) } : {}),
     }));
   }
 

@@ -1,5 +1,7 @@
 import { Character, Content, Skill, elementNames, elements, learningBlockers, learningStatRequirements, skillLevel, skillPower, skillProgression, upgradeBlockers } from '@game/core';
 import { symbols } from '../../../shared/ui/game-labels';
+import { targetingLabels } from '../../../shared/ui/effect-labels';
+import '../../battles/effects.css';
 
 interface Props { character?: Character; content: Content | null; busy: boolean; onLearn: (id: string) => void; onUpgrade: (id: string, expectedLevel: number) => void }
 export function SkillTree({ character, content, busy, onLearn, onUpgrade }: Props) {
@@ -24,7 +26,9 @@ export function SkillTree({ character, content, busy, onLearn, onUpgrade }: Prop
         return <article key={skill.id} className={`skill-node ${learned ? 'learned' : available ? 'available' : 'locked'}`}>
           <div className="node-status">{learned ? `✓ УРОВЕНЬ ${level} / ${progression.maxLevel}` : available ? 'МОЖНО ИЗУЧИТЬ' : 'ЗАКРЫТ'}</div>
           <h4>{skill.name}</h4><p className="node-description">{skill.description}</p>
-          <div className="node-effect">{skill.effect === 'heal' ? 'Лечение' : 'Урон'}: {content.statDefinitions ? `×${((skillPower(skill, level || 1) + (skill.effect === 'damage' ? content.balance.attributes?.skillReferencePower ?? 8 : 0)) / (content.balance.attributes?.skillReferencePower ?? 8)).toFixed(3)} ${skill.effect === 'heal' ? 'силы лечения' : skill.element === 'physical' ? 'физической мощи' : 'магической мощи'}` : skillPower(skill, level || 1)} · Энергия: {skill.cost}<br/>Перезарядка: {skill.cooldown} ход.</div>
+          {skill.effects?.length ? <><div className="node-effect">{targetingLabels[skill.targeting!.kind]} · Энергия: {skill.cost}<br/>Перезарядка: {skill.cooldown} ход.</div>
+            <ul className="skill-effects-list">{skill.effects.map(effect => <li key={effect.id}>{effect.kind === 'stat_modifier' ? `${effect.polarity === 'buff' ? 'Усиление' : 'Ослабление'}: ${content.statDefinitions?.find(definition => definition.id === effect.statId)?.name ?? effect.statId} · ${typeof effect.durationTurns === 'number' ? `${effect.durationTurns} ход.` : 'срок от характеристик'}` : effect.kind === 'dispel' ? `Снять ${effect.maxCount} ${effect.polarityToRemove === 'debuff' ? 'дебаф' : 'баф'}` : effect.kind === 'damage' ? 'Урон от характеристик' : 'Лечение от характеристик'}</li>)}</ul></>
+            : <div className="node-effect">{skill.effect === 'heal' ? 'Лечение' : 'Урон'}: {content.statDefinitions ? `×${((skillPower(skill, level || 1) + (skill.effect === 'damage' ? content.balance.attributes?.skillReferencePower ?? 8 : 0)) / (content.balance.attributes?.skillReferencePower ?? 8)).toFixed(3)} ${skill.effect === 'heal' ? 'силы лечения' : skill.element === 'physical' ? 'физической мощи' : 'магической мощи'}` : skillPower(skill, level || 1)} · Энергия: {skill.cost}<br/>Перезарядка: {skill.cooldown} ход.</div>}
           {r.starter ? <p className="starter-note">Бесплатный стартовый навык</p> : <ul className="skill-requirements">
             <li className={character && character.skillPoints >= r.pointCost ? 'met' : ''}>{r.pointCost} очк. навыков{character ? ` · есть ${character.skillPoints}` : ''}</li>
             <li className={character && character.level >= r.level ? 'met' : ''}>Уровень {r.level}</li>
@@ -32,7 +36,7 @@ export function SkillTree({ character, content, busy, onLearn, onUpgrade }: Prop
             {character && learningStatRequirements(character, skill, content?.statDefinitions).map((requirement, index) => <li key={`${requirement.id}:${index}`} className={requirement.actual >= requirement.required ? 'met' : ''}>{requirement.name} ≥ {requirement.required} · есть {requirement.actual}</li>)}
           </ul>}
           {learned ? <>
-            <p className="hint">Улучшение: +{progression.powerPerLevel} силы за {progression.pointCost} ОН.</p>
+            <p className="hint">{skill.effects?.length ? `Улучшение коэффициентов эффектов за ${progression.pointCost} ОН.` : `Улучшение: +${progression.powerPerLevel} силы за ${progression.pointCost} ОН.`}</p>
             <button className={upgradeReasons.length ? 'ghost' : 'primary'} disabled={busy || upgradeReasons.length > 0} title={upgradeReasons.join('; ')} onClick={() => onUpgrade(skill.id, level)}>{level >= progression.maxLevel ? 'Максимальный уровень' : `Улучшить до ${level + 1} · ${progression.pointCost} ОН`}</button>
           </> : <button className={available ? 'primary' : 'ghost'} disabled={!available || busy} title={blockers.join('; ')} onClick={() => onLearn(skill.id)}>{available ? `Изучить · ${r.pointCost} ОН` : 'Недоступен'}</button>}
         </article>;

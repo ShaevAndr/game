@@ -9,7 +9,7 @@ import { Pool } from 'pg';
 import { MongoClient } from 'mongodb';
 import Redis from 'ioredis';
 import { io, Socket } from 'socket.io-client';
-import { Battle, Character, Content, InventoryView, InventoryResult, findBattlefieldMove, findBattlefieldMatches, gainExperience, seedContent } from '@game/core';
+import { Battle, Character, Content, InventoryView, InventoryResult, findBattlefieldMove, findBattlefieldMatches, gainExperience, seedContent, seedEffectSkills, skillChoices } from '@game/core';
 import { InventoryService } from '../src/modules/inventory/application/inventory.service';
 import { InventoryRepository } from '../src/modules/inventory/ports/inventory.repository';
 import { AppModule } from '../src/app.module';
@@ -23,6 +23,7 @@ import { RedisCache } from '../src/infrastructure/redis/redis-cache';
 import { CharactersService } from '../src/modules/characters/application/characters.service';
 import { UnitOfWork } from '../src/shared/application/unit-of-work';
 import { MongoDatabase } from '../src/infrastructure/mongo/mongo.service';
+import { BattlesRepository } from '../src/modules/battles/ports/battles.repository';
 
 async function eventually(check: () => Promise<boolean>, timeout = 15000) {
   const until = Date.now() + timeout;
@@ -76,18 +77,19 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
 
     assert.equal((await request<Character[]>('/characters')).length, 10);
     const catalog = await request<Content>('/content');
-    assert.equal(catalog.skills.length, 30); assert.equal(catalog.balance.progression.startingSkillPoints, 4);
+    assert.equal(catalog.skills.length, seedContent.skills.length + seedEffectSkills.length); assert.equal(catalog.balance.progression.startingSkillPoints, 4);
     assert.equal(catalog.balance.progression.statGrowth.maxEnergy, 0); assert.equal(catalog.balance.teamSize, 2);
     assert.equal(catalog.skills.find(skill => skill.id === 'strike')!.cost, 3);
     assert.equal(catalog.skills.find(skill => skill.id === 'inferno')!.learning.stats.maxEnergy, 30);
     assert.equal(catalog.skills.find(skill => skill.id === 'inferno')!.power, 47);
-    assert.equal((await request<object[]>('/skills')).length, 30);
+    assert.equal((await request<object[]>('/skills')).length, seedContent.skills.length + seedEffectSkills.length);
     assert.equal((await request<object[]>('/items')).length, seedContent.items.length);
     await request('/battles/not-a-uuid', undefined, 400);
     const character = await request<Character>('/characters', { name: 'Интеграционный герой' });
     assert.equal(character.skillPoints, 4); assert.deepEqual(character.learnedSkillIds, ['strike']);
     await verifyCharacterCreation(character, request, app);
     await verifyCharacterAttributes(request, app, catalog);
+    await verifyBattleEffects(request, app);
     assert.equal((await request<Character>(`/characters/${character.id}`)).id, character.id);
     assert.equal((await request<object[]>(`/characters/${character.id}/inventory`)).length, character.inventory.length);
     const learned = await request<Character>(`/characters/${character.id}/skills`, { skillId: 'ember' });
@@ -437,4 +439,66 @@ async function verifyCharacterAttributes(request: TestRequest, app: INestApplica
   const persisted = await app.get(Database).sql.selectFrom('characters').select('data').where('id', '=', hero.id).executeTakeFirstOrThrow();
   assert.equal(persisted.data.attributePoints, 0);
   assert.equal(persisted.data.baseAttributes?.vitality, 12);
+}
+
+async function verifyBattleEffects(request: TestRequest, app: INestApplication) {
+  const first = await request<Character>('/characters', { name: 'Маг усилений' });
+  const second = await request<Character>('/characters', { name: 'Маг ослаблений' });
+  for (const id of ['battle-cry', 'weakening', 'purify']) await request(`/characters/${first.id}/skills`, { skillId: id });
+  await request(`/characters/${second.id}/skills`, { skillId: 'weakening' });
+  const created = await request<Battle>('/battles', { name: 'Проверка бафов', characterId: first.id, kind: 'duel' });
+  const joined = await request<Battle>(`/battles/${created.id}/join`, { characterId: second.id, team: 1 });
+  let battle = await request<Battle>(`/battles/${created.id}/start`, { characterId: first.id, version: joined.version });
+  assert.equal(battle.effectsVersion, 1);
+  const read = () => request<Battle>(`/battles/${battle.id}`);
+  const database = app.get(Database);
+  const prepare = async (skillId: string) => {
+    battle = await read();
+    const actor = battle.fighters.find(fighter => fighter.id === battle.activeId)!;
+    actor.skillEnergy = 30; actor.cooldowns[skillId] = 0; battle.usedSkill = false;
+    battle.phase = 'choose'; battle.matchedElements = [battle.content.skills.find(skill => skill.id === skillId)!.element];
+    battle.skillChoices = skillChoices(battle, actor);
+    await database.sql.updateTable('battles').set({ data: JSON.stringify(battle) }).where('id', '=', battle.id).execute();
+  };
+  const command = (action: object, characterId = battle.activeId!, version = battle.version, status = 201) => request<Battle>(`/battles/${battle.id}/actions`, { characterId, version, action }, status);
+  const pass = async () => { await prepare('strike'); battle = await command({ type: 'end' }); };
+  await prepare('battle-cry');
+  const before = await read();
+  const repository = app.get(BattlesRepository), save = repository.save;
+  repository.save = async () => { throw new Error('simulated effect save failure'); };
+  try { await command({ type: 'skill', skillId: 'battle-cry', targetId: first.id }, first.id, battle.version, 500); }
+  finally { repository.save = save; }
+  assert.deepEqual(await read(), before);
+  const version = battle.version;
+  battle = await command({ type: 'skill', skillId: 'battle-cry', targetId: first.id });
+  let caster = battle.fighters.find(fighter => fighter.id === first.id)!;
+  assert.equal(caster.activeEffects?.length, 1);
+  assert.equal(caster.activeEffects![0].remainingTurns, 2);
+  assert.equal(caster.attributes!.effective.strength, 12);
+  assert.equal(caster.skillEnergy, 27);
+  assert.ok(battle.playback?.some(frame => frame.fighters.some(fighter => fighter.activeEffects?.length)));
+  await command({ type: 'skill', skillId: 'battle-cry', targetId: first.id }, first.id, version, 409);
+  assert.equal((await read()).effectSequence, battle.effectSequence);
+  const stored = await database.sql.selectFrom('battles').select('data').where('id', '=', battle.id).executeTakeFirstOrThrow();
+  assert.deepEqual(stored.data.fighters.find(fighter => fighter.id === first.id)!.activeEffects, caster.activeEffects);
+  assert.equal((await request<Character>(`/characters/${first.id}`)).baseAttributes!.strength, 10);
+  assert.equal((await request<Character>(`/characters/${first.id}`)).attributes!.effective.strength, 10);
+
+  await prepare('weakening');
+  battle = await command({ type: 'skill', skillId: 'weakening', targetId: first.id });
+  caster = battle.fighters.find(fighter => fighter.id === first.id)!;
+  assert.equal(caster.activeEffects!.length, 2);
+  assert.ok(caster.attributes!.effective.physicalPower < caster.attributes!.equipped.physicalPower + 1);
+  await prepare('purify');
+  await command({ type: 'skill', skillId: 'purify', targetId: second.id }, first.id, battle.version, 400);
+  battle = await command({ type: 'skill', skillId: 'purify', targetId: first.id });
+  caster = battle.fighters.find(fighter => fighter.id === first.id)!;
+  assert.equal(caster.activeEffects!.length, 1);
+  assert.equal(caster.activeEffects![0].polarity, 'buff');
+  assert.equal(caster.activeEffects![0].remainingTurns, 1);
+  await pass(); await pass();
+  caster = battle.fighters.find(fighter => fighter.id === first.id)!;
+  assert.equal(caster.activeEffects!.length, 0);
+  assert.equal(caster.attributes!.effective.strength, 10);
+  assert.equal(caster.attributeState!.temporaryModifiers.length, 0);
 }

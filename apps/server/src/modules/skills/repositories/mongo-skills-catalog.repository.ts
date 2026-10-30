@@ -1,5 +1,5 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
-import { Skill, seedContent, defaultSkillProgression } from '@game/core';
+import { Skill, seedContent, seedEffectSkills, defaultSkillProgression } from '@game/core';
 import { MongoDatabase } from '../../../infrastructure/mongo/mongo.service';
 import { SkillsCatalogRepository } from '../ports/skills-catalog.repository';
 
@@ -9,7 +9,7 @@ export class MongoSkillsCatalogRepository extends SkillsCatalogRepository implem
   async onModuleInit() {
     const collection = this.mongo.db.collection<Skill>('skills');
     await collection.createIndex({ id: 1 }, { unique: true });
-    for (const value of seedContent.skills) {
+    for (const value of [...seedContent.skills, ...seedEffectSkills]) {
       await collection.updateOne({ id: value.id }, { $setOnInsert: value }, { upsert: true });
     }
     await collection.updateOne({ id: 'strike', cost: 0 }, { $set: { cost: 3, description: seedContent.skills.find(skill => skill.id === 'strike')!.description } });
