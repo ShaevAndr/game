@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
-import { grantSkill, learnSkill, skillLevel, skillPower, skillProgression, upgradeSkill } from '@game/core';
+import { grantSkill, learnSkill, skillLevel, skillMagnitude, skillPower, skillProgression, upgradeSkill } from '@game/core';
 import { z } from 'zod';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
 import { CharactersService } from '../../characters/application/characters.service';
@@ -26,6 +26,7 @@ export class SkillsService {
     return content.skills.filter(skill => skillLevel(character, skill.id) > 0).map(skill => ({
       ...skill, level: skillLevel(character, skill.id),
       power: skillPower(skill, skillLevel(character, skill.id)), progression: skillProgression(skill),
+      ...(character.attributes ? { magnitude: skillMagnitude(skill, skillLevel(character, skill.id), character.attributes.effective, content.balance.attributes?.skillReferencePower) } : {}),
     }));
   }
 

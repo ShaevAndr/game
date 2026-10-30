@@ -6,6 +6,7 @@ import { SkillsCatalogService } from '../../skills/application/skills-catalog.se
 import { ItemsService } from '../../items/application/items.service';
 import { RecipesCatalogService } from '../../crafting/application/recipes-catalog.service';
 import { ContentSettingsRepository } from '../ports/content-settings.repository';
+import { CharacteristicsCatalogService } from '../../characters/application/characteristics-catalog.service';
 
 const cacheKey = 'content:v1';
 
@@ -18,6 +19,7 @@ export class ContentService implements OnApplicationBootstrap {
     @Inject(CharacterTemplatesService) private readonly templates: CharacterTemplatesService,
     @Inject(RecipesCatalogService) private readonly recipes: RecipesCatalogService,
     @Inject(Cache) private readonly cache: Cache,
+    @Inject(CharacteristicsCatalogService) private readonly characteristics: CharacteristicsCatalogService,
   ) {}
 
   async onApplicationBootstrap() {
@@ -31,10 +33,10 @@ export class ContentService implements OnApplicationBootstrap {
       const parsed = contentSchema.safeParse(cached);
       if (parsed.success) return parsed.data;
     }
-    const [settings, skills, items, characterTemplates, itemGroups, recipes] = await Promise.all([
-      this.settings.get(), this.skills.list(), this.items.list(), this.templates.list(), this.items.groups(), this.recipes.list(),
+    const [settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions] = await Promise.all([
+      this.settings.get(), this.skills.list(), this.items.list(), this.templates.list(), this.items.groups(), this.recipes.list(), this.characteristics.list(),
     ]);
-    const content = contentSchema.parse({ ...settings, skills, items, characterTemplates, itemGroups, recipes });
+    const content = contentSchema.parse({ ...settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions });
     await this.cache.set(cacheKey, content, 30);
     return content;
   }

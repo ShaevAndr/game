@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { Content, InventoryCommand, InventoryState, ItemInstance, applyInventoryCommand, availableItemActions, backpackStacks, equipmentBonuses } from '@game/core';
+import { Content, InventoryCommand, InventoryState, ItemInstance, applyInventoryCommand, availableItemActions, backpackStacks, equipmentBonuses, equipmentAttributeSources, equipmentRequirementBlockers, projectCharacterAttributes } from '@game/core';
 import { z } from 'zod';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
 import { CharactersService } from '../../characters/application/characters.service';
@@ -32,10 +32,15 @@ export class InventoryService {
       const state = await this.repository.load(ownerId, context);
       const groups = content.itemGroups ?? [];
       return {
-        ...state, definitions: content.items, groups,
+        ...state, definitions: content.items, groups, statDefinitions: content.statDefinitions,
         items: state.items.map(instance => {
           const definition = content.items.find(item => item.id === instance.itemId);
           const actions = definition ? availableItemActions(instance, state, definition, groups) : [];
+          if (definition && content.statDefinitions) {
+            const blockers = equipmentRequirementBlockers(definition, character.baseAttributes ?? {}, content.statDefinitions);
+            const equip = actions.find(action => action.id === 'equip');
+            if (equip && blockers.length) { equip.enabled = false; equip.reason = blockers.join('; '); }
+          }
           if (definition?.grantedSkillId && character.learnedSkillIds.includes(definition.grantedSkillId)) {
             const read = actions.find(action => action.id === 'read');
             if (read) { read.enabled = false; read.reason = 'Навык уже известен'; }
@@ -83,6 +88,11 @@ export class InventoryService {
       await this.characters.update(state.ownerId, content, character => {
         character.inventory = backpackStacks(state);
         character.equipmentBonuses = equipmentBonuses(state, content.items);
+        if (content.statDefinitions) {
+          const sources = equipmentAttributeSources(state, content.items);
+          character.equipmentModifiers = sources.modifiers; character.equipmentScaling = sources.scaling;
+          Object.assign(character, projectCharacterAttributes(character, content));
+        }
       }, context);
     }
   }
@@ -102,6 +112,14 @@ export class InventoryService {
         states.push(await this.state(ownerId, content, context));
       }
       if ('instanceId' in command && !states.some(state => state.items.some(item => item.id === command.instanceId))) throw new ConflictException('Предмет перемещён. Повторите действие.');
+      if (command.type === 'equip' && content.statDefinitions) {
+        const state = states.find(state => state.items.some(item => item.id === command.instanceId))!;
+        const instance = state.items.find(item => item.id === command.instanceId)!;
+        const definition = content.items.find(item => item.id === instance.itemId)!;
+        const character = await this.characters.get(state.ownerId, content, context, true);
+        const blockers = equipmentRequirementBlockers(definition, character.baseAttributes ?? {}, content.statDefinitions);
+        if (blockers.length) throw new BadRequestException(blockers.join('; '));
+      }
       let changed: ReturnType<typeof applyInventoryCommand>;
       try { changed = applyInventoryCommand(states, command, content.items, content.itemGroups, randomUUID); }
       catch (error) { throw new BadRequestException((error as Error).message); }
@@ -109,7 +127,7 @@ export class InventoryService {
         const granted = await this.skills.grant(effect.ownerId, effect.skillId, context);
         if (!granted.granted) throw new BadRequestException('Навык уже известен; свиток не потрачен');
       }
-      await this.commit(states, content, context);
+      await this.commit(changed.states, content, context);
       await this.repository.finishOperation(operationId, changed.result, context);
       return changed.result;
     });

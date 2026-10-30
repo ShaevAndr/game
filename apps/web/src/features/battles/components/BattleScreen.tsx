@@ -7,6 +7,7 @@ import { BattlefieldSummary } from '../../battlefield/components/BattlefieldSumm
 import { BattleSkills } from './BattleSkills';
 import { SkillEnergy } from '../../../shared/ui/SkillEnergy';
 import { FieldMotion } from '../../battlefield/model/field-playback';
+import { CharacterAttributes } from '../../characters/components/CharacterAttributes';
 
 interface Props {
   battle: Battle; characterId: string; hasCharacter: boolean; busy: boolean;
@@ -39,6 +40,7 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, animatin
         <b>{fighter.hp}<small> / {fighter.stats.maxHp}</small></b><div className="hp-track"><i style={{ width: `${100 * fighter.hp / fighter.stats.maxHp}%` }}/></div>
         {battle.combatVersion === 2 && <SkillEnergy value={skillEnergy(fighter)}/>}
       </button>)}</div>
+      {me?.attributes && battle.content.statDefinitions && <details className="battle-character-stats"><summary>Параметры в этом бою</summary><CharacterAttributes attributes={me.attributes} definitions={battle.content.statDefinitions}/></details>}
       {battle.status === 'waiting' && <div className="lobby-actions">
         {!me ? <>{(battle.kind === 'bot' ? [] : [0, 1]).filter(team => battle.kind !== 'dungeon' || team === 0).map(team =>
           <button key={team} disabled={!hasCharacter || busy} onClick={() => onJoin(team)}>Вступить в команду {team + 1}</button>)}</>

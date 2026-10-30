@@ -1,10 +1,12 @@
 import type { Item, ItemStack, Stats } from './types';
 import { defaultItemGroups, ItemGroup, itemActionNames, ItemActionId } from './items';
+import { legacyEquipmentAttributes } from './attributes/equipment';
+import type { ScaledEquipmentBonus, StatDefinition, StatModifier } from './attributes/types';
 
 export interface InventoryContainer { id: string; ownerId: string; name: string; capacity: number; primary: boolean }
 export interface ItemInstance { id: string; ownerId: string; inventoryId: string | null; itemId: string; quantity: number; equippedSlot: string | null }
 export interface InventoryState { ownerId: string; inventories: InventoryContainer[]; items: ItemInstance[] }
-export interface InventoryView extends InventoryState { items: (ItemInstance & { actions: AvailableItemAction[] })[]; definitions: Item[]; groups: ItemGroup[] }
+export interface InventoryView extends InventoryState { items: (ItemInstance & { actions: AvailableItemAction[] })[]; definitions: Item[]; groups: ItemGroup[]; statDefinitions?: StatDefinition[] }
 export interface InventoryResult { itemIds: string[]; deletedItemIds: string[]; inventoryId?: string }
 export interface InventoryEffect { ownerId: string; skillId: string }
 export type InventoryCommand =
@@ -30,6 +32,24 @@ export function equipmentBonuses(state: InventoryState, definitions: Item[]): Pa
     for (const [key, value] of Object.entries(definitions.find(definition => definition.id === item.itemId)?.bonuses ?? {}) as [keyof Stats, number][]) result[key] = (result[key] ?? 0) + value;
   }
   return result;
+}
+
+export function equipmentAttributeSources(state: InventoryState, definitions: Item[]) {
+  const modifiers: StatModifier[] = [], scaling: ScaledEquipmentBonus[] = [];
+  for (const instance of state.items.filter(item => item.equippedSlot)) {
+    const definition = definitions.find(item => item.id === instance.itemId);
+    if (!definition) throw new Error('Описание экипировки не найдено');
+    const legacy = legacyEquipmentAttributes(definition.bonuses ?? {}, instance.id);
+    modifiers.push(...legacy.modifiers); scaling.push(...legacy.scaling);
+    for (const [index, modifier] of (definition.statModifiers ?? []).entries()) modifiers.push({ ...modifier, id: `${instance.id}:modifier:${index}`, sourceId: instance.id });
+    for (const [index, bonus] of (definition.scaledBonuses ?? []).entries()) scaling.push({ ...bonus, id: `${instance.id}:scaling:${index}`, sourceId: instance.id });
+  }
+  return { modifiers, scaling };
+}
+
+export function equipmentRequirementBlockers(item: Item, baseAttributes: Record<string, number>, definitions: StatDefinition[]): string[] {
+  return Object.entries(item.attributeRequirements ?? {}).filter(([id, minimum]) => (baseAttributes[id] ?? 0) < minimum)
+    .map(([id, minimum]) => `Нужно: ${definitions.find(definition => definition.id === id)?.name ?? id} ${minimum}`);
 }
 
 /** Clones its inputs: failed operations never partially mutate a caller's state. */

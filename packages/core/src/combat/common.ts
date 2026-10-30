@@ -1,12 +1,15 @@
-import { Battle, Character, Content, Fighter, emptyEnergy, tileTypes } from '../types';
+import { Battle, Character, Content, Element, Fighter, emptyEnergy, tileTypes } from '../types';
 import { effectiveStats } from '../skills';
 import { ENERGY_CAP, totalEnergy } from './rules';
+import { projectCharacterAttributes } from '../attributes/character';
 
 export function characterFighter(character: Character, team: number, content: Content): Fighter {
+  character = projectCharacterAttributes(character, content);
   const stats = effectiveStats(character); stats.maxEnergy = Math.min(ENERGY_CAP, stats.maxEnergy);
   const energy = emptyEnergy();
   for (const type of tileTypes) energy[type] = Math.min(ENERGY_CAP, Math.max(0, character.energy[type] ?? 0));
-  return { id: character.id, characterId: character.id, name: character.name, team, npc: false, stats, hp: stats.maxHp, energy, skillEnergy: totalEnergy(energy), guardDefense: 0, inventory: structuredClone(character.inventory), cooldowns: {}, skillLevels: { ...character.skillLevels }, skillIds: content.skills.filter(s => character.learnedSkillIds.includes(s.id) || s.learning?.starter).map(s => s.id) };
+  return { id: character.id, characterId: character.id, name: character.name, team, npc: false, stats, hp: stats.maxHp, energy, skillEnergy: totalEnergy(energy), guardDefense: 0, inventory: structuredClone(character.inventory), cooldowns: {}, skillLevels: { ...character.skillLevels }, skillIds: content.skills.filter(s => character.learnedSkillIds.includes(s.id) || s.learning?.starter).map(s => s.id),
+    ...(content.statDefinitions && character.attributes ? { attributes: structuredClone(character.attributes), attributeState: { baseAttributes: { ...character.baseAttributes }, equipmentModifiers: structuredClone(character.equipmentModifiers ?? []), equipmentScaling: structuredClone(character.equipmentScaling ?? []), temporaryModifiers: [] } } : {}) };
 }
 export function addLog(battle: Battle, message: string) { battle.log.push(message); battle.log = battle.log.slice(-100); }
 export function spawnWave(b: Battle) {
@@ -32,7 +35,7 @@ export function startBattle(b: Battle) {
   if (b.kind === 'bot') {
     if (b.fighters.length !== 1 || b.fighters[0].npc || b.fighters[0].team !== 0) throw new Error('Для боя с ботом нужен один игрок');
     const hero = b.fighters[0];
-    b.fighters.push({ id: 'bot-opponent', name: `Бот: ${hero.name}`, team: 1, npc: true, stats: { ...hero.stats }, hp: hero.stats.maxHp, energy: emptyEnergy(), skillEnergy: 0, guardDefense: 0, inventory: [], cooldowns: {}, skillIds: [...hero.skillIds], skillLevels: { ...hero.skillLevels } });
+    b.fighters.push({ id: 'bot-opponent', name: `Бот: ${hero.name}`, team: 1, npc: true, stats: { ...hero.stats }, hp: hero.stats.maxHp, energy: emptyEnergy(), skillEnergy: 0, guardDefense: 0, inventory: [], cooldowns: {}, skillIds: [...hero.skillIds], skillLevels: { ...hero.skillLevels }, ...(hero.attributes ? { attributes: structuredClone(hero.attributes), attributeState: structuredClone(hero.attributeState) } : {}) });
     addLog(b, 'Бот готов: характеристики и навыки соответствуют вашему герою.');
   }
   if (b.kind === 'dungeon') spawnWave(b);
@@ -71,8 +74,30 @@ export function target(b: Battle, actor: Fighter, id: string, ally = false): Fig
   if (!value) throw new Error(ally ? 'Выберите живого союзника' : 'Выберите живого противника');
   return value;
 }
-export function damage(b: Battle, actor: Fighter, victim: Fighter, power: number) {
+function criticalRoll(battle: Battle): number {
+  if (battle.attributeRngState === undefined) {
+    let seed = 2166136261;
+    for (const character of battle.id) seed = Math.imul(seed ^ character.charCodeAt(0), 16777619);
+    battle.attributeRngState = seed >>> 0;
+  }
+  battle.attributeRngState = (Math.imul(battle.attributeRngState, 1664525) + 1013904223) >>> 0;
+  return battle.attributeRngState / 4294967296 * 10000;
+}
+
+export function damage(b: Battle, actor: Fighter, victim: Fighter, power: number, element: Element = 'physical') {
   const guard = b.combatVersion === 2 ? victim.guardDefense ?? 0 : 0;
+  if (b.content.statDefinitions) {
+    const attack = actor.attributes?.effective[element === 'physical' ? 'physicalPower' : 'magicPower'] ?? actor.stats.attack;
+    const defense = victim.attributes?.effective[element === 'physical' ? 'physicalResistance' : `${element}Resistance`] ?? victim.stats.defense;
+    const critical = criticalRoll(b) < (actor.attributes?.effective.criticalChanceBps ?? 0);
+    const bonus = critical ? actor.attributes!.effective.criticalBonusBps : 0;
+    // Existing skill power is a coefficient relative to the reference power 8, never free damage.
+    const reference = b.content.balance.attributes?.skillReferencePower ?? 8;
+    const amount = Math.max(1, Number(BigInt(attack) * BigInt(reference + power) * BigInt(10000 + bonus) / (BigInt(reference) * 10000n)) - defense - guard);
+    victim.hp = Math.max(0, victim.hp - amount);
+    addLog(b, `${actor.name} → ${victim.name}: ${amount} урона (${element}${critical ? ', критический' : ''})`);
+    return;
+  }
   const amount = Math.max(1, Math.floor(power + actor.stats.attack - victim.stats.defense - guard));
   victim.hp = Math.max(0, victim.hp - amount); addLog(b, `${actor.name} → ${victim.name}: ${amount} урона`);
 }

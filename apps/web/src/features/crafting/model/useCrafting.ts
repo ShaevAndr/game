@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { InventoryView, RecipeIngredient } from '@game/core';
+import { CraftingResult, InventoryView, RecipeIngredient } from '@game/core';
 import { inventoryApi } from '../../inventory/api/inventory.api';
 import { craftingApi, CraftingCatalog } from '../api/crafting.api';
 import { ApiError } from '../../../shared/api/http';
@@ -9,7 +9,7 @@ export function useCrafting(ownerId: string, onError: (message: string) => void)
   const [view, setView] = useState<InventoryView | null>(null);
   const [catalog, setCatalog] = useState<CraftingCatalog | null>(null);
   const [selection, setSelection] = useState<Record<string, number>>({});
-  const attempts = useRef(new Map<string, { id: string; committed: boolean }>());
+  const attempts = useRef(new Map<string, { id: string; committed: boolean; result?: CraftingResult }>());
 
   const refresh = useCallback(async () => {
     if (ownerId) setView(await inventoryApi.get(ownerId));
@@ -30,15 +30,14 @@ export function useCrafting(ownerId: string, onError: (message: string) => void)
     .map(([itemId, quantity]) => ({ itemId, quantity }))
     .sort((left, right) => left.itemId.localeCompare(right.itemId));
 
-  const execute = async <T,>(signature: string, send: (id: string) => Promise<T>): Promise<T> => {
-    const attempt = attempts.current.get(signature) ?? { id: operationId(), committed: false };
+  const execute = async <T extends CraftingResult,>(signature: string, send: (id: string) => Promise<T>): Promise<T> => {
+    const attempt: { id: string; committed: boolean; result?: CraftingResult } = attempts.current.get(signature) ?? { id: operationId(), committed: false };
     attempts.current.set(signature, attempt);
     try {
-      let result: T | undefined;
-      if (!attempt.committed) { result = await send(attempt.id); attempt.committed = true; }
+      if (!attempt.committed) { attempt.result = await send(attempt.id); attempt.committed = true; }
       await refresh();
       attempts.current.delete(signature);
-      return result as T;
+      return attempt.result as T;
     } catch (error) {
       if (error instanceof ApiError && error.status < 500 && !attempt.committed) attempts.current.delete(signature);
       await refresh().catch(() => undefined);

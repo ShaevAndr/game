@@ -30,7 +30,7 @@ export function BattleSkills({ battle, me, myTurn, busy, targetId, healTarget, o
       return <button key={skill.id} title={choice?.reason ?? skill.description} className="skill" disabled={!enabled || busy}
         onClick={() => onCommand({ type: 'skill', skillId: skill.id, targetId: skill.effect === 'heal' ? healTarget! : targetId })}>
         <span className={`element-icon ${skill.element}`}>{symbols[skill.element]}</span>
-        <span><strong>{skill.name} · ур. {level}</strong><small>{skill.effect === 'heal' ? 'Лечение союзника' : 'Урон по цели'} · сила {skillPower(skill, level)}{cooldown > 0 ? ` · КД ${cooldown}` : ''}{choice?.reason ? ` · ${choice.reason}` : ''}</small></span><b>{skill.cost}</b>
+        <span><strong>{skill.name} · ур. {level}</strong><small>{skill.effect === 'heal' ? 'Лечение союзника' : 'Урон по цели'} · {choice?.magnitude !== undefined ? `${choice.magnitude}${skill.effect === 'damage' ? ' до защиты и крита' : ' HP'}` : `сила ${skillPower(skill, level)}`}{cooldown > 0 ? ` · КД ${cooldown}` : ''}{choice?.reason ? ` · ${choice.reason}` : ''}</small></span><b>{skill.cost}</b>
       </button>;
     })}
     {!choiceOnly && me && consumables.map(item => {

@@ -7,6 +7,8 @@ export * from './items';
 export * from './skills';
 export * from './inventory';
 export * from './crafting';
+export * from './attributes';
+export * from './effects/stat-modifiers';
 export * from './battlefield';
 export * from './combat/rules';
 export { skillChoices } from './combat/matched';

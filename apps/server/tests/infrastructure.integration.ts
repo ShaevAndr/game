@@ -9,7 +9,7 @@ import { Pool } from 'pg';
 import { MongoClient } from 'mongodb';
 import Redis from 'ioredis';
 import { io, Socket } from 'socket.io-client';
-import { Battle, Character, Content, InventoryView, InventoryResult, findBattlefieldMove, findBattlefieldMatches, seedContent } from '@game/core';
+import { Battle, Character, Content, InventoryView, InventoryResult, findBattlefieldMove, findBattlefieldMatches, gainExperience, seedContent } from '@game/core';
 import { InventoryService } from '../src/modules/inventory/application/inventory.service';
 import { InventoryRepository } from '../src/modules/inventory/ports/inventory.repository';
 import { AppModule } from '../src/app.module';
@@ -20,6 +20,9 @@ import { BattleHistoryRepository } from '../src/modules/battle-history/ports/bat
 import { ValidationFilter } from '../src/shared/http/validation.filter';
 import { BullMqTaskQueue } from '../src/infrastructure/queues/bullmq-task-queue';
 import { RedisCache } from '../src/infrastructure/redis/redis-cache';
+import { CharactersService } from '../src/modules/characters/application/characters.service';
+import { UnitOfWork } from '../src/shared/application/unit-of-work';
+import { MongoDatabase } from '../src/infrastructure/mongo/mongo.service';
 
 async function eventually(check: () => Promise<boolean>, timeout = 15000) {
   const until = Date.now() + timeout;
@@ -79,13 +82,14 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.equal(catalog.skills.find(skill => skill.id === 'inferno')!.learning.stats.maxEnergy, 30);
     assert.equal(catalog.skills.find(skill => skill.id === 'inferno')!.power, 47);
     assert.equal((await request<object[]>('/skills')).length, 30);
-    assert.equal((await request<object[]>('/items')).length, 6);
+    assert.equal((await request<object[]>('/items')).length, seedContent.items.length);
     await request('/battles/not-a-uuid', undefined, 400);
     const character = await request<Character>('/characters', { name: 'Интеграционный герой' });
     assert.equal(character.skillPoints, 4); assert.deepEqual(character.learnedSkillIds, ['strike']);
     await verifyCharacterCreation(character, request, app);
+    await verifyCharacterAttributes(request, app, catalog);
     assert.equal((await request<Character>(`/characters/${character.id}`)).id, character.id);
-    assert.equal((await request<object[]>(`/characters/${character.id}/inventory`)).length, 5);
+    assert.equal((await request<object[]>(`/characters/${character.id}/inventory`)).length, character.inventory.length);
     const learned = await request<Character>(`/characters/${character.id}/skills`, { skillId: 'ember' });
     assert.ok(learned.learnedSkillIds.includes('ember'));
     await request(`/characters/${character.id}/skills`, { skillId: 'ember' }, 400);
@@ -119,7 +123,9 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.equal((await request<Battle>(`/battles/${room.id}`)).fighters[0].stats.attack, frozenAttack);
     const database = app.get(Database);
     // Test fixture: one legal move will finish the battle, without relying on random cascades.
-    started.fighters.find(fighter => !fighter.npc)!.stats.attack = 10000;
+    const strong = started.fighters.find(fighter => !fighter.npc)!;
+    strong.stats.attack = 10000;
+    if (strong.attributes) strong.attributes.effective.physicalPower = 10000;
     started.board = Array.from({ length: 6 }, (_, row) => Array.from({ length: 10 }, (_, col) => (row + col) % 2 ? 'water' : 'physical'));
     await database.sql.updateTable('battles').set({ data: JSON.stringify(started) }).where('id', '=', room.id).execute();
 
@@ -151,6 +157,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.equal(result.status, 'finished');
     assert.equal(result.fighters[0].skillEnergy, moved.fighters[0].skillEnergy! - 3);
     assert.equal((await request<Character>(`/characters/${character.id}`)).level, 2);
+    assert.equal((await request<Character>(`/characters/${character.id}`)).attributePoints, 5);
     assert.equal((await database.sql.selectFrom('battle_rewards').selectAll().execute()).length, 1);
     await eventually(async () => snapshots.some(value => value.id === room.id && value.version === result.version));
 
@@ -310,7 +317,7 @@ async function verifyOperations(character: Character, request: TestRequest, app:
   const recipient = await request<Character>('/characters', { name: 'Получатель' });
   const recipientView = () => request<InventoryView>(`/characters/${recipient.id}/inventories`);
   await action(sword.id, { action: 'equip' });
-  assert.equal((await request<Character>(`/characters/${owner}`)).equipmentBonuses?.attack, 3);
+  assert.equal((await request<Character>(`/characters/${owner}`)).equipmentBonuses?.attack, 4);
   await transfer(sword.id, recipient.id, 1, randomUUID(), 400);
   await action(sword.id, { action: 'unequip' });
   await transfer(ore.id, recipient.id, 5);
@@ -381,11 +388,53 @@ async function verifyOperations(character: Character, request: TestRequest, app:
   assert.equal(replaced.items.find(item => item.id === sword.id)?.equippedSlot, null);
   assert.equal(replaced.items.find(item => item.id === replacement.itemIds[0])?.equippedSlot, 'main-hand');
   const afterReplacement = await request<Character>(`/characters/${owner}`);
-  assert.equal(afterReplacement.equipmentBonuses?.attack, 3);
+  assert.equal(afterReplacement.equipmentBonuses?.attack, 4);
   assert.equal(afterReplacement.inventory.find(stack => stack.itemId === 'iron-sword')?.quantity, 1);
   // Swap both directions so correctness cannot depend on which random UUID sorts first.
   await action(sword.id, { action: 'equip' });
   const switchedBack = await view();
   assert.equal(switchedBack.items.find(item => item.id === sword.id)?.equippedSlot, 'main-hand');
   assert.equal(switchedBack.items.find(item => item.id === replacement.itemIds[0])?.equippedSlot, null);
+}
+
+async function verifyCharacterAttributes(request: TestRequest, app: INestApplication, content: Content) {
+  const hero = await request<Character>('/characters', { name: 'Распределение очков' });
+  assert.equal(hero.attributePoints, 0);
+  assert.equal(hero.attributes?.base.physicalPower, 8);
+  const service = app.get(CharactersService);
+  const grown = await app.get(UnitOfWork).run(context => service.update(hero.id, content, character => {
+    gainExperience(character, 100, content.balance.progression);
+  }, context));
+  assert.equal(grown.attributePoints, 5);
+  assert.equal(grown.attributes?.base.physicalPower, 8);
+  const allocate = (allocations: Record<string, number>, expectedRevision: number, status = 201) => request<Character>(`/characters/${hero.id}/attributes`, { allocations, expectedRevision }, status);
+  const race = await Promise.allSettled([allocate({ strength: 3 }, grown.attributeRevision!), allocate({ intelligence: 3 }, grown.attributeRevision!)]);
+  assert.equal(race.filter(result => result.status === 'fulfilled').length, 1);
+  const rejected = race.find(result => result.status === 'rejected');
+  assert.equal(rejected?.status === 'rejected' ? rejected.reason.actual : undefined, 409);
+  const current = await request<Character>(`/characters/${hero.id}`);
+  assert.equal(current.attributePoints, 2);
+  await allocate({ strength: 3 }, current.attributeRevision!, 400);
+  await allocate({ strength: -1 }, current.attributeRevision!, 400);
+  await allocate({ physicalPower: 1 }, current.attributeRevision!, 400);
+  assert.equal((await request<Character>(`/characters/${hero.id}`)).attributePoints, 2);
+
+  const item = { ...seedContent.items.find(item => item.id === 'iron-sword')!, id: 'attribute-test-sword', attributeRequirements: { vitality: 12 } };
+  await app.get(MongoDatabase).db.collection('items').insertOne(item);
+  const inventory = app.get(InventoryService);
+  const received = await inventory.receive(hero.id, item.id, 1, randomUUID());
+  const instanceId = received.itemIds[0];
+  const blocked = (await inventory.get(hero.id)).items.find(item => item.id === instanceId)!.actions.find(action => action.id === 'equip')!;
+  assert.equal(blocked.enabled, false); assert.match(blocked.reason!, /Выносливость 12/);
+  await request(`/item-instances/${instanceId}/actions`, { action: 'equip', operationId: randomUUID() }, 400);
+  const increased = await allocate({ vitality: 2 }, current.attributeRevision!);
+  assert.equal(increased.attributePoints, 0);
+  assert.equal(increased.attributes?.base.maxHp, 144);
+  await request(`/item-instances/${instanceId}/actions`, { action: 'equip', operationId: randomUUID() });
+  const equipped = await request<Character>(`/characters/${hero.id}`);
+  assert.ok(equipped.attributes!.equipped.physicalPower > equipped.attributes!.base.physicalPower);
+  assert.deepEqual(equipped.baseAttributes, increased.baseAttributes);
+  const persisted = await app.get(Database).sql.selectFrom('characters').select('data').where('id', '=', hero.id).executeTakeFirstOrThrow();
+  assert.equal(persisted.data.attributePoints, 0);
+  assert.equal(persisted.data.baseAttributes?.vitality, 12);
 }

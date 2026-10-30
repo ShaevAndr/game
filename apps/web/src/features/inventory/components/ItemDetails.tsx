@@ -30,6 +30,8 @@ export function ItemDetails({ view, selectedId, characters, busy, recipientId, d
       <div className="item-title"><span className="item-large-icon"><ItemIcon item={definition}/></span><div><span className="item-category">{definition?.equipSlot ? slotNames[definition.equipSlot] ?? definition.equipSlot : view.groups.find(group => group.id === definition?.groupId)?.name}</span><h3>{definition?.name ?? selected.itemId}</h3><span className={`item-location ${equipped ? 'is-equipped' : ''}`}>{equipped ? '● Надето на персонажа' : inBackpack ? 'В рюкзаке' : 'В сохранённых предметах'}{selected.quantity > 1 ? ` · ${selected.quantity} шт.` : ''}</span></div></div>
       <p>{definition?.description ?? 'Описание предмета недоступно.'}</p>
       {!!definition?.bonuses && <dl className="item-bonuses">{Object.entries(definition.bonuses).map(([key, value]) => <div key={key}><dt>{statNames[key] ?? key}</dt><dd>+{value}</dd></div>)}</dl>}
+      {!!definition?.bonuses?.attack && view.statDefinitions && <p className="hint">Мощь оружия усиливается характеристиками героя. Итоговый вклад показан в расчёте параметров на экране экипировки.</p>}
+      {!equipped && selected.actions.find(action => action.id === 'equip')?.reason && <p className="inventory-notice">{selected.actions.find(action => action.id === 'equip')?.reason}</p>}
       {previous && !equipped && <p className="replacement-note">При надевании «{previousDefinition?.name ?? previous.itemId}» вернётся в рюкзак.</p>}
       {selected.actions.some(action => action.id === 'use-in-battle') && <p className="hint">Используется во время боя.</p>}
       {equipped && !unequipAction?.enabled && <p className="inventory-notice" role="status">{unequipAction?.reason ?? 'Снять предмет сейчас нельзя.'}</p>}

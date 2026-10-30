@@ -15,6 +15,7 @@ import { useBattle } from '../features/battles/model/useBattle';
 import { BattleScreen } from '../features/battles/components/BattleScreen';
 import { battlesApi } from '../features/battles/api/battles.api';
 import { InventoryPage } from '../features/inventory/InventoryPage';
+import { EquipmentPage } from '../features/equipment/EquipmentPage';
 import { CraftingPage } from '../features/crafting/CraftingPage';
 import { EnergyPanel } from '../shared/ui/EnergyPanel';
 import { kindNames, ruleNames } from '../shared/ui/game-labels';
@@ -49,23 +50,26 @@ export function App() {
   const openRoom = (id: string) => { setError(''); navigation.openRoom(id); };
   const openSkills = () => { setError(''); navigation.openSkills(); };
   const openCrafting = () => { setError(''); navigation.openCrafting(); };
-  const heading = screen === 'inventory' ? 'Всё для следующего боя.' : screen === 'crafting' ? 'Кузница героя.' : screen === 'skills' ? 'Выбери свой путь.' : battle ? battle.name : roomId ? 'Загрузка боя…' : 'Каждый ход имеет значение.';
-  const description = screen === 'inventory' ? 'Снаряжение, запасы и знания твоего героя.' : screen === 'crafting' ? 'Собери материалы — создай снаряжение для следующего боя.' : screen === 'skills' ? 'Развивай четыре стихии и физические навыки героя.'
+  const openInventory = () => { setError(''); navigation.openInventory(); };
+  const openEquipment = () => { setError(''); navigation.openEquipment(); };
+  const workshop = ['inventory', 'equipment', 'crafting'].includes(screen);
+  const heading = screen === 'equipment' ? 'Подготовь героя к бою.' : screen === 'inventory' ? 'Всё для следующего боя.' : screen === 'crafting' ? 'Кузница героя.' : screen === 'skills' ? 'Выбери свой путь.' : battle ? battle.name : roomId ? 'Загрузка боя…' : 'Каждый ход имеет значение.';
+  const description = screen === 'equipment' ? 'Выбери слот, надень снаряжение и проверь бонусы.' : screen === 'inventory' ? 'Снаряжение, запасы и знания твоего героя.' : screen === 'crafting' ? 'Выбери известный рецепт и собери необходимые предметы.' : screen === 'skills' ? 'Развивай четыре стихии и физические навыки героя.'
     : battle ? `${kindNames[battle.kind]} · ${ruleNames[battle.rule]} · ${battle.kind === 'dungeon' ? `Волна ${battle.wave} из ${battle.totalWaves}` : 'Две команды — одно поле'}`
     : 'Четыре стихии. Физическая сила. Защита. Твоя тактика.';
 
   return <div className="app">
     <header className="topbar">
       <a className="brand" href="#" onClick={() => openRoom('')}><span className="brand-mark">✦</span><span>СТИХИИ<span className="brand-sub">TACTICAL MATCH–3</span></span></a>
-      <nav><button onClick={() => openRoom('')} className={screen === 'arena' ? 'nav-active' : ''}>Арена</button><button onClick={openSkills} className={screen === 'skills' ? 'nav-active' : ''}>Навыки</button><button onClick={openCrafting} className={screen === 'crafting' ? 'nav-active' : ''}>Крафт</button><button onClick={() => { setError(''); navigation.openInventory(); }} className={screen === 'inventory' ? 'nav-active' : ''}>Инвентарь</button></nav>
+      <nav aria-label="Основная навигация"><button onClick={() => openRoom('')} className={screen === 'arena' ? 'nav-active' : ''}>Арена</button><button onClick={openSkills} className={screen === 'skills' ? 'nav-active' : ''}>Навыки</button><button onClick={openEquipment} className={screen === 'equipment' ? 'nav-active' : ''}>Экипировка</button><button onClick={openCrafting} className={screen === 'crafting' ? 'nav-active' : ''}>Крафт</button><button onClick={openInventory} className={screen === 'inventory' ? 'nav-active' : ''}>Инвентарь</button></nav>
       <div className="connection"><i className={(roomId ? connected : !!content) ? 'online' : ''}/>{roomId ? connected ? 'Автообновление' : 'Обновление каждые 5 с' : content ? 'Сервер подключён' : 'Подключение…'}</div>
     </header>
     <main>
       <div className="page-heading"><div><div className="eyebrow">СОБИРАЙ. НАПОЛНЯЙ. ПОБЕЖДАЙ.</div><h1>{heading}</h1><p>{description}</p></div>{roomId && <button className="ghost" onClick={() => openRoom('')}>← Все комнаты</button>}</div>
       {error && <div className="error" role="alert">{error}<button onClick={() => setError('')} aria-label="Закрыть ошибку">×</button></div>}
-      <div className={`layout${screen === 'inventory' ? ' inventory-layout' : screen === 'crafting' ? ' crafting-layout' : ''}`}>
+      <div className={`layout${workshop ? ` ${screen}-layout` : ''}`}>
         <aside className="sidebar">
-          <CharacterPanel compact={screen === 'inventory'} characters={characters} characterId={characterId} character={character} content={content} fighter={fighter} busy={busy} onChoose={chooseCharacter} onSkills={openSkills} onInventory={() => { setError(''); navigation.openInventory(); }}
+          <CharacterPanel compact={workshop} characters={characters} characterId={characterId} character={character} content={content} fighter={fighter} busy={busy} onChoose={chooseCharacter} onSkills={openSkills} onInventory={openInventory} onEquipment={openEquipment}
             onCreate={async (name, templateId) => {
               let created = false;
               await perform(async () => {
@@ -76,9 +80,10 @@ export function App() {
               });
               return created;
             }}/>
-          {screen !== 'inventory' && screen !== 'crafting' && <EnergyPanel character={character} fighter={fighter} legacy={!!battle && battle.combatVersion !== 2}/>}
+          {!workshop && <EnergyPanel character={character} fighter={fighter} legacy={!!battle && battle.combatVersion !== 2}/>}
         </aside>
         {screen === 'inventory' ? <InventoryPage key={characterId} ownerId={characterId} characters={characters} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters}/>
+          : screen === 'equipment' ? <EquipmentPage key={characterId} ownerId={characterId} character={character} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters} onInventory={openInventory}/>
           : screen === 'crafting' ? <CraftingPage key={characterId} ownerId={characterId} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters}/>
           : screen === 'skills' ? <SkillTree character={character} content={content} busy={busy}
           onUpgrade={(skillId, level) => void perform(async () => updateCharacter(await skillsApi.upgrade(characterId, skillId, level)))}

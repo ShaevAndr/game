@@ -1,6 +1,6 @@
 import { Action, Battle, Fighter, SkillChoice, elements } from '../types';
 import { BattlefieldEngine, defaultBattlefieldEngine, normalizeBattlefieldOptions } from '../battlefield';
-import { skillPower } from '../skills';
+import { skillMagnitude, skillPower } from '../skills';
 import { isBattleConsumable } from '../items';
 import { addLog, damage, nextTurn, target } from './common';
 import { combatRules, skillEnergy } from './rules';
@@ -11,7 +11,7 @@ export function skillChoices(battle: Battle, actor: Fighter): SkillChoice[] {
   return battle.content.skills.filter(skill => actor.skillIds.includes(skill.id) && battle.matchedElements?.includes(skill.element)).map(skill => {
     const reason = (actor.cooldowns[skill.id] ?? 0) > 0 ? 'Навык перезаряжается'
       : skillEnergy(actor) < skill.cost ? 'Недостаточно энергии' : undefined;
-    return { skillId: skill.id, enabled: !reason, ...(reason ? { reason } : {}) };
+    return { skillId: skill.id, enabled: !reason, ...(reason ? { reason } : {}), ...(actor.attributes ? { magnitude: skillMagnitude(skill, actor.skillLevels?.[skill.id] ?? 1, actor.attributes.effective, battle.content.balance.attributes?.skillReferencePower) } : {}) };
   });
 }
 
@@ -28,7 +28,7 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
     const previous = skillEnergy(actor);
     const count = report.generated.count + report.direct.count - (report.direct.byType.defense ?? 0);
     actor.skillEnergy = Math.min(rules.energyCap, previous + count * rules.energyPerTile);
-    const guard = (report.direct.byType.defense ?? 0) * rules.defensePerTile;
+    const guard = (report.direct.byType.defense ?? 0) * (actor.attributes?.effective.guardPerCell ?? rules.defensePerTile);
     actor.guardDefense = (actor.guardDefense ?? 0) + guard;
     battle.board = board; battle.battlefield = nextConfig;
     battle.boardMoves = [...(battle.boardMoves ?? []), { actorId, from: { ...action.from }, to: { ...action.to }, ...report }].slice(-11);
@@ -54,9 +54,10 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
     battle.usedSkill = true;
     addLog(battle, `${actor.name} применяет «${skill.name}»: −${skill.cost} энергии`);
     const power = skillPower(skill, actor.skillLevels?.[skill.id] ?? 1);
-    if (skill.effect === 'damage') damage(battle, actor, victim, power);
+    if (skill.effect === 'damage') damage(battle, actor, victim, power, skill.element);
     else {
-      const healed = Math.min(power, victim.stats.maxHp - victim.hp);
+      const magnitude = actor.attributes ? skillMagnitude(skill, actor.skillLevels?.[skill.id] ?? 1, actor.attributes.effective, battle.content.balance.attributes?.skillReferencePower) : power;
+      const healed = Math.min(magnitude, victim.stats.maxHp - victim.hp);
       victim.hp += healed; addLog(battle, `${victim.name}: +${healed} HP`);
     }
     nextTurn(battle); return;
@@ -90,7 +91,8 @@ export function runMatchedNpcTurns(battle: Battle, fieldEngine: BattlefieldEngin
     }
     if (battle.status !== 'active' || battle.activeId !== actor.id) continue;
     const available = skillChoices(battle, actor).filter(choice => choice.enabled).map(choice => battle.content.skills.find(skill => skill.id === choice.skillId)!);
-    const byPower = (a: typeof available[number], b: typeof available[number]) => skillPower(b, actor.skillLevels?.[b.id] ?? 1) - skillPower(a, actor.skillLevels?.[a.id] ?? 1);
+    const magnitude = (skill: typeof available[number]) => actor.attributes ? skillMagnitude(skill, actor.skillLevels?.[skill.id] ?? 1, actor.attributes.effective, battle.content.balance.attributes?.skillReferencePower) : skillPower(skill, actor.skillLevels?.[skill.id] ?? 1);
+    const byPower = (a: typeof available[number], b: typeof available[number]) => magnitude(b) - magnitude(a);
     const heal = actor.hp <= actor.stats.maxHp / 2 ? available.filter(skill => skill.effect === 'heal').sort(byPower)[0] : undefined;
     const skill = heal ?? available.filter(skill => skill.effect === 'damage').sort(byPower)[0];
     if (!skill) { applyMatchedAction(battle, actor.id, { type: 'end' }, Math.random, fieldEngine); onAction?.(); continue; }

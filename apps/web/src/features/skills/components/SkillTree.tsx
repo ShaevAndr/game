@@ -1,4 +1,4 @@
-import { Character, Content, Skill, Stats, elementNames, elements, learningBlockers, statNames, skillLevel, skillPower, skillProgression, upgradeBlockers } from '@game/core';
+import { Character, Content, Skill, elementNames, elements, learningBlockers, learningStatRequirements, skillLevel, skillPower, skillProgression, upgradeBlockers } from '@game/core';
 import { symbols } from '../../../shared/ui/game-labels';
 
 interface Props { character?: Character; content: Content | null; busy: boolean; onLearn: (id: string) => void; onUpgrade: (id: string, expectedLevel: number) => void }
@@ -18,18 +18,18 @@ export function SkillTree({ character, content, busy, onLearn, onUpgrade }: Prop
         const learned = level > 0;
         const progression = skillProgression(skill);
         const upgradeReasons = character ? upgradeBlockers(character, skill) : ['Выберите персонажа'];
-        const blockers = character ? learningBlockers(character, skill, skills) : ['Выберите персонажа'];
+        const blockers = character ? learningBlockers(character, skill, skills, content?.statDefinitions) : ['Выберите персонажа'];
         const available = !!character && !learned && blockers.length === 0;
         const r = skill.learning;
         return <article key={skill.id} className={`skill-node ${learned ? 'learned' : available ? 'available' : 'locked'}`}>
           <div className="node-status">{learned ? `✓ УРОВЕНЬ ${level} / ${progression.maxLevel}` : available ? 'МОЖНО ИЗУЧИТЬ' : 'ЗАКРЫТ'}</div>
           <h4>{skill.name}</h4><p className="node-description">{skill.description}</p>
-          <div className="node-effect">{skill.effect === 'heal' ? 'Лечение' : 'Урон'}: {skillPower(skill, level || 1)} · Энергия: {skill.cost}<br/>Перезарядка: {skill.cooldown} ход.</div>
+          <div className="node-effect">{skill.effect === 'heal' ? 'Лечение' : 'Урон'}: {content.statDefinitions ? `×${((skillPower(skill, level || 1) + (skill.effect === 'damage' ? content.balance.attributes?.skillReferencePower ?? 8 : 0)) / (content.balance.attributes?.skillReferencePower ?? 8)).toFixed(3)} ${skill.effect === 'heal' ? 'силы лечения' : skill.element === 'physical' ? 'физической мощи' : 'магической мощи'}` : skillPower(skill, level || 1)} · Энергия: {skill.cost}<br/>Перезарядка: {skill.cooldown} ход.</div>
           {r.starter ? <p className="starter-note">Бесплатный стартовый навык</p> : <ul className="skill-requirements">
             <li className={character && character.skillPoints >= r.pointCost ? 'met' : ''}>{r.pointCost} очк. навыков{character ? ` · есть ${character.skillPoints}` : ''}</li>
             <li className={character && character.level >= r.level ? 'met' : ''}>Уровень {r.level}</li>
             {r.prerequisites.map(id => <li key={id} className={character?.learnedSkillIds.includes(id) ? 'met' : ''}>Навык «{skills.find(s => s.id === id)?.name ?? id}»</li>)}
-            {(Object.entries(r.stats) as [keyof Stats, number][]).map(([key, value]) => <li key={key} className={character && character.stats[key] >= value ? 'met' : ''}>{statNames[key]} ≥ {value}{character ? ` · есть ${character.stats[key]}` : ''}</li>)}
+            {character && learningStatRequirements(character, skill, content?.statDefinitions).map((requirement, index) => <li key={`${requirement.id}:${index}`} className={requirement.actual >= requirement.required ? 'met' : ''}>{requirement.name} ≥ {requirement.required} · есть {requirement.actual}</li>)}
           </ul>}
           {learned ? <>
             <p className="hint">Улучшение: +{progression.powerPerLevel} силы за {progression.pointCost} ОН.</p>

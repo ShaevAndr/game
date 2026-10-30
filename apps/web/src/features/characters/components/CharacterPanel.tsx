@@ -1,15 +1,16 @@
 import { Character, Content, Fighter, experienceToNextLevel, effectiveStats } from '@game/core';
 import { InventoryList } from '../../inventory/components/InventoryList';
 import { CharacterCreation } from './CharacterCreation';
+import '../attributes.css';
 
 interface Props {
   characters: Character[]; characterId: string; character?: Character; content: Content | null;
-  fighter?: Fighter; busy: boolean; onChoose: (id: string) => void; onSkills: () => void; onInventory: () => void;
+  fighter?: Fighter; busy: boolean; onChoose: (id: string) => void; onSkills: () => void; onInventory: () => void; onEquipment: () => void;
   compact?: boolean;
   onCreate: (name: string, templateId?: string) => Promise<boolean>;
 }
 
-export function CharacterPanel({ characters, characterId, character, content, fighter, busy, compact, onChoose, onSkills, onInventory, onCreate }: Props) {
+export function CharacterPanel({ characters, characterId, character, content, fighter, busy, compact, onChoose, onSkills, onInventory, onEquipment, onCreate }: Props) {
   const stats = fighter?.stats ?? (character ? effectiveStats(character) : null);
   const nextLevel = character && content ? experienceToNextLevel(character.level, content.balance.progression) : 0;
   return <section className="panel">
@@ -33,7 +34,10 @@ export function CharacterPanel({ characters, characterId, character, content, fi
         <div><span>Защита</span><b>{stats?.defense}{fighter?.guardDefense ? ` + ${fighter.guardDefense}` : ''}</b></div>
         <div><span>Лимит энергии</span><b>{stats?.maxEnergy}</b></div>
       </div>
-      <button className="ghost" onClick={onInventory}>Рюкзак и экипировка ↗</button>
+      {character.baseAttributes && content?.statDefinitions && <><div className="primary-attributes-summary">{content.statDefinitions.filter(definition => definition.kind === 'primary').sort((left, right) => left.displayOrder - right.displayOrder).map(definition => <div key={definition.id}>{definition.name}<b>{character.baseAttributes![definition.id]}</b></div>)}</div>
+        <button className="ghost" onClick={onEquipment}>Очки характеристик: {character.attributePoints ?? 0} ↗</button></>}
+      <button className="ghost" onClick={onEquipment}>Экипировка ↗</button>
+      <button className="ghost" onClick={onInventory}>Рюкзак ↗</button>
       <InventoryList stacks={fighter?.inventory ?? character.inventory} items={content?.items ?? []} inBattle={!!fighter}/>
     </> : <p className="hint">Выбери готового героя 10-го уровня или создай своего. Регистрация не нужна.</p>}
   </section>;

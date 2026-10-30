@@ -7,6 +7,8 @@ import { itemDefinitionSchema, itemGroupSchema, defaultItemGroups } from './item
 import type { ItemDefinition, ItemGroup } from './items';
 import { blindCraftRulesSchema, craftingRecipeSchema } from './crafting';
 import type { BlindCraftRules, CraftingRecipe } from './crafting';
+import { statDefinitionsSchema } from './attributes/schema';
+import type { AttributeCalculation, StatDefinition, StatModifier, ScaledEquipmentBonus } from './attributes/types';
 
 export type Element = typeof elements[number];
 export type TileType = typeof tileTypes[number];
@@ -17,30 +19,40 @@ export const emptyEnergy = (): Energy => ({ fire: 0, water: 0, earth: 0, air: 0,
 export interface Stats { maxHp: number; attack: number; defense: number; maxEnergy: number }
 export type Item = ItemDefinition;
 export interface ItemStack { itemId: string; quantity: number }
-export interface Character { id: string; name: string; templateId?: string; level: number; experience: number; skillPoints: number; learnedSkillIds: string[]; skillLevels?: Record<string, number>; equipmentBonuses?: Partial<Stats>; stats: Stats; energy: Energy; inventory: ItemStack[]; createdAt: string }
+export interface Character { id: string; name: string; templateId?: string; level: number; experience: number; skillPoints: number; learnedSkillIds: string[]; skillLevels?: Record<string, number>; equipmentBonuses?: Partial<Stats>; stats: Stats; energy: Energy; inventory: ItemStack[]; createdAt: string;
+  attributeVersion?: 1; baseAttributes?: Record<string, number>; attributePoints?: number; attributeRevision?: number; attributes?: AttributeCalculation;
+  equipmentModifiers?: StatModifier[]; equipmentScaling?: ScaledEquipmentBonus[];
+}
 export interface CharacterTemplate { id: string; name: string; description: string; element: Element; skillId: string }
-export interface SkillLearning { pointCost: number; level: number; prerequisites: string[]; stats: Partial<Stats>; starter: boolean }
+export interface SkillLearning { pointCost: number; level: number; prerequisites: string[]; stats: Partial<Stats>; starter: boolean; requirements?: Record<string, number> }
 export interface Skill { id: string; name: string; description: string; element: Element; cost: number; power: number; effect: 'damage' | 'heal'; cooldown: number; learning: SkillLearning; progression?: SkillProgression }
 export interface SkillProgression { maxLevel: number; pointCost: number; powerPerLevel: number }
 export interface Enemy { id: string; name: string; stats: Stats; skillIds: string[] }
 export interface Progression { baseExperience: number; experiencePerLevel: number; startingSkillPoints: number; skillPointsPerLevel: number; statGrowth: Stats; victoryExperience: Record<BattleKind, number> }
 export interface CombatRules { version: 2; energyCap: 30; energyPerTile: 1; defensePerTile: number }
-export interface Balance { combat?: CombatRules; characterStats: Stats; starterItems: ItemStack[]; damagePerTile: number; energyPerTile: number; teamSize: number; dungeonWaves: string[]; progression: Progression; crafting?: { blind: BlindCraftRules } }
-export interface Content { itemGroups?: ItemGroup[]; skills: Skill[]; items: Item[]; enemies: Enemy[]; characterTemplates: CharacterTemplate[]; balance: Balance; recipes?: CraftingRecipe[] }
+export interface Balance { combat?: CombatRules; characterStats: Stats; starterItems: ItemStack[]; damagePerTile: number; energyPerTile: number; teamSize: number; dungeonWaves: string[]; progression: Progression; crafting?: { blind: BlindCraftRules }; attributes?: { skillReferencePower: number } }
+export interface Content { itemGroups?: ItemGroup[]; skills: Skill[]; items: Item[]; enemies: Enemy[]; characterTemplates: CharacterTemplate[]; balance: Balance; recipes?: CraftingRecipe[]; statDefinitions?: StatDefinition[] }
 const statsSchema = z.object({ maxHp: z.number().int().positive().max(100000), attack: z.number().int().nonnegative().max(10000), defense: z.number().int().nonnegative().max(10000), maxEnergy: z.number().int().positive().max(10000) });
 const contentId = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
-const learningSchema = z.object({ pointCost: z.number().int().min(1).max(100), level: z.number().int().min(1).max(1000), prerequisites: z.array(contentId).max(20), stats: statsSchema.partial(), starter: z.boolean() });
+const learningSchema = z.object({ pointCost: z.number().int().min(1).max(100), level: z.number().int().min(1).max(1000), prerequisites: z.array(contentId).max(20), stats: statsSchema.partial(), starter: z.boolean(), requirements: z.record(z.string(), z.number().int().min(0).max(1_000_000)).optional() });
 export const progressionSchema = z.object({ baseExperience: z.number().int().min(1).max(1000000), experiencePerLevel: z.number().int().min(0).max(1000000), startingSkillPoints: z.number().int().min(0).max(1000), skillPointsPerLevel: z.number().int().min(1).max(100), statGrowth: z.object({ maxHp: z.number().int().min(0).max(1000), attack: z.number().int().min(0).max(1000), defense: z.number().int().min(0).max(1000), maxEnergy: z.number().int().min(0).max(1000) }), victoryExperience: z.object({ duel: z.number().int().positive().max(1000000), bot: z.number().int().positive().max(1000000).default(100), team: z.number().int().positive().max(1000000), dungeon: z.number().int().positive().max(1000000) }) });
 export const contentSchema = z.object({
+  statDefinitions: statDefinitionsSchema.optional(),
   characterTemplates: z.array(z.object({ id: contentId, name: z.string().min(1).max(80), description: z.string().max(500), element: z.enum(elements), skillId: contentId })).default([]),
   skills: z.array(z.object({ id: contentId, name: z.string().min(1).max(80), description: z.string().max(500), element: z.enum(elements), cost: z.number().int().nonnegative().max(10000), power: z.number().int().nonnegative().max(10000), effect: z.enum(['damage', 'heal']), cooldown: z.number().int().nonnegative().max(100), learning: learningSchema, progression: z.object({ maxLevel: z.number().int().min(1).max(10), pointCost: z.number().int().min(1).max(100), powerPerLevel: z.number().int().min(0).max(10000) }).optional() })).min(1),
   itemGroups: z.array(itemGroupSchema).default(defaultItemGroups),
   items: z.array(itemDefinitionSchema),
   recipes: z.array(craftingRecipeSchema).default([]),
   enemies: z.array(z.object({ id: contentId, name: z.string().min(1).max(80), stats: statsSchema, skillIds: z.array(contentId).min(1) })).min(1),
-  balance: z.object({ characterStats: statsSchema, starterItems: z.array(z.object({ itemId: contentId, quantity: z.number().int().nonnegative().max(1000) })), damagePerTile: z.number().int().positive().max(100), energyPerTile: z.number().int().positive().max(100), teamSize: z.number().int().min(1).max(10), dungeonWaves: z.array(contentId).min(1).max(100), progression: progressionSchema, crafting: z.object({ blind: blindCraftRulesSchema }).optional(), combat: z.object({ version: z.literal(2), energyCap: z.literal(30), energyPerTile: z.literal(1), defensePerTile: z.number().int().min(1).max(100) }).optional() }),
+  balance: z.object({ characterStats: statsSchema, starterItems: z.array(z.object({ itemId: contentId, quantity: z.number().int().nonnegative().max(1000) })), damagePerTile: z.number().int().positive().max(100), energyPerTile: z.number().int().positive().max(100), teamSize: z.number().int().min(1).max(10), dungeonWaves: z.array(contentId).min(1).max(100), progression: progressionSchema, crafting: z.object({ blind: blindCraftRulesSchema }).optional(), combat: z.object({ version: z.literal(2), energyCap: z.literal(30), energyPerTile: z.literal(1), defensePerTile: z.number().int().min(1).max(100) }).optional(), attributes: z.object({ skillReferencePower: z.number().int().min(1).max(10000) }).optional() }),
 }).superRefine((content, ctx) => {
   const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
+  if (content.statDefinitions) {
+    const required: Record<string, string> = { strength: 'points', dexterity: 'points', intelligence: 'points', vitality: 'points', luck: 'points', maxHp: 'hp', physicalPower: 'points', magicPower: 'points', healingPower: 'points', physicalResistance: 'points', fireResistance: 'points', waterResistance: 'points', earthResistance: 'points', airResistance: 'points', criticalChanceBps: 'basis_points', criticalBonusBps: 'basis_points', guardPerCell: 'points_per_cell' };
+    for (const [id, unit] of Object.entries(required)) if (!content.statDefinitions.some(definition => definition.id === id && definition.unit === unit)) fail(`Отсутствует характеристика ${id} с единицей ${unit}`);
+    if ((content.statDefinitions.find(definition => definition.id === 'maxHp')?.min ?? 0) < 1) fail('Минимальный maxHp должен быть не меньше 1');
+    for (const skill of content.skills) for (const id of Object.keys(skill.learning.requirements ?? {})) if (!content.statDefinitions.some(definition => definition.id === id)) fail(`Неизвестное требование навыка ${skill.id}: ${id}`);
+  }
   const starters = content.skills.filter(skill => skill.learning.starter);
   if (starters.length !== 1 || starters[0]?.element !== 'physical') fail('Должен быть ровно один стартовый физический навык');
   const modern = content.balance.combat?.version === 2;
@@ -53,6 +65,17 @@ export const contentSchema = z.object({
   for (const item of content.items) {
     if (!groups.has(item.groupId)) fail(`Неизвестная группа предмета ${item.id}`);
     if (item.grantedSkillId && !content.skills.some(skill => skill.id === item.grantedSkillId)) fail(`Неизвестный навык свитка ${item.id}`);
+    if (content.statDefinitions) {
+      const definitions = new Map(content.statDefinitions.map(definition => [definition.id, definition]));
+      for (const modifier of item.statModifiers ?? []) {
+        if (!definitions.has(modifier.statId)) fail(`Неизвестная характеристика предмета ${item.id}: ${modifier.statId}`);
+        if (modifier.operation === 'multiply' && modifier.value < 0) fail(`Отрицательный множитель предмета ${item.id}`);
+      }
+      for (const bonus of item.scaledBonuses ?? []) {
+        if (definitions.get(bonus.statId)?.kind !== 'derived' || !definitions.has(bonus.scalingStatId)) fail(`Неверное масштабирование предмета ${item.id}`);
+      }
+      for (const statId of Object.keys(item.attributeRequirements ?? {})) if (definitions.get(statId)?.kind !== 'primary') fail(`Неизвестное требование предмета ${item.id}: ${statId}`);
+    }
   }
   const recipeIds = new Set(content.recipes.map(recipe => recipe.id));
   if (recipeIds.size !== content.recipes.length) fail('ID рецептов должны быть уникальными');
@@ -74,7 +97,7 @@ export const contentSchema = z.object({
     if (visiting.has(id)) { fail('В дереве навыков обнаружен цикл'); return; }
     if (visited.has(id)) return;
     const skill = skills.get(id); if (!skill) { fail(`Неизвестный обязательный навык ${id}`); return; }
-    if (skill.learning.starter && (skill.learning.level !== 1 || skill.learning.prerequisites.length || Object.keys(skill.learning.stats).length)) fail(`Стартовый навык ${id} не должен иметь требований`);
+    if (skill.learning.starter && (skill.learning.level !== 1 || skill.learning.prerequisites.length || Object.keys(skill.learning.stats).length || Object.keys(skill.learning.requirements ?? {}).length)) fail(`Стартовый навык ${id} не должен иметь требований`);
     visiting.add(id); for (const parent of skill.learning.prerequisites) visit(parent); visiting.delete(id); visited.add(id);
   };
   for (const skill of content.skills) visit(skill.id);
@@ -88,12 +111,15 @@ export const contentSchema = z.object({
 export const rules = ['before', 'before-after', 'on-match'] as const;
 export type Rule = typeof rules[number];
 export type BattleKind = 'duel' | 'bot' | 'team' | 'dungeon';
-export interface Fighter { id: string; characterId?: string; name: string; team: number; npc: boolean; stats: Stats; hp: number; energy: Energy; skillEnergy?: number; inventory: ItemStack[]; cooldowns: Record<string, number>; skillIds: string[]; skillLevels?: Record<string, number>; guardDefense?: number }
+export interface Fighter { id: string; characterId?: string; name: string; team: number; npc: boolean; stats: Stats; hp: number; energy: Energy; skillEnergy?: number; inventory: ItemStack[]; cooldowns: Record<string, number>; skillIds: string[]; skillLevels?: Record<string, number>; guardDefense?: number;
+  attributes?: AttributeCalculation; attributeState?: { baseAttributes: Record<string, number>; equipmentModifiers: StatModifier[]; equipmentScaling: ScaledEquipmentBonus[]; temporaryModifiers: StatModifier[] };
+}
 export type Board = TileType[][];
-export interface SkillChoice { skillId: string; enabled: boolean; reason?: string }
+export interface SkillChoice { skillId: string; enabled: boolean; reason?: string; magnitude?: number }
 export interface Battle {
   id: string; name: string; kind: BattleKind; rule: Rule; status: 'waiting' | 'active' | 'finished';
   combatVersion?: 2; skillChoices?: SkillChoice[]; matchedElements?: Element[];
+  attributeRngState?: number;
   version: number; board: Board; battlefield?: BattlefieldConfig; boardMoves?: BattlefieldMoveEvent[]; fighters: Fighter[]; activeId: string | null; turn: number;
   phase: 'before' | 'after' | 'choose'; usedSkill: boolean; pendingMatch: number;
   wave: number; totalWaves: number; winner: number | null; log: string[]; content: Content; createdAt: string;
