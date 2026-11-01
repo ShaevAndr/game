@@ -28,7 +28,7 @@ export function ArenaScreen({ rooms, canCreate, busy, onRefresh, onOpen, onCreat
       </div>
       <BattlefieldSettings value={battlefield} onChange={setBattlefield} disabled={busy}/>
       {!validField.success && <p className="hint" role="status">{validField.error.issues.map(issue => issue.message).join('; ')}</p>}
-      <p className="rule-note">Сначала поле и все каскады. Затем — навык типа прямого совпадения с расходом энергии. Защита усиливает героя на ход противника; вторичные совпадения только копят энергию.</p>
+      <p className="rule-note">Сначала прямое сокращение и энергия. Затем — навык типа прямого совпадения и цель; после применения или пропуска проходят каскады. Защита усиливает героя на ход противника; вторичные совпадения только копят энергию.</p>
       <button className="primary" disabled={!canCreate || busy || name.trim().length < 2 || !validField.success} onClick={() => onCreate({ name, kind, battlefield })}>Создать комнату <span>↗</span></button>
     </section>
     <section className="panel rooms">

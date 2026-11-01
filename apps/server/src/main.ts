@@ -9,7 +9,7 @@ async function bootstrap() {
   const { AppModule } = await import('./app.module');
   const { ValidationFilter } = await import('./shared/http/validation.filter');
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('api'); app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173' });
+  app.setGlobalPrefix('api/v1'); app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173' });
   app.useGlobalFilters(new ValidationFilter()); app.enableShutdownHooks();
   await app.listen(Number(process.env.PORT ?? 3001), '0.0.0.0');
 }

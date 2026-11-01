@@ -42,7 +42,7 @@ test('legacy normalization preserves level, stats and existing progress includin
   c.skillPoints = 0; c.experience = 37; c.learnedSkillIds.push('ember'); c.skillLevels = { strike: 1, ember: 1 }; assert.deepEqual(normalizeCharacter(c, seedContent), c);
 });
 test('victory recipients include fallen allies, exclude losers and NPCs', () => {
-  const c = hero(), b = newBattle('battle', 'test', 'team', 'before', c, seedContent); b.status = 'finished'; b.winner = 0;
+  const c = hero(), b = newBattle('battle', 'test', 'team', 'on-match', c, seedContent); b.status = 'finished'; b.winner = 0;
   b.fighters.push({ ...characterFighter({ ...c, id: 'fallen' }, 0, seedContent), hp: 0 }, characterFighter({ ...c, id: 'loser' }, 1, seedContent), { ...characterFighter({ ...c, id: 'npc' }, 0, seedContent), npc: true });
   assert.deepEqual(victoryRecipients(b), ['fallen', 'hero']); b.winner = null; assert.deepEqual(victoryRecipients(b), []); b.winner = 0; b.status = 'active'; assert.deepEqual(victoryRecipients(b), []);
 });

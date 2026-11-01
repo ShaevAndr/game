@@ -9,10 +9,10 @@ export function skillPower(skill: Skill, level = 1): number {
   return skill.power + (Math.max(1, level) - 1) * skillProgression(skill).powerPerLevel;
 }
 /** Preview before target resistance/guard and the direct-damage critical roll. */
-export function skillMagnitude(skill: Skill, level: number, values: Record<string, number>, referencePower = 8): number {
+export function skillMagnitude(skill: Skill, level: number, values: Record<string, number>, referencePower = 8, multiplierBps = 10000): number {
   const power = skillPower(skill, level);
   const attribute = values[skill.effect === 'heal' ? 'healingPower' : skill.element === 'physical' ? 'physicalPower' : 'magicPower'];
-  return Number(BigInt(attribute) * BigInt(power + (skill.effect === 'damage' ? referencePower : 0)) / BigInt(referencePower));
+  return Number(BigInt(attribute) * BigInt(power + (skill.effect === 'damage' ? referencePower : 0)) * BigInt(multiplierBps) / (BigInt(referencePower) * 10000n));
 }
 export function upgradeBlockers(character: Character, skill: Skill): string[] {
   const level = skillLevel(character, skill.id), progression = skillProgression(skill);

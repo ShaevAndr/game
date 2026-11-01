@@ -1,7 +1,7 @@
-import { newLegacyBattle as newBattle } from './helpers/legacy';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { InventoryCommand, InventoryState, applyAction, applyInventoryCommand, availableItemActions, backpackStacks, characterFighter, contentSchema, createCharacter, defaultItemGroups, effectiveStats, equipmentBonuses, grantSkill, normalizeCharacter, seedContent, skillLevel, skillPower, startBattle, upgradeSkill } from '../src';
+import { InventoryCommand, InventoryState, newBattle, applyAction, applyInventoryCommand, availableItemActions, backpackStacks, characterFighter, contentSchema, createCharacter, defaultItemGroups, effectiveStats, equipmentBonuses, grantSkill, normalizeCharacter, seedContent, skillLevel, skillPower, startBattle, upgradeSkill } from '../src';
+import { match } from './helpers/combat';
 
 function hero() { return createCharacter('hero', 'Герой', seedContent); }
 function inventories(): InventoryState[] {
@@ -49,13 +49,13 @@ test('legacy learned skills become rank one and new battles freeze ranks and equ
   const normalized = normalizeCharacter(character, seedContent);
   assert.equal(normalized.skillLevels?.strike, 1);
   normalized.equipmentBonuses = { attack: 3 }; upgradeSkill(normalized, 'strike', seedContent);
-  const battle = newBattle('battle', 'Тест', 'bot', 'before', normalized, seedContent); startBattle(battle);
+  const battle = newBattle('battle', 'Тест', 'bot', 'on-match', normalized, seedContent); startBattle(battle);
   upgradeSkill(normalized, 'strike', seedContent);
   assert.equal(battle.fighters[0].skillLevels?.strike, 2);
   assert.equal(battle.fighters[1].skillLevels?.strike, 2);
   assert.equal(battle.fighters[0].stats.attack, normalized.stats.attack + 3);
   const previousHp = battle.fighters[1].hp;
-  battle.fighters[0].energy.physical = 3;
+  match(battle);
   applyAction(battle, 'hero', { type: 'skill', skillId: 'strike', targetId: battle.fighters[1].id });
   assert.equal(previousHp - battle.fighters[1].hp, seedContent.skills[0].power + 2 + battle.fighters[0].stats.attack - battle.fighters[1].stats.defense);
   assert.equal(effectiveStats(normalized).attack, normalized.stats.attack + 3);
@@ -165,7 +165,7 @@ test('receiving respects stack limits and invalid quantities cannot mutate state
 });
 
 test('weapons and resources cannot be consumed as healing potions in battle', () => {
-  const battle = newBattle('battle', 'Тест', 'bot', 'before', hero(), seedContent); startBattle(battle);
+  const battle = newBattle('battle', 'Тест', 'bot', 'on-match', hero(), seedContent); startBattle(battle);
   battle.fighters[0].hp = 60;
   const before = structuredClone(battle);
   assert.throws(() => applyAction(battle, 'hero', { type: 'item', itemId: 'iron-sword' }), /недоступен/);
@@ -180,7 +180,7 @@ test('new potions and custom skill growth work from catalog data', () => {
   upgradeSkill(character, 'strike', content);
   assert.equal(character.skillPoints, 2); assert.equal(skillPower(content.skills[0], 2), content.skills[0].power + 7);
   character.inventory.push({ itemId: 'minor-potion', quantity: 2 });
-  const battle = newBattle('battle', 'Тест', 'bot', 'before', character, content); startBattle(battle);
+  const battle = newBattle('battle', 'Тест', 'bot', 'on-match', character, content); startBattle(battle);
   battle.fighters[0].hp = 30;
   applyAction(battle, character.id, { type: 'item', itemId: 'minor-potion' });
   assert.equal(battle.fighters[0].hp, 39);

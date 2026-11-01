@@ -1,5 +1,5 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
-import { defaultStatDefinitions, StatDefinition } from '@game/core';
+import { combatStatDefinitions, StatDefinition } from '@game/core';
 import { MongoDatabase } from '../../../infrastructure/mongo/mongo.service';
 import { CharacteristicsRepository } from '../ports/characteristics.repository';
 
@@ -9,7 +9,9 @@ export class MongoCharacteristicsRepository extends CharacteristicsRepository im
   async onModuleInit() {
     const collection = this.mongo.db.collection<StatDefinition>('statDefinitions');
     await collection.createIndex({ id: 1 }, { unique: true });
-    for (const definition of defaultStatDefinitions) await collection.updateOne({ id: definition.id }, { $setOnInsert: definition }, { upsert: true });
+    for (const definition of combatStatDefinitions) {
+      await collection.updateOne({ id: definition.id }, { $setOnInsert: definition }, { upsert: true });
+    }
   }
   list() { return this.mongo.db.collection<StatDefinition>('statDefinitions').find({}, { projection: { _id: 0 } }).toArray(); }
 }

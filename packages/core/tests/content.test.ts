@@ -1,4 +1,3 @@
-import { newLegacyBattle as newBattle } from './helpers/legacy';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { applyAction, characterFighter, contentSchema, createCharacter, elements, gainExperience, joinBattle, learnSkill, possibleMove, rules, seedContent, startBattle } from '../src';
@@ -45,26 +44,6 @@ test('all branches can be learned through normal level and stat growth', () => {
       learnSkill(hero, remaining.splice(index, 1)[0].id, seedContent);
     }
     assert.ok(hero.skillPoints >= 0);
-  }
-});
-
-for (const rule of rules) test(`every skill works in combat under ${rule}`, () => {
-  for (const skill of seedContent.skills) {
-    const hero = createCharacter('hero', 'Герой', seedContent), enemy = createCharacter('enemy', 'Враг', seedContent);
-    hero.learnedSkillIds = seedContent.skills.map(s => s.id);
-    const battle = newBattle('battle', 'Проверка', 'duel', rule, hero, seedContent);
-    joinBattle(battle, enemy, 1); startBattle(battle);
-    const actor = battle.fighters[0], victim = skill.effect === 'heal' ? actor : battle.fighters[1];
-    if (rule === 'on-match') applyAction(battle, actor.id, { type: 'swap', ...possibleMove(battle.board)!, targetId: 'enemy' });
-    actor.energy[skill.element] = actor.stats.maxEnergy;
-    victim.hp = skill.effect === 'heal' ? 1 : victim.stats.maxHp;
-    const hp = victim.hp, energy = actor.energy[skill.element], bonus = rule === 'on-match' ? battle.pendingMatch * seedContent.balance.damagePerTile : 0;
-    applyAction(battle, actor.id, { type: 'skill', skillId: skill.id, targetId: victim.id });
-    const expected = skill.effect === 'heal' ? Math.min(victim.stats.maxHp, hp + skill.power + bonus) : Math.max(0, hp - Math.max(1, skill.power + bonus + actor.stats.attack - victim.stats.defense));
-    assert.equal(victim.hp, expected, skill.id);
-    assert.equal(actor.energy[skill.element], energy - skill.cost, skill.id);
-    assert.equal(actor.cooldowns[skill.id], skill.cooldown ? skill.cooldown + 1 : 0, skill.id);
-    assert.equal(battle.usedSkill, rule !== 'on-match', skill.id);
   }
 });
 

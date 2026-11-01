@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
-import { Battle, BattleFrame, applyAction, characterFighter, commandSchema, createBattleSchema, elements, joinBattle, joinBattleSchema, newBattle, runNpcTurns, startBattle } from '@game/core';
+import { randomInt, randomUUID } from 'node:crypto';
+import { Battle, BattleFrame, applyAction, characterFighter, commandSchema, createBattleSchema, joinBattle, joinBattleSchema, newBattle, runNpcTurns, startBattle } from '@game/core';
 import { z } from 'zod';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
 import { CharactersService } from '../../characters/application/characters.service';
@@ -46,24 +46,26 @@ export class BattlesService {
     return battle;
   }
 
-  private async mutate(id: string, expected: number | undefined, change: (battle: Battle, context: TransactionContext) => void | Promise<void>) {
+  private async mutate(id: string, expected: number | undefined, change: (battle: Battle, context: TransactionContext, checkpoint: (battle: Battle) => void) => void | Promise<void>) {
     const battle = await this.transactions.run(async context => {
       const row = await this.repository.lock(id, context);
       if (!row) throw new NotFoundException('Бой не найден');
       if (expected !== undefined && expected !== row.version) throw new ConflictException('Состояние изменилось. Повторите действие.');
       const state = row.battle;
       const wasFinished = state.status === 'finished';
+      state.effectResults = [];
+      state.damageResults = [];
       state.boardMoves = [];
       state.playback = [];
       const frames: BattleFrame[] = [];
       let recordedMoves = 0;
-      const checkpoint = () => {
-        const { board, fighters, activeId, turn, phase, status, usedSkill, pendingMatch, matchedElements, skillChoices, boardMoves, log, wave, winner } = state;
-        frames.push(structuredClone({ board, fighters, activeId, turn, phase, status, usedSkill, pendingMatch, matchedElements, skillChoices, boardMoves: boardMoves?.slice(recordedMoves), log, wave, winner }));
+      const checkpoint = (source = state) => {
+        const { board, fighters, activeId, turn, phase, status, usedSkill, pendingMatch, matchPowerBps, matchedElements, skillChoices, boardMoves, log, wave, winner } = source;
+        frames.push(structuredClone({ board, fighters, activeId, turn, phase, status, usedSkill, pendingMatch, ...(matchPowerBps !== undefined ? { matchPowerBps } : {}), matchedElements, skillChoices, boardMoves: boardMoves?.slice(recordedMoves), log, wave, winner }));
         recordedMoves = boardMoves?.length ?? 0;
       };
-      await change(state, context);
-      if (state.combatVersion === 2) checkpoint();
+      await change(state, context, checkpoint);
+      checkpoint();
       domainAction(() => runNpcTurns(state, this.battlefield, checkpoint));
       state.playback = frames;
       const finished = !wasFinished && state.status === 'finished';
@@ -89,12 +91,9 @@ export class BattlesService {
     return this.mutate(id, version, async (state, context) => {
       if (!state.fighters.some(fighter => fighter.characterId === characterId)) throw new BadRequestException('Выберите участника боя');
       if (state.status !== 'waiting') throw new BadRequestException('Бой уже начался');
-      if (state.combatVersion !== 2 && (!state.battlefield || elements.every(type => state.battlefield!.elementTypes.includes(type)) && state.battlefield.elementTypes.length === elements.length)) {
-        const field = domainAction(() => this.battlefield.create({ size: { rows: state.board.length, cols: state.board[0]?.length ?? 0 } }));
-        state.board = field.board; state.battlefield = field.config;
-      }
-      state.combatVersion = 2; state.rule = 'on-match'; state.skillChoices = []; state.matchedElements = [];
+      state.combatVersion = 1; state.rule = 'on-match'; state.skillChoices = []; state.matchedElements = [];
       state.content = await this.content.get(true);
+      if (state.content.modifierRulesVersion === 1) state.attributeRngState = randomInt(0, 4294967296);
       state.effectsVersion = state.content.effectsVersion;
       if (state.effectsVersion === 1) state.effectSequence = 0;
       state.totalWaves = state.kind === 'dungeon' ? state.content.balance.dungeonWaves.length : 1;
@@ -108,6 +107,6 @@ export class BattlesService {
 
   command(id: string, body: unknown) {
     const { characterId, version, action } = commandSchema.parse(body);
-    return this.mutate(id, version, state => domainAction(() => applyAction(state, characterId, action, Math.random, this.battlefield)));
+    return this.mutate(id, version, (state, _context, checkpoint) => domainAction(() => applyAction(state, characterId, action, Math.random, this.battlefield, checkpoint)));
   }
 }

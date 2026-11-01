@@ -1,20 +1,20 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { InventoryResult, InventoryState, ItemQuality, ItemInstance, ItemStack } from '@game/core';
+import { InventoryResult, InventoryState, ItemQuality, ItemInstance, ItemStack, Item } from '@game/core';
 import { Database } from '../../../infrastructure/database/database.service';
 import { TransactionContext } from '../../../shared/application/unit-of-work';
 import { InventoryRepository } from '../ports/inventory.repository';
 
-type ItemRow = { quality?: ItemQuality | null; id: string; owner_id: string; inventory_id: string | null; item_id: string; quantity: number; equipped_slot: string | null };
+type ItemRow = { item_level?: number; definition_version?: number; quality?: ItemQuality | null; id: string; owner_id: string; inventory_id: string | null; item_id: string; quantity: number; equipped_slot: string | null };
 function instance(row: ItemRow): ItemInstance {
-  return { ...(row.quality ? { quality: row.quality } : {}), id: row.id, ownerId: row.owner_id, inventoryId: row.inventory_id, itemId: row.item_id, quantity: row.quantity, equippedSlot: row.equipped_slot };
+  return { ...(row.item_level != null ? { itemLevel: row.item_level } : {}), ...(row.definition_version != null ? { definitionVersion: row.definition_version } : {}), ...(row.quality ? { quality: row.quality } : {}), id: row.id, ownerId: row.owner_id, inventoryId: row.inventory_id, itemId: row.item_id, quantity: row.quantity, equippedSlot: row.equipped_slot };
 }
 
 @Injectable()
 export class PostgresInventoryRepository extends InventoryRepository {
   constructor(@Inject(Database) private readonly db: Database) { super(); }
 
-  async ensurePrimary(ownerId: string, initial: ItemStack[], limits: Record<string, number>, context: TransactionContext) {
+  async ensurePrimary(ownerId: string, initial: ItemStack[], limits: Record<string, number>, context: TransactionContext, definitions: Item[] = []) {
     const tx = this.db.session(context);
     const created = await tx.insertInto('inventories').values({ id: ownerId, owner_id: ownerId, name: 'Рюкзак', capacity: 50, is_primary: true })
       .onConflict(conflict => conflict.column('id').doNothing()).returning('id').executeTakeFirst();
@@ -24,7 +24,7 @@ export class PostgresInventoryRepository extends InventoryRepository {
       const limit = limits[stack.itemId] ?? 99;
       for (let remaining = stack.quantity; remaining > 0;) {
         const quantity = Math.min(remaining, limit);
-        rows.push({ id: randomUUID(), owner_id: ownerId, inventory_id: ownerId, item_id: stack.itemId, quantity, equipped_slot: null });
+        rows.push({ id: randomUUID(), owner_id: ownerId, inventory_id: ownerId, item_id: stack.itemId, item_level: definitions.find(item => item.id === stack.itemId)?.itemLevel ?? 1, definition_version: definitions.find(item => item.id === stack.itemId)?.version ?? 1, quantity, equipped_slot: null });
         remaining -= quantity;
       }
     }
@@ -61,7 +61,7 @@ export class PostgresInventoryRepository extends InventoryRepository {
     // Release previous equipment slots before filling them: the unique index is immediate.
     const ordered = [...items].sort((left, right) => Number(!!left.equippedSlot) - Number(!!right.equippedSlot));
     for (const item of ordered) {
-      const row = { quality: item.quality ? JSON.stringify(item.quality) : null, id: item.id, owner_id: item.ownerId, inventory_id: item.inventoryId, item_id: item.itemId, quantity: item.quantity, equipped_slot: item.equippedSlot };
+      const row = { item_level: item.itemLevel ?? 1, definition_version: item.definitionVersion ?? 1, quality: item.quality ? JSON.stringify(item.quality) : null, id: item.id, owner_id: item.ownerId, inventory_id: item.inventoryId, item_id: item.itemId, quantity: item.quantity, equipped_slot: item.equippedSlot };
       await tx.insertInto('item_instances').values(row).onConflict(conflict => conflict.column('id').doUpdateSet(row)).execute();
     }
   }

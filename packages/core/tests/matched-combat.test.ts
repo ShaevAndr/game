@@ -34,17 +34,21 @@ test('all new templates start with only one physical skill, four unspent points 
   assert.equal(tileTypes.length, 6);
 });
 
-test('only direct types offer skills and all cascades award energy before the choices are computed', () => {
+test('only direct energy is available when skills are chosen; cascades are awarded after casting', () => {
   const battle = duel(['ember', 'fireball', 'spring']);
   swap(battle, { fire: 3 }, { fire: 2, water: 3, physical: 4 });
   assert.equal(battle.phase, 'choose'); assert.equal(battle.activeId, 'hero');
-  assert.equal(skillEnergy(battle.fighters[0]), 12);
+  assert.equal(skillEnergy(battle.fighters[0]), 3);
   assert.deepEqual(battle.skillChoices?.map(choice => choice.skillId), ['ember', 'fireball']);
-  assert.ok(battle.skillChoices?.every(choice => choice.enabled));
+  assert.equal(battle.skillChoices?.find(choice => choice.skillId === 'fireball')?.enabled, false);
+  assert.equal(battle.boardMoves?.[0].generated.count, 0);
+  assert.ok(battle.pendingBattlefield);
   assert.equal(battle.fighters[1].hp, 120); // Neither direct nor secondary matches deal damage.
-  cast(battle, 'fireball');
-  assert.equal(skillEnergy(battle.fighters[0]), 7);
-  assert.equal(battle.fighters[1].hp, 91); // 24 power + 8 attack - 3 defense; no tile damage bonus.
+  cast(battle, 'ember');
+  assert.equal(skillEnergy(battle.fighters[0]), 10);
+  assert.equal(battle.fighters[1].hp, 105); // Base skill power + attack - defense.
+  assert.equal(battle.pendingBattlefield, undefined);
+  assert.equal(battle.boardMoves?.at(-1)?.continuation, true);
   assert.equal(battle.activeId, 'enemy');
 });
 
@@ -166,7 +170,7 @@ test('all thirty learned skills obey direct type selection, energy spending and 
     assert.ok(battle.skillChoices?.some(choice => choice.skillId === skill.id && choice.enabled), skill.id);
     assert.ok(battle.skillChoices?.every(choice => seedContent.skills.find(skill => skill.id === choice.skillId)?.element === skill.element));
     cast(battle, skill.id, victim.id);
-    assert.equal(skillEnergy(hero), 30 - skill.cost, skill.id);
+    assert.equal(skillEnergy(hero), Math.min(30, 30 - skill.cost + 14), skill.id);
     assert.equal(victim.hp, skill.effect === 'heal' ? Math.min(victim.stats.maxHp, hp + skill.power) : Math.max(0, hp - Math.max(1, skill.power + hero.stats.attack - victim.stats.defense)), skill.id);
     assert.equal(battle.activeId, 'enemy', skill.id);
   }
@@ -184,7 +188,7 @@ test('energy saved from a different type and secondary defense pays for a direct
   assert.equal(skillEnergy(battle.fighters[0]), 3);
 });
 
-test('older v2 typed reserves convert once into a capped shared reserve', () => {
+test('typed template reserves initialize a capped shared reserve once', () => {
   const battle = duel(['fireball']), hero = battle.fighters[0];
   delete hero.skillEnergy;
   hero.energy.water = 20; hero.energy.air = 20;
@@ -192,4 +196,76 @@ test('older v2 typed reserves convert once into a capped shared reserve', () => 
   swap(battle, { fire: 3 }); cast(battle, 'fireball');
   assert.equal(skillEnergy(hero), 25);
   assert.equal(hero.energy.water, 20); // Legacy data does not refill the explicit reserve.
+});
+
+test('direct cell count scales skill power by 0.3 per cell beyond three, cascades do not', () => {
+  for (const count of [3, 4, 5, 6]) {
+    const battle = duel(), [hero, enemy] = battle.fighters;
+    swap(battle, { physical: count }, { physical: 20 });
+    assert.equal(battle.matchPowerBps, 10000 + (count - 3) * 3000);
+    assert.equal(skillEnergy(hero), count);
+    cast(battle);
+    assert.equal(enemy.hp, 120 - Math.floor(5 * (1 + (count - 3) * 0.3) + 8 - 3));
+    assert.equal(skillEnergy(hero), count - 3 + 20);
+    assert.equal(battle.matchPowerBps, undefined);
+  }
+});
+
+test('a saved pending cascade survives reload, invalid casts and is credited only once on skipping', () => {
+  const battle = duel(['fireball']);
+  swap(battle, { fire: 3 }, { defense: 8 });
+  const restored: Battle = JSON.parse(JSON.stringify(battle));
+  assert.equal(skillEnergy(restored.fighters[0]), 3);
+  assert.throws(() => cast(restored, 'fireball'), /энергии/);
+  assert.deepEqual(restored, JSON.parse(JSON.stringify(battle)));
+  applyAction(restored, 'hero', { type: 'end' });
+  assert.equal(skillEnergy(restored.fighters[0]), 11);
+  assert.equal(restored.pendingBattlefield, undefined);
+  assert.throws(() => applyAction(restored, 'hero', { type: 'end' }), /другого участника/);
+  assert.equal(skillEnergy(restored.fighters[0]), 11);
+});
+
+test('casting frees capacity before secondary energy is capped', () => {
+  const battle = duel(['fireball']); battle.fighters[0].skillEnergy = 28;
+  swap(battle, { fire: 3 }, { water: 3 });
+  assert.equal(skillEnergy(battle.fighters[0]), 30);
+  cast(battle, 'fireball');
+  assert.equal(skillEnergy(battle.fighters[0]), 28);
+});
+
+test('the visible board pauses after the direct refill and resumes its saved result without another field call', () => {
+  const battle = duel(), staged = engine({ physical: 4 }, { defense: 3 });
+  const directBoard = battle.board.map(row => [...row]), finalBoard = battle.board.map(row => [...row]);
+  directBoard[0][0] = 'fire'; finalBoard[0][0] = 'water';
+  let calls = 0;
+  const field: BattlefieldEngine = { ...staged, move: (...args) => {
+    calls++;
+    const result = staged.move(...args);
+    result.board = finalBoard; result.steps[0].boardAfter = directBoard; result.steps[1].boardAfter = finalBoard;
+    return result;
+  } };
+  applyAction(battle, 'hero', { type: 'swap', from: { row: 0, col: 0 }, to: { row: 0, col: 1 }, targetId: '' }, Math.random, field);
+  assert.deepEqual(battle.board, directBoard);
+  assert.deepEqual(battle.boardMoves?.[0].steps.map(step => step.source), ['direct']);
+  const restored: Battle = JSON.parse(JSON.stringify(battle));
+  let checkpoint = false;
+  applyAction(restored, 'hero', { type: 'skill', skillId: 'strike', targetId: 'enemy' }, () => { throw new Error('RNG must not be repeated'); }, field, frame => {
+    checkpoint = true;
+    assert.deepEqual(frame.board, directBoard);
+    assert.equal(frame.fighters[0].skillEnergy, 1);
+    assert.ok(frame.fighters[1].hp < 120);
+  });
+  assert.ok(checkpoint); assert.equal(calls, 1);
+  assert.deepEqual(restored.board, finalBoard);
+  assert.equal(restored.fighters[0].skillEnergy, 4);
+});
+
+test('NPC cannot spend energy from its pending cascades', () => {
+  const hero = createCharacter('hero', 'Герой', seedContent); grantSkill(hero, 'fireball', seedContent);
+  const battle = newBattle('bot', 'Бот', 'bot', 'on-match', hero, seedContent); startBattle(battle);
+  swap(battle, { water: 3 });
+  runNpcTurns(battle, engine({ fire: 3 }, { fire: 10 }));
+  assert.equal(battle.fighters[0].hp, 120);
+  assert.equal(skillEnergy(battle.fighters[1]), 13);
+  assert.equal(battle.pendingBattlefield, undefined);
 });

@@ -7,7 +7,7 @@ import { BattleArchiveOutbox, BattleHistoryRepository } from '../src/modules/bat
 import { TaskQueue } from '../src/shared/application/task-queue.port';
 
 const character = createCharacter('00000000-0000-4000-8000-000000000001', 'Герой', seedContent);
-const completed = newBattle('00000000-0000-4000-8000-000000000002', 'Бой', 'bot', 'before', character, seedContent);
+const completed = newBattle('00000000-0000-4000-8000-000000000002', 'Бой', 'bot', 'on-match', character, seedContent);
 completed.status = 'finished';
 
 test('Redis failure leaves the committed archive event pending and it is delivered on recovery', async () => {

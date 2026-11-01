@@ -20,8 +20,11 @@ export function validateStatDefinitions(definitions: StatDefinition[]): StatDefi
       if (definition.defaultValue < definition.min || definition.defaultValue > definition.max || definition.growthPerLevel < 0) throw new Error(`Неверная база ${definition.id}`);
     } else {
       integer(definition.formula.constant ?? 0, 'constant');
-      if (definition.formula.terms.length > 32) throw new Error('В формуле допускается до 32 ссылок');
-      for (const term of definition.formula.terms) {
+      integer(definition.formula.perLevel ?? 0, 'perLevel');
+      if (definition.formula.factor) integer(definition.formula.factor.constantBps, 'factor.constantBps');
+      const terms = [...definition.formula.terms, ...(definition.formula.factor?.terms ?? [])];
+      if (terms.length > 32) throw new Error('В формуле допускается до 32 ссылок');
+      for (const term of terms) {
         if (!byId.has(term.statId)) throw new Error(`Неизвестная характеристика ${term.statId}`);
         integer(term.coefficientBps, 'coefficientBps', 10_000_000);
       }
@@ -34,7 +37,7 @@ export function validateStatDefinitions(definitions: StatDefinition[]): StatDefi
     if (visited.has(id)) return depths.get(id)!;
     const definition = byId.get(id)!;
     visiting.add(id);
-    const depth = definition.kind === 'primary' ? 1 : 1 + Math.max(0, ...definition.formula.terms.map(term => visit(term.statId)));
+    const depth = definition.kind === 'primary' ? 1 : 1 + Math.max(0, ...[...definition.formula.terms, ...(definition.formula.factor?.terms ?? [])].map(term => visit(term.statId)));
     if (depth > 16) throw new Error('Глубина формул превышает 16');
     visiting.delete(id); visited.add(id); depths.set(id, depth); ordered.push(definition);
     return depth;
@@ -72,12 +75,17 @@ function applyModifiers(base: Rational, modifiers: StatModifier[], extraFlat = r
   return overrides.length ? rational(overrides[overrides.length - 1].value) : value;
 }
 
-function evaluateFormula(definition: StatDefinition, values: Record<string, number>): Rational {
+function evaluateFormula(definition: StatDefinition, values: Record<string, number>, level: number, withFactor = true): Rational {
   if (definition.kind !== 'derived') throw new Error('Ожидалась производная характеристика');
-  return definition.formula.terms.reduce((total, term) => add(total, multiply(rational(values[term.statId]), rational(term.coefficientBps, 10000))), rational(definition.formula.constant ?? 0));
+  const linear = definition.formula.terms.reduce((total, term) => add(total, multiply(rational(values[term.statId]), rational(term.coefficientBps, 10000))), rational((definition.formula.constant ?? 0) + (level - 1) * (definition.formula.perLevel ?? 0)));
+  const factor = definition.formula.factor;
+  return factor && withFactor ? multiply(linear, factor.terms.reduce((total, term) => add(total, rational(BigInt(values[term.statId]) * BigInt(term.coefficientBps), 10000)), rational(factor.constantBps, 10000))) : linear;
 }
 
 export function calculateAttributes(input: AttributeCalculationInput): AttributeCalculation {
+  const level = input.level ?? 1;
+  integer(level, 'level', 1000);
+  if (level < 1) throw new Error('Уровень должен быть положительным');
   const definitions = validateStatDefinitions(input.definitions);
   const permanent = input.permanentModifiers ?? [], equipment = input.equipmentModifiers ?? [], temporary = input.temporaryModifiers ?? [];
   validateModifiers([...permanent, ...equipment, ...temporary], definitions);
@@ -109,14 +117,20 @@ export function calculateAttributes(input: AttributeCalculationInput): Attribute
       values[definition.id] = intrinsic[definition.id] = boundedFloor(value, definition.min, definition.max);
     }
     for (const definition of definitions.filter(definition => definition.kind === 'derived')) {
-      intrinsic[definition.id] = boundedFloor(applyModifiers(evaluateFormula(definition, intrinsic), forStat(permanent, definition.id)), definition.min, definition.max);
+      intrinsic[definition.id] = boundedFloor(applyModifiers(evaluateFormula(definition, intrinsic, level), forStat(permanent, definition.id)), definition.min, definition.max);
     }
     for (const definition of definitions.filter(definition => definition.kind === 'derived')) {
-      let value = applyModifiers(evaluateFormula(definition, values), forStat(permanent, definition.id));
+      const equipmentFactor = definition.formula.factor?.includeEquipment;
+      let value = applyModifiers(evaluateFormula(definition, values, level, !equipmentFactor), equipmentFactor ? [] : forStat(permanent, definition.id));
       if (withEquipment) {
         const scaled = scaling.filter(bonus => bonus.statId === definition.id).reduce((sum, bonus) => add(sum,
           multiply(rational(bonus.baseValue), add(rational(1), multiply(rational(intrinsic[bonus.scalingStatId]), rational(bonus.coefficientBps, 10000))))), rational(0));
         value = applyModifiers(value, forStat(equipment, definition.id), scaled);
+      }
+      if (equipmentFactor) {
+        const factor = definition.formula.factor!;
+        value = multiply(value, factor.terms.reduce((sum, term) => add(sum, rational(BigInt(values[term.statId]) * BigInt(term.coefficientBps), 10000)), rational(factor.constantBps, 10000)));
+        value = applyModifiers(value, forStat(permanent, definition.id));
       }
       if (withTemporary) value = applyModifiers(value, forStat(temporary, definition.id));
       values[definition.id] = boundedFloor(value, definition.min, definition.max);

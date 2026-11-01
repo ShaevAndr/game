@@ -4,3 +4,4 @@ export * from './defaults';
 export * from './schema';
 export * from './character';
 export * from './equipment';
+export * from './combat-defaults';

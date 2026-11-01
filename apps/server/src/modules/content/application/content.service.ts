@@ -9,7 +9,7 @@ import { RecipesCatalogService } from '../../crafting/application/recipes-catalo
 import { ContentSettingsRepository } from '../ports/content-settings.repository';
 import { CharacteristicsCatalogService } from '../../characters/application/characteristics-catalog.service';
 
-const cacheKey = 'content:v1';
+const cacheKey = 'content:v3';
 
 @Injectable()
 export class ContentService implements OnApplicationBootstrap {
@@ -35,10 +35,10 @@ export class ContentService implements OnApplicationBootstrap {
       const parsed = contentSchema.safeParse(cached);
       if (parsed.success) return parsed.data;
     }
-    const [settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions, itemRanks, progression, modifierDefinitions] = await Promise.all([
-      this.settings.get(), this.skills.list(), this.items.list(), this.templates.list(), this.items.groups(), this.recipes.list(), this.characteristics.list(), this.items.ranks(), this.recipes.progression(), this.modifierDefinitions.list(),
+    const [settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions, itemRanks, progression, modifierDefinitions, itemScalingProfiles] = await Promise.all([
+      this.settings.get(), this.skills.list(), this.items.list(), this.templates.list(), this.items.groups(), this.recipes.list(), this.characteristics.list(), this.items.ranks(), this.recipes.progression(), this.modifierDefinitions.list(), this.items.scalingProfiles(),
     ]);
-    const content = contentSchema.parse({ ...settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions, itemRanks, ...progression, modifierDefinitions, effectsVersion: 1 });
+    const content = contentSchema.parse({ ...settings, skills, items, characterTemplates, itemGroups, recipes, statDefinitions, itemRanks, ...progression, modifierDefinitions, itemScalingProfiles, modifierRulesVersion: 1, effectsVersion: 1 });
     await this.cache.set(cacheKey, content, 30);
     return content;
   }

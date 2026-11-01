@@ -4,6 +4,7 @@ import { Server, Socket } from 'socket.io';
 import { Battle } from '@game/core';
 import { z } from 'zod';
 import { BattleEvents } from '../ports/battle-events';
+import { battleView } from './battle-view';
 
 @WebSocketGateway({ cors: { origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173' } })
 export class BattlesGateway extends BattleEvents {
@@ -26,7 +27,7 @@ export class BattlesGateway extends BattleEvents {
   }
 
   publish(battle: Battle) {
-    try { this.server?.to(battle.id).emit('battle', battle); }
+    try { this.server?.to(battle.id).emit('battle', battleView(battle)); }
     catch { this.logger.warn(`Battle ${battle.id}: realtime delivery failed; snapshot is available via REST`); }
   }
 }

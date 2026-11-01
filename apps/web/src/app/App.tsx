@@ -80,7 +80,7 @@ export function App() {
               });
               return created;
             }}/>
-          {!workshop && <EnergyPanel character={character} fighter={fighter} legacy={!!battle && battle.combatVersion !== 2}/>}
+          {!workshop && <EnergyPanel character={character} fighter={fighter}/>}
         </aside>
         {screen === 'inventory' ? <InventoryPage key={characterId} ownerId={characterId} characters={characters} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters}/>
           : screen === 'equipment' ? <EquipmentPage key={characterId} ownerId={characterId} character={character} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters} onInventory={openInventory}/>

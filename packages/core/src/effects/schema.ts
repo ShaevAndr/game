@@ -21,9 +21,10 @@ export const targetingSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('ally_single'), includeSelf: z.boolean().optional() }).strict(),
   z.object({ kind: z.literal('allies_all'), includeSelf: z.boolean().optional() }).strict(),
 ]);
-const base = { id, name: z.string().min(1).max(80).optional(), recipient: z.enum(['selected', 'caster']) };
+const base = { id, name: z.string().min(1).max(80).optional(), recipient: z.enum(['selected', 'caster']),
+  activationChanceBps: z.number().int().min(0).max(10000).optional(), chancePerSkillRankBps: z.number().int().min(0).max(10000).optional(), maxChanceBps: z.number().int().min(0).max(10000).optional() };
 export const skillEffectSchema = z.discriminatedUnion('kind', [
-  z.object({ ...base, modifierDefinitionId: id.optional(), kind: z.literal('stat_modifier'), polarity: z.enum(['buff', 'debuff', 'neutral']), statId: statIdSchema,
+  z.object({ ...base, modifierDefinitionId: id.optional(), modifierDefinitionVersion: z.number().int().min(1).optional(), coefficientBps: z.number().int().min(0).max(10_000_000).optional(), coefficientPerSkillRankBps: z.number().int().min(-1_000_000).max(1_000_000).optional(), kind: z.literal('stat_modifier'), polarity: z.enum(['buff', 'debuff', 'neutral']), statId: statIdSchema,
     operation: z.enum(['add_flat', 'add_percent', 'multiply', 'set']), magnitude: effectExpressionSchema,
     durationTurns: z.union([z.number().int().min(1).max(20), effectExpressionSchema]), tags: z.array(id).max(16).optional(), dispellable: z.boolean().optional(),
     stackKey: id.optional(), stacking: z.enum(['refresh', 'replace_if_stronger', 'stack', 'independent']).optional(), maxStacks: z.number().int().min(1).max(20).optional(), priority: integer.optional(),
@@ -43,6 +44,11 @@ export function validateSkillEffects(skills: { id: string; targeting?: SkillTarg
     for (const effect of skill.effects) {
       if (ids.has(effect.id)) throw new Error(`Дубликат эффекта ${skill.id}:${effect.id}`);
       ids.add(effect.id);
+      if (effect.kind === 'stat_modifier') {
+        if ((effect.coefficientBps !== undefined || effect.coefficientPerSkillRankBps !== undefined || effect.modifierDefinitionVersion !== undefined) && !effect.modifierDefinitionId) throw new Error('Опорная величина требует ссылку на определение допа');
+        if (effect.coefficientPerSkillRankBps !== undefined && effect.coefficientBps === undefined) throw new Error('Рост коэффициента требует начальный коэффициент');
+        if (effect.coefficientBps !== undefined && effect.coefficientBps + 9 * (effect.coefficientPerSkillRankBps ?? 0) < 0) throw new Error('Отрицательный коэффициент допа');
+      }
       if (effect.kind === 'dispel') continue;
       const expressions = [effect.magnitude, ...(effect.kind === 'stat_modifier' && typeof effect.durationTurns !== 'number' ? [effect.durationTurns] : [])];
       for (const expression of expressions) for (const term of expression.terms ?? []) if (!byId.has(term.statId)) throw new Error(`Неизвестная характеристика эффекта ${term.statId}`);

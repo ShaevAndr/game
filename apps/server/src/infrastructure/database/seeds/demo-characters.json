@@ -1,0 +1,708 @@
+[
+  {
+    "id": "de000000-0000-4000-8000-000000000001",
+    "name": "Искра",
+    "templateId": "pyromancer",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 14,
+    "learnedSkillIds": [
+      "strike",
+      "ember",
+      "fireball",
+      "inferno",
+      "phoenix-warmth",
+      "healing-flame",
+      "phoenix-heart"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 30
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0,
+      "defense": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      },
+      {
+        "itemId": "iron-sword",
+        "quantity": 1
+      },
+      {
+        "itemId": "leather-armor",
+        "quantity": 1
+      },
+      {
+        "itemId": "iron-ore",
+        "quantity": 60
+      },
+      {
+        "itemId": "healing-herb",
+        "quantity": 40
+      },
+      {
+        "itemId": "leather",
+        "quantity": 40
+      },
+      {
+        "itemId": "ember-scroll",
+        "quantity": 1
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z",
+    "skillLevels": {
+      "strike": 1,
+      "ember": 1,
+      "fireball": 1,
+      "inferno": 1,
+      "phoenix-warmth": 1,
+      "healing-flame": 1,
+      "phoenix-heart": 1
+    }
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000002",
+    "name": "Феникс",
+    "templateId": "phoenix",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 14,
+    "learnedSkillIds": [
+      "strike",
+      "ember",
+      "fireball",
+      "inferno",
+      "phoenix-warmth",
+      "healing-flame",
+      "phoenix-heart"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 30
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0,
+      "defense": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      },
+      {
+        "itemId": "iron-sword",
+        "quantity": 1
+      },
+      {
+        "itemId": "leather-armor",
+        "quantity": 1
+      },
+      {
+        "itemId": "iron-ore",
+        "quantity": 60
+      },
+      {
+        "itemId": "healing-herb",
+        "quantity": 40
+      },
+      {
+        "itemId": "leather",
+        "quantity": 40
+      },
+      {
+        "itemId": "ember-scroll",
+        "quantity": 1
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z",
+    "skillLevels": {
+      "strike": 1,
+      "ember": 1,
+      "fireball": 1,
+      "inferno": 1,
+      "phoenix-warmth": 1,
+      "healing-flame": 1,
+      "phoenix-heart": 1
+    }
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000003",
+    "name": "Прилив",
+    "templateId": "tidekeeper",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 14,
+    "learnedSkillIds": [
+      "strike",
+      "spring",
+      "tide",
+      "renewal",
+      "ice-shard",
+      "ice-lance",
+      "glacier"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 30
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0,
+      "defense": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      },
+      {
+        "itemId": "iron-sword",
+        "quantity": 1
+      },
+      {
+        "itemId": "leather-armor",
+        "quantity": 1
+      },
+      {
+        "itemId": "iron-ore",
+        "quantity": 60
+      },
+      {
+        "itemId": "healing-herb",
+        "quantity": 40
+      },
+      {
+        "itemId": "leather",
+        "quantity": 40
+      },
+      {
+        "itemId": "ember-scroll",
+        "quantity": 1
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z",
+    "skillLevels": {
+      "strike": 1,
+      "spring": 1,
+      "tide": 1,
+      "renewal": 1,
+      "ice-shard": 1,
+      "ice-lance": 1,
+      "glacier": 1
+    }
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000004",
+    "name": "Иней",
+    "templateId": "frostmage",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 14,
+    "learnedSkillIds": [
+      "strike",
+      "spring",
+      "tide",
+      "renewal",
+      "ice-shard",
+      "ice-lance",
+      "glacier"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 30
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0,
+      "defense": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      },
+      {
+        "itemId": "iron-sword",
+        "quantity": 1
+      },
+      {
+        "itemId": "leather-armor",
+        "quantity": 1
+      },
+      {
+        "itemId": "iron-ore",
+        "quantity": 60
+      },
+      {
+        "itemId": "healing-herb",
+        "quantity": 40
+      },
+      {
+        "itemId": "leather",
+        "quantity": 40
+      },
+      {
+        "itemId": "ember-scroll",
+        "quantity": 1
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z",
+    "skillLevels": {
+      "strike": 1,
+      "spring": 1,
+      "tide": 1,
+      "renewal": 1,
+      "ice-shard": 1,
+      "ice-lance": 1,
+      "glacier": 1
+    }
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000005",
+    "name": "Гранит",
+    "templateId": "geomancer",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 14,
+    "learnedSkillIds": [
+      "strike",
+      "pebble",
+      "quake",
+      "landslide",
+      "lifesap",
+      "grove",
+      "world-tree"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 30
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0,
+      "defense": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      },
+      {
+        "itemId": "iron-sword",
+        "quantity": 1
+      },
+      {
+        "itemId": "leather-armor",
+        "quantity": 1
+      },
+      {
+        "itemId": "iron-ore",
+        "quantity": 60
+      },
+      {
+        "itemId": "healing-herb",
+        "quantity": 40
+      },
+      {
+        "itemId": "leather",
+        "quantity": 40
+      },
+      {
+        "itemId": "ember-scroll",
+        "quantity": 1
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z",
+    "skillLevels": {
+      "strike": 1,
+      "pebble": 1,
+      "quake": 1,
+      "landslide": 1,
+      "lifesap": 1,
+      "grove": 1,
+      "world-tree": 1
+    }
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000006",
+    "name": "Ива",
+    "templateId": "druid",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 14,
+    "learnedSkillIds": [
+      "strike",
+      "pebble",
+      "quake",
+      "landslide",
+      "lifesap",
+      "grove",
+      "world-tree"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 30
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0,
+      "defense": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      },
+      {
+        "itemId": "iron-sword",
+        "quantity": 1
+      },
+      {
+        "itemId": "leather-armor",
+        "quantity": 1
+      },
+      {
+        "itemId": "iron-ore",
+        "quantity": 60
+      },
+      {
+        "itemId": "healing-herb",
+        "quantity": 40
+      },
+      {
+        "itemId": "leather",
+        "quantity": 40
+      },
+      {
+        "itemId": "ember-scroll",
+        "quantity": 1
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z",
+    "skillLevels": {
+      "strike": 1,
+      "pebble": 1,
+      "quake": 1,
+      "landslide": 1,
+      "lifesap": 1,
+      "grove": 1,
+      "world-tree": 1
+    }
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000007",
+    "name": "Шторм",
+    "templateId": "stormcaller",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 14,
+    "learnedSkillIds": [
+      "strike",
+      "breeze",
+      "gust",
+      "tempest",
+      "soothing-wind",
+      "cloud-rest",
+      "sky-blessing"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 30
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0,
+      "defense": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      },
+      {
+        "itemId": "iron-sword",
+        "quantity": 1
+      },
+      {
+        "itemId": "leather-armor",
+        "quantity": 1
+      },
+      {
+        "itemId": "iron-ore",
+        "quantity": 60
+      },
+      {
+        "itemId": "healing-herb",
+        "quantity": 40
+      },
+      {
+        "itemId": "leather",
+        "quantity": 40
+      },
+      {
+        "itemId": "ember-scroll",
+        "quantity": 1
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z",
+    "skillLevels": {
+      "strike": 1,
+      "breeze": 1,
+      "gust": 1,
+      "tempest": 1,
+      "soothing-wind": 1,
+      "cloud-rest": 1,
+      "sky-blessing": 1
+    }
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000008",
+    "name": "Зефир",
+    "templateId": "windkeeper",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 14,
+    "learnedSkillIds": [
+      "strike",
+      "breeze",
+      "gust",
+      "tempest",
+      "soothing-wind",
+      "cloud-rest",
+      "sky-blessing"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 30
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0,
+      "defense": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      },
+      {
+        "itemId": "iron-sword",
+        "quantity": 1
+      },
+      {
+        "itemId": "leather-armor",
+        "quantity": 1
+      },
+      {
+        "itemId": "iron-ore",
+        "quantity": 60
+      },
+      {
+        "itemId": "healing-herb",
+        "quantity": 40
+      },
+      {
+        "itemId": "leather",
+        "quantity": 40
+      },
+      {
+        "itemId": "ember-scroll",
+        "quantity": 1
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z",
+    "skillLevels": {
+      "strike": 1,
+      "breeze": 1,
+      "gust": 1,
+      "tempest": 1,
+      "soothing-wind": 1,
+      "cloud-rest": 1,
+      "sky-blessing": 1
+    }
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000009",
+    "name": "Клинок",
+    "templateId": "duelist",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 16,
+    "learnedSkillIds": [
+      "strike",
+      "cleave",
+      "execution",
+      "lunge",
+      "second-wind",
+      "blade-dance"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 30
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0,
+      "defense": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      },
+      {
+        "itemId": "iron-sword",
+        "quantity": 1
+      },
+      {
+        "itemId": "leather-armor",
+        "quantity": 1
+      },
+      {
+        "itemId": "iron-ore",
+        "quantity": 60
+      },
+      {
+        "itemId": "healing-herb",
+        "quantity": 40
+      },
+      {
+        "itemId": "leather",
+        "quantity": 40
+      },
+      {
+        "itemId": "ember-scroll",
+        "quantity": 1
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z",
+    "skillLevels": {
+      "strike": 1,
+      "cleave": 1,
+      "execution": 1,
+      "lunge": 1,
+      "second-wind": 1,
+      "blade-dance": 1
+    }
+  },
+  {
+    "id": "de000000-0000-4000-8000-000000000010",
+    "name": "Оплот",
+    "templateId": "veteran",
+    "level": 10,
+    "experience": 0,
+    "skillPoints": 16,
+    "learnedSkillIds": [
+      "strike",
+      "cleave",
+      "execution",
+      "lunge",
+      "second-wind",
+      "blade-dance"
+    ],
+    "stats": {
+      "maxHp": 228,
+      "attack": 26,
+      "defense": 12,
+      "maxEnergy": 30
+    },
+    "energy": {
+      "fire": 0,
+      "water": 0,
+      "earth": 0,
+      "air": 0,
+      "physical": 0,
+      "defense": 0
+    },
+    "inventory": [
+      {
+        "itemId": "potion",
+        "quantity": 3
+      },
+      {
+        "itemId": "iron-sword",
+        "quantity": 1
+      },
+      {
+        "itemId": "leather-armor",
+        "quantity": 1
+      },
+      {
+        "itemId": "iron-ore",
+        "quantity": 60
+      },
+      {
+        "itemId": "healing-herb",
+        "quantity": 40
+      },
+      {
+        "itemId": "leather",
+        "quantity": 40
+      },
+      {
+        "itemId": "ember-scroll",
+        "quantity": 1
+      }
+    ],
+    "createdAt": "2026-10-28T00:00:00.000Z",
+    "skillLevels": {
+      "strike": 1,
+      "cleave": 1,
+      "execution": 1,
+      "lunge": 1,
+      "second-wind": 1,
+      "blade-dance": 1
+    }
+  }
+]

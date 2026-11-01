@@ -21,3 +21,6 @@ export * from './combat/rules';
 export { skillChoices } from './combat/matched';
 
 export * from './item-progression';
+export * from './modifiers';
+
+export * from './combat/formulas';

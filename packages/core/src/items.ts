@@ -7,6 +7,7 @@ export const itemActionIds = ['split', 'merge', 'equip', 'unequip', 'use-in-batt
 export type ItemActionId = typeof itemActionIds[number];
 export interface ItemGroup { id: string; name: string; description: string; actions: ItemActionId[] }
 export interface ItemDefinition {
+  itemLevel?: number; version?: number;
   id: string; name: string; description: string; groupId: string; stackLimit: number;
   heal?: number; equipSlot?: string; bonuses?: Partial<Stats>; grantedSkillId?: string;
   statModifiers?: Omit<StatModifier, 'id' | 'sourceId' | 'appliedSequence'>[];
@@ -27,6 +28,7 @@ export const itemGroupSchema = z.object({
   actions: z.array(z.enum(itemActionIds)).max(20),
 }).strict();
 export const itemDefinitionSchema = z.object({
+  itemLevel: z.number().int().min(1).max(1000).optional(), version: z.number().int().min(1).optional(),
   id: idSchema, name: z.string().min(1).max(80), description: z.string().max(500),
   groupId: idSchema.default('potions'), stackLimit: z.number().int().min(1).max(9999).default(99),
   heal: z.number().int().positive().max(10000).optional(), equipSlot: idSchema.optional(),

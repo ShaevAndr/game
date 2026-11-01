@@ -20,13 +20,13 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, animatin
   const controls = useBattleControls(battle, characterId, busy, onCommand);
   const { me, active, myTurn, targetId, healTarget } = controls;
   const dialog = useRef<HTMLDialogElement>(null);
-  const choosing = battle.combatVersion === 2 && myTurn && battle.phase === 'choose' && !animating;
+  const choosing = battle.combatVersion === 1 && myTurn && battle.phase === 'choose' && !animating;
   useEffect(() => {
     if (choosing && !dialog.current?.open) dialog.current?.showModal();
     else if (!choosing && dialog.current?.open) dialog.current.close();
   }, [choosing]);
   const lastMove = [...(battle.boardMoves ?? [])].reverse().find(move => move.actorId === characterId) ?? battle.boardMoves?.[battle.boardMoves.length - 1];
-  const phaseLabel = animating ? fieldMotion ? fieldMotion.stage === 'remove' ? 'Фишки исчезают…' : fieldMotion.stage === 'fall' ? 'Фишки падают…' : 'Перестановка…' : active?.npc ? 'Бот готовит ход…' : 'Ход выполняется…' : battle.status === 'active' ? battle.phase === 'choose' ? 'Выбери навык' : battle.phase === 'after' ? 'Заверши ход' : 'Собери три в ряд' : 'Общее поле';
+  const phaseLabel = animating ? fieldMotion ? fieldMotion.stage === 'remove' ? 'Фишки исчезают…' : fieldMotion.stage === 'fall' ? 'Фишки падают…' : 'Перестановка…' : active?.npc ? 'Бот готовит ход…' : 'Ход выполняется…' : battle.status === 'active' ? battle.phase === 'choose' ? 'Выбери навык' : 'Собери три в ряд' : 'Общее поле';
   return <div className="main-column">
     <section className="panel battle-top">
       <div className="section-heading"><div>
@@ -39,7 +39,7 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, animatin
         className={`fighter ${fighter.id === battle.activeId ? 'acting' : ''} ${fighter.id === targetId ? 'target' : ''} ${fighter.hp === 0 ? 'dead' : ''}`}>
         <div><span>{fighter.npc ? '⬡' : '◈'} {fighter.name}</span><small>Команда {fighter.team + 1}{fighter.id === me?.id ? ' · ты' : ''}{fighter.id === targetId ? ' · цель' : ''}</small>{(fighter.guardDefense ?? 0) > 0 && <small className="guard-status">⛨ Защита +{fighter.guardDefense} до своего хода</small>}</div>
         <b>{fighter.hp}<small> / {fighter.stats.maxHp}</small></b><div className="hp-track"><i style={{ width: `${100 * fighter.hp / fighter.stats.maxHp}%` }}/></div>
-        {battle.combatVersion === 2 && <SkillEnergy value={skillEnergy(fighter)}/>}
+        {battle.combatVersion === 1 && <SkillEnergy value={skillEnergy(fighter)}/>}
       </button><ActiveEffects effects={fighter.activeEffects ?? []} fighters={battle.fighters} definitions={battle.content.statDefinitions ?? []}/></div>)}</div>
       {me?.attributes && battle.content.statDefinitions && <details className="battle-character-stats"><summary>Параметры в этом бою</summary><CharacterAttributes attributes={me.attributes} definitions={battle.content.statDefinitions}/></details>}
       {battle.status === 'waiting' && <div className="lobby-actions">

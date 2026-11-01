@@ -10,7 +10,9 @@ const display = {
 };
 export const statDefinitionSchema = z.discriminatedUnion('kind', [
   z.object({ ...display, kind: z.literal('primary'), defaultValue: integer, growthPerLevel: z.literal(0) }).strict(),
-  z.object({ ...display, kind: z.literal('derived'), formula: z.object({ constant: integer.optional(), terms: z.array(z.object({ statId: statIdSchema, coefficientBps: z.number().int().min(-10_000_000).max(10_000_000) }).strict()).max(32) }).strict() }).strict(),
+  z.object({ ...display, kind: z.literal('derived'), formula: z.object({ constant: integer.optional(), perLevel: integer.optional(),
+    factor: z.object({ includeEquipment: z.boolean().optional(), constantBps: integer, terms: z.array(z.object({ statId: statIdSchema, coefficientBps: z.number().int().min(-10_000_000).max(10_000_000) }).strict()).max(32) }).strict().optional(),
+    terms: z.array(z.object({ statId: statIdSchema, coefficientBps: z.number().int().min(-10_000_000).max(10_000_000) }).strict()).max(32) }).strict() }).strict(),
 ]);
 export const statDefinitionsSchema = z.array(statDefinitionSchema).min(1).max(64).superRefine((definitions, context) => {
   try { validateStatDefinitions(definitions); }

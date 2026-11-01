@@ -31,7 +31,11 @@ export interface BattlefieldMoveReport<T extends string = BattlefieldElement> {
 }
 export interface BattlefieldMoveResult<T extends string = BattlefieldElement> extends Battlefield<T>, BattlefieldMoveReport<T> {}
 export interface BattlefieldMove { from: Cell; to: Cell }
-export interface BattlefieldMoveEvent<T extends string = BattlefieldElement> extends BattlefieldMoveReport<T>, BattlefieldMove { actorId: string }
+export interface BattlefieldMoveEvent<T extends string = BattlefieldElement> extends BattlefieldMoveReport<T>, BattlefieldMove {
+  actorId: string;
+  /** Secondary reductions resume an earlier swap without swapping the cells again. */
+  continuation?: boolean;
+}
 export interface BattlefieldEngine<T extends string = BattlefieldElement> {
   create(options?: BattlefieldOptions<T>, random?: () => number): Battlefield<T>;
   move(field: Battlefield<T>, from: Cell, to: Cell, random?: () => number): BattlefieldMoveResult<T>;

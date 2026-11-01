@@ -2,6 +2,8 @@ export type StatId = string;
 export type StatUnit = 'points' | 'hp' | 'basis_points' | 'points_per_cell';
 export interface StatFormula {
   constant?: number;
+  perLevel?: number;
+  factor?: { includeEquipment?: boolean; constantBps: number; terms: { statId: StatId; coefficientBps: number }[] };
   terms: { statId: StatId; coefficientBps: number }[];
 }
 interface StatDisplay {
@@ -21,6 +23,7 @@ export interface ScaledEquipmentBonus {
   id: string; statId: StatId; baseValue: number; scalingStatId: StatId; coefficientBps: number; sourceId: string;
 }
 export interface AttributeCalculationInput {
+  level?: number;
   definitions: StatDefinition[]; baseAttributes: Record<StatId, number>;
   permanentModifiers?: StatModifier[];
   equipmentModifiers?: StatModifier[];

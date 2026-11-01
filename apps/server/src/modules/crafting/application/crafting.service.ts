@@ -1,7 +1,7 @@
 import { CharactersService } from '../../characters/application/characters.service';
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomInt, randomUUID } from 'node:crypto';
-import { applyCraftRecipe, defaultBlindCraftRules, knownRecipes, matchingCraftRecipes, resolveBlindCraft, type BlindCraftReceipt, type InventoryResult, professionProgress, recipeProfession } from '@game/core';
+import { applyCraftRecipe, defaultBlindCraftRules, knownRecipes, matchingCraftRecipes, resolveBlindCraft, type BlindCraftReceipt, type InventoryResult, professionProgress, recipeProfession, compatibleItemModifiers, itemModifierRange, defaultItemScalingProfiles } from '@game/core';
 import { z } from 'zod';
 import { UnitOfWork } from '../../../shared/application/unit-of-work';
 import { ContentService } from '../../content/application/content.service';
@@ -39,7 +39,13 @@ export class CraftingService {
             const policy = output.rankPolicy;
             const chances = policy?.mode === 'fixed' ? [{ rankId: policy.rankId, chanceBps: 10000 }]
               : policy?.mode === 'profession' ? content.rankProfiles?.find(profile => profile.id === policy.profileId)?.levels.find(entry => entry.level === (progress?.level ?? 1))?.chances ?? [] : [];
-            return { itemId: output.itemId, fixed: policy?.mode === 'fixed', chances };
+            const item = content.items.find(item => item.id === output.itemId)!;
+            return { itemId: output.itemId, itemLevel: item.itemLevel ?? 1, fixed: policy?.mode === 'fixed', chances,
+              modifierPreviews: content.modifierRulesVersion === 1 && item.equipSlot ? compatibleItemModifiers(item, content.modifierDefinitions ?? []).map(modifier => ({
+                id: modifier.id, name: modifier.name, statId: modifier.statId, operation: modifier.operation, craftWeight: modifier.craftWeight ?? 0,
+                activationChanceBps: modifier.activationChanceBps ?? 10000, ...itemModifierRange(modifier, item.itemLevel ?? 1, content.itemScalingProfiles ?? defaultItemScalingProfiles),
+              })) : [],
+            };
           }),
         };
       }),

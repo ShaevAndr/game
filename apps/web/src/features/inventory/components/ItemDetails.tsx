@@ -1,4 +1,4 @@
-import { rankedItemDefinition } from '@game/core';
+import { rankedItemDefinition, canMergeInstances } from '@game/core';
 import { ItemQuality, qualityStyle } from './ItemQuality';
 import { useState } from 'react';
 import { Character, InventoryCommand, InventoryContainer, InventoryView } from '@game/core';
@@ -23,7 +23,7 @@ export function ItemDetails({ view, selectedId, characters, busy, recipientId, d
   const inBackpack = selected.inventoryId === primary?.id;
   const previous = definition?.equipSlot ? view.items.find(item => item.equippedSlot === definition.equipSlot && item.id !== selected.id) : undefined;
   const previousDefinition = view.definitions.find(item => item.id === previous?.itemId);
-  const compatible = view.items.find(item => item.id !== selected.id && item.itemId === selected.itemId && item.inventoryId === selected.inventoryId && !item.equippedSlot && item.quantity + selected.quantity <= (definition?.stackLimit ?? 0));
+  const compatible = view.items.find(item => canMergeInstances(selected, item, definition?.stackLimit ?? 0));
   const quantityValid = Number.isInteger(amount) && amount > 0 && amount <= selected.quantity;
   const destination = destinations.find(inventory => inventory.primary);
   const unequipAction = selected.actions.find(action => action.id === 'unequip');
@@ -32,6 +32,7 @@ export function ItemDetails({ view, selectedId, characters, busy, recipientId, d
     <div className="item-description">
       <div className="item-title"><span className="item-large-icon"><ItemIcon item={definition}/></span><div><span className="item-category">{definition?.equipSlot ? slotNames[definition.equipSlot] ?? definition.equipSlot : view.groups.find(group => group.id === definition?.groupId)?.name}</span><h3>{definition?.name ?? selected.itemId}</h3><span className={`item-location ${equipped ? 'is-equipped' : ''}`}>{equipped ? '● Надето на персонажа' : inBackpack ? 'В рюкзаке' : 'В сохранённых предметах'}{selected.quantity > 1 ? ` · ${selected.quantity} шт.` : ''}</span></div></div>
       <ItemQuality item={selected}/>
+      {!selected.quality && <p className="hint">Уровень предмета: {selected.itemLevel ?? 1}</p>}
       <p>{definition?.description ?? 'Описание предмета недоступно.'}</p>
       {!!definition?.bonuses && <dl className="item-bonuses">{Object.entries(definition.bonuses).map(([key, value]) => <div key={key}><dt>{statNames[key] ?? key}</dt><dd>+{value}</dd></div>)}</dl>}
       {!!definition?.bonuses?.attack && view.statDefinitions && <p className="hint">Мощь оружия усиливается характеристиками героя. Итоговый вклад показан в расчёте параметров на экране экипировки.</p>}

@@ -5,6 +5,7 @@ import { ItemsRepository } from '../ports/items.repository';
 export class ItemsService {
   constructor(@Inject(ItemsRepository) private readonly repository: ItemsRepository) {}
   ranks() { return this.repository.ranks(); }
+  scalingProfiles() { return this.repository.scalingProfiles(); }
   groups() { return this.repository.groups(); }
   list() { return this.repository.list(); }
   async get(id: string) {

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { applyAction, applySkillEffects, contentSchema, createCharacter, defaultStatDefinitions, joinBattle, legalSkillTargets, newBattle, projectCharacterAttributes,
-  removeDeadEffects, runNpcTurns, seedContent, seedEffectSkills, skillChoices, startBattle, type Battle, type Content, type Skill, type StatModifierEffect } from '../src';
+  removeDeadEffects, runNpcTurns, seedContent, seedEffectSkills, skillChoices, previewSkillEffects, startBattle, type Battle, type Content, type Skill, type StatModifierEffect } from '../src';
 
 const content: Content = { ...seedContent, statDefinitions: defaultStatDefinitions, effectsVersion: 1, skills: [...seedContent.skills, ...seedEffectSkills] };
 function fixture(extra: Skill[] = []) {
@@ -67,6 +67,26 @@ test('a debuff counts target turns, persists through JSON round trips and does n
   assert.deepEqual(restored, battle);
   assert.equal(battle.fighters[1].activeEffects!.length, 0);
   assert.equal(battle.fighters[1].attributes!.effective.physicalPower, 8);
+});
+
+test('match power scales negative modifiers and healing while preserving duration and activation chance', () => {
+  const { battle } = fixture(), [actor, target] = battle.fighters;
+  const weakening = skill('weakening');
+  const before = previewSkillEffects(battle, actor, weakening)[0];
+  battle.matchPowerBps = 13000;
+  const after = previewSkillEffects(battle, actor, weakening)[0];
+  assert.equal(after.magnitude, -2600);
+  assert.equal(after.durationTurns, before.durationTurns);
+  assert.equal(after.activationChanceBps, before.activationChanceBps);
+  applySkillEffects(battle, actor, weakening, target.id);
+  assert.equal(target.activeEffects![0].magnitude, after.magnitude);
+  const healing: Skill = { ...battle.content.skills.find(skill => skill.id === 'spring')!, effects: [{
+    id: 'heal', recipient: 'selected', kind: 'heal', magnitude: { unit: 'hp', constant: 11 },
+  }] };
+  actor.hp = 50;
+  assert.equal(previewSkillEffects(battle, actor, healing)[0].magnitude, 14);
+  applySkillEffects(battle, actor, healing, actor.id);
+  assert.equal(actor.hp, 64);
 });
 
 test('refresh replaces the snapshot and duration; changing source attributes later does not change magnitude', () => {

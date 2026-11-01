@@ -6,8 +6,14 @@ import { legacyEquipmentAttributes } from './attributes/equipment';
 import type { ScaledEquipmentBonus, StatDefinition, StatModifier } from './attributes/types';
 
 export interface InventoryContainer { id: string; ownerId: string; name: string; capacity: number; primary: boolean }
-export interface ItemInstance { quality?: ItemQuality; id: string; ownerId: string; inventoryId: string | null; itemId: string; quantity: number; equippedSlot: string | null }
+export interface ItemInstance { itemLevel?: number; definitionVersion?: number; quality?: ItemQuality; id: string; ownerId: string; inventoryId: string | null; itemId: string; quantity: number; equippedSlot: string | null }
 export interface InventoryState { ownerId: string; inventories: InventoryContainer[]; items: ItemInstance[] }
+export function canMergeInstances(source: ItemInstance, target: ItemInstance, stackLimit: number): boolean {
+  return source.id !== target.id && !source.equippedSlot && !target.equippedSlot
+    && source.ownerId === target.ownerId && source.inventoryId === target.inventoryId && source.itemId === target.itemId
+    && (source.itemLevel ?? 1) === (target.itemLevel ?? 1) && (source.definitionVersion ?? 1) === (target.definitionVersion ?? 1)
+    && JSON.stringify(source.quality) === JSON.stringify(target.quality) && source.quantity + target.quantity <= stackLimit;
+}
 export interface InventoryView extends InventoryState { items: (ItemInstance & { actions: AvailableItemAction[] })[]; definitions: Item[]; groups: ItemGroup[]; statDefinitions?: StatDefinition[] }
 export interface InventoryResult { createdItems?: ItemInstance[]; itemIds: string[]; deletedItemIds: string[]; inventoryId?: string }
 export interface InventoryEffect { ownerId: string; skillId: string }
@@ -104,7 +110,7 @@ export function applyInventoryCommand(input: InventoryState[], command: Inventor
     if (inventoryId === undefined || (inventoryId && container(inventoryId).state.ownerId !== state.ownerId)) throw new Error('Инвентарь не принадлежит получателю');
     for (let remaining = command.quantity; remaining > 0;) {
       const quantity = Math.min(remaining, item.stackLimit);
-      const instance: ItemInstance = { id: newId(), ownerId: state.ownerId, inventoryId, itemId: item.id, quantity, equippedSlot: null };
+      const instance: ItemInstance = { id: newId(), ownerId: state.ownerId, inventoryId, itemId: item.id, itemLevel: item.itemLevel ?? 1, definitionVersion: item.version ?? 1, quantity, equippedSlot: null };
       state.items.push(instance); result.itemIds.push(instance.id); remaining -= quantity;
     }
   } else {
@@ -135,9 +141,8 @@ export function applyInventoryCommand(input: InventoryState[], command: Inventor
           if (command.type !== 'merge') return;
           const target = find(command.targetInstanceId).instance;
           movable(target);
-          if (target.id === instance.id || target.ownerId !== instance.ownerId || target.inventoryId !== instance.inventoryId || target.itemId !== instance.itemId) throw new Error('Объединять можно одинаковые предметы в одном инвентаре');
-          if (JSON.stringify(target.quality) !== JSON.stringify(instance.quality)) throw new Error('Качество предметов не совпадает');
           if (target.quantity + instance.quantity > definition(instance.itemId).stackLimit) throw new Error('Превышен размер стэка');
+          if (!canMergeInstances(instance, target, definition(instance.itemId).stackLimit)) throw new Error('Объединять можно одинаковые предметы одного уровня и качества в пределах стэка');
           target.quantity += instance.quantity; state.items = state.items.filter(item => item.id !== instance.id);
           result.itemIds.push(target.id); result.deletedItemIds.push(instance.id);
         },
@@ -173,6 +178,8 @@ export function applyInventoryCommand(input: InventoryState[], command: Inventor
       if (state.items.filter(item => item.inventoryId === inventory.id && !item.equippedSlot).length > inventory.capacity) throw new Error(`Инвентарь «${inventory.name}» заполнен`);
     }
     for (const instance of state.items) {
+      if (instance.itemLevel !== undefined && (!Number.isInteger(instance.itemLevel) || instance.itemLevel < 1 || instance.itemLevel > 1000)) throw new Error('Неверный уровень предмета');
+      if (instance.quality?.version === 1 && instance.itemLevel !== instance.quality.itemLevel) throw new Error('Уровень предмета не совпадает со снимком качества');
       positive(instance.quantity);
       if (instance.quantity > definition(instance.itemId).stackLimit) throw new Error('Превышен размер стэка');
       if (instance.ownerId !== state.ownerId || (instance.inventoryId && !state.inventories.some(inventory => inventory.id === instance.inventoryId))) throw new Error('Нарушена принадлежность предмета');
@@ -197,7 +204,7 @@ export function availableItemActions(instance: ItemInstance, state: InventorySta
     if (action === 'unequip') enabled = equipped && state.items.filter(other => other.inventoryId === instance.inventoryId && !other.equippedSlot).length < (state.inventories.find(inventory => inventory.id === instance.inventoryId)?.capacity ?? 0);
     if (action === 'read') enabled = primary && !!item.grantedSkillId;
     if (action === 'split') enabled = !equipped && instance.quantity > 1;
-    if (action === 'merge') enabled = !equipped && state.items.some(other => other.id !== instance.id && other.itemId === instance.itemId && other.inventoryId === instance.inventoryId && !other.equippedSlot && other.quantity + instance.quantity <= item.stackLimit);
+    if (action === 'merge') enabled = state.items.some(other => canMergeInstances(instance, other, item.stackLimit));
     actions.push({ id: action, label: itemActionNames[action], enabled,
       ...(action === 'use-in-battle' ? { reason: 'Применяется в активном бою' } : action === 'unequip' && equipped && !enabled ? { reason: 'Освободите место в рюкзаке' } : {}),
     });

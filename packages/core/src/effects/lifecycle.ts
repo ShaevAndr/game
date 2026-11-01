@@ -11,12 +11,12 @@ export function initializeEffectFighter(battle: Battle, fighter: Fighter): void 
   if (!definitions) throw new Error('Эффекты требуют реестр характеристик');
   if (!fighter.attributeState) {
     const baseAttributes = fillBaseAttributes({}, 1, definitions);
-    const intrinsic = calculateAttributes({ definitions, baseAttributes }).base;
+    const intrinsic = calculateAttributes({ level: fighter.combatLevel ?? 1, definitions, baseAttributes }).base;
     const wanted: Record<string, number> = { maxHp: fighter.stats.maxHp, physicalPower: fighter.stats.attack, magicPower: fighter.stats.attack,
       healingPower: fighter.stats.attack, physicalResistance: fighter.stats.defense, fireResistance: fighter.stats.defense,
       waterResistance: fighter.stats.defense, earthResistance: fighter.stats.defense, airResistance: fighter.stats.defense, criticalChanceBps: 0, criticalBonusBps: 0 };
     const permanentModifiers: StatModifier[] = Object.entries(wanted).map(([statId, value]) => ({ id: `${fighter.id}:template:${statId}`, sourceId: 'npc-template', statId, operation: 'add_flat', value: value - intrinsic[statId] }));
-    fighter.attributeState = { baseAttributes, permanentModifiers, equipmentModifiers: [], equipmentScaling: [], temporaryModifiers: [] };
+    fighter.attributeState = { ...(battle.content.balance.formulas ? { level: fighter.combatLevel ?? 1 } : {}), baseAttributes, permanentModifiers, equipmentModifiers: [], equipmentScaling: [], temporaryModifiers: [] };
     fighter.attributes = calculateAttributes({ definitions, ...fighter.attributeState });
     fighter.stats = compatibilityStats(fighter.attributes.effective);
   }

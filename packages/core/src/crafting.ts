@@ -94,7 +94,7 @@ export function applyCraftRecipe(state: InventoryState, recipe: CraftingRecipe, 
     if (!definition) throw new Error(`Предмет «${name(output.itemId)}» не найден в каталоге`);
     for (let remaining = output.quantity; remaining > 0;) {
       const quantity = Math.min(remaining, definition.stackLimit);
-      const instance = { id: newId(), ownerId: draft.ownerId, inventoryId: primary.id, itemId: output.itemId, quantity, equippedSlot: null };
+      const instance = { id: newId(), ownerId: draft.ownerId, inventoryId: primary.id, itemId: output.itemId, itemLevel: definition.itemLevel ?? 1, definitionVersion: definition.version ?? 1, quantity, equippedSlot: null };
       if (definition.equipSlot && output.rankPolicy && progression) {
         const profession = recipeProfession(recipe, definitions, progression.content);
         Object.assign(instance, { quality: qualityForItem(definition, output.rankPolicy, professionProgress(progression.xp[profession?.id ?? ''] ?? 0).level, progression.content, progression.roll) });

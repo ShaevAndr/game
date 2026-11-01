@@ -14,7 +14,7 @@ export function projectCharacterAttributes(character: Character, content: Conten
   const legacy = legacyEquipmentAttributes(character.equipmentBonuses ?? {}, 'legacy-equipment');
   const equipmentModifiers = character.equipmentModifiers ?? legacy.modifiers;
   const equipmentScaling = character.equipmentScaling ?? legacy.scaling;
-  const attributes = calculateAttributes({ definitions: content.statDefinitions, baseAttributes, equipmentModifiers, equipmentScaling });
+  const attributes = calculateAttributes({ level: content.balance.formulas ? character.level : 1, definitions: content.statDefinitions, baseAttributes, equipmentModifiers, equipmentScaling });
   const stats = compatibilityStats(attributes.base), equipped = compatibilityStats(attributes.equipped);
   const equipmentBonuses = Object.fromEntries(Object.keys(stats).map(key => [key, equipped[key as keyof Stats] - stats[key as keyof Stats]]));
   return { ...character, attributeVersion: 1, baseAttributes, attributePoints: character.attributePoints ?? (character.level - 1) * ATTRIBUTE_POINTS_PER_LEVEL, attributeRevision: character.attributeRevision ?? 0,

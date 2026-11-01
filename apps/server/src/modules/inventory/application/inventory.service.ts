@@ -21,14 +21,14 @@ export class InventoryService {
   /** Creates the owner's backpack and starting items in the character creation transaction. */
   async initialize(ownerId: string, content: Content, context: TransactionContext) {
     const character = await this.characters.get(ownerId, content, context, true);
-    await this.repository.ensurePrimary(ownerId, character.inventory, Object.fromEntries(content.items.map(item => [item.id, item.stackLimit])), context);
+    await this.repository.ensurePrimary(ownerId, character.inventory, Object.fromEntries(content.items.map(item => [item.id, item.stackLimit])), context, content.items);
   }
 
   async get(ownerId: string) {
     const content = await this.content.get(true);
     return this.transactions.run(async context => {
       const character = await this.characters.get(ownerId, content, context, true);
-      await this.repository.ensurePrimary(ownerId, character.inventory, Object.fromEntries(content.items.map(item => [item.id, item.stackLimit])), context);
+      await this.repository.ensurePrimary(ownerId, character.inventory, Object.fromEntries(content.items.map(item => [item.id, item.stackLimit])), context, content.items);
       const state = await this.repository.load(ownerId, context);
       const groups = content.itemGroups ?? [];
       return {
@@ -79,7 +79,7 @@ export class InventoryService {
    */
   async state(ownerId: string, content: Content, context: TransactionContext): Promise<InventoryState> {
     const character = await this.characters.get(ownerId, content, context, true);
-    await this.repository.ensurePrimary(ownerId, character.inventory, this.limits(content), context);
+    await this.repository.ensurePrimary(ownerId, character.inventory, this.limits(content), context, content.items);
     return this.repository.load(ownerId, context);
   }
 

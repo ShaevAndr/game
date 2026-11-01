@@ -10,7 +10,7 @@ import { Pool } from 'pg';
 import { MongoClient } from 'mongodb';
 import Redis from 'ioredis';
 import { io, Socket } from 'socket.io-client';
-import { Battle, Character, Content, InventoryView, InventoryResult, findBattlefieldMove, findBattlefieldMatches, gainExperience, seedContent, seedEffectSkills, skillChoices } from '@game/core';
+import { Battle, Character, Content, InventoryView, InventoryResult, findBattlefieldMove, findBattlefieldMatches, gainExperience, combatStatDefinitions, defaultModifierDefinitions, defaultCombatFormulaRules, seedContent, seedEffectSkills, skillChoices } from '@game/core';
 import { InventoryService } from '../src/modules/inventory/application/inventory.service';
 import { InventoryRepository } from '../src/modules/inventory/ports/inventory.repository';
 import { AppModule } from '../src/app.module';
@@ -25,6 +25,7 @@ import { CharactersService } from '../src/modules/characters/application/charact
 import { UnitOfWork } from '../src/shared/application/unit-of-work';
 import { MongoDatabase } from '../src/infrastructure/mongo/mongo.service';
 import { BattlesRepository } from '../src/modules/battles/ports/battles.repository';
+import { ContentService } from '../src/modules/content/application/content.service';
 
 async function eventually(check: () => Promise<boolean>, timeout = 15000) {
   const until = Date.now() + timeout;
@@ -55,22 +56,20 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     const isolated = new URL(postgresUrl); isolated.pathname = '/' + databaseName;
     Object.assign(process.env, { POSTGRES_URL: isolated.toString(), MONGO_URL: mongoUrl, MONGO_DB: databaseName, REDIS_URL: redisUrl, REDIS_NAMESPACE: namespace });
     await mongo.connect();
-    // Upgrade an existing customized Mongo catalog rather than only testing a fresh seed.
-    const oldBalance = structuredClone(seedContent.balance);
-    delete oldBalance.combat; oldBalance.progression.startingSkillPoints = 2;
-    oldBalance.progression.statGrowth.maxEnergy = 2; oldBalance.teamSize = 2;
-    await mongo.db(databaseName).collection('settings').insertOne({ id: 'balance', ...oldBalance });
-    const oldStrike = structuredClone(seedContent.skills.find(skill => skill.id === 'strike')!); oldStrike.cost = 0;
-    const oldInferno = structuredClone(seedContent.skills.find(skill => skill.id === 'inferno')!);
-    oldInferno.learning.stats.maxEnergy = 36; oldInferno.power = 47;
-    await mongo.db(databaseName).collection('skills').insertMany([oldStrike, oldInferno]);
+    // Custom v1 content must survive initialization; missing records are seeded independently.
+    await mongo.db(databaseName).collection('settings').insertOne({ id: 'balance', ...structuredClone(seedContent.balance), attributes: { skillReferencePower: 8 }, formulas: defaultCombatFormulaRules, teamSize: 2 });
+    const inferno = structuredClone(seedContent.skills.find(skill => skill.id === 'inferno')!); inferno.power = 47;
+    await mongo.db(databaseName).collection('skills').insertOne(inferno);
+    await mongo.db(databaseName).collection('statDefinitions').insertOne({ ...combatStatDefinitions.find(stat => stat.id === 'strength')!, name: 'Своя сила' });
+    await mongo.db(databaseName).collection('modifierDefinitions').insertOne({ ...defaultModifierDefinitions[0], id: 'custom-strength', name: 'Свой доп', statId: 'strength', allowArmor: false, baseValue: 10000, itemRoll: { minFactorBps: 2, maxFactorBps: 7, scalingProfileId: 'flat-stat' } });
     app = await NestFactory.create(AppModule, { logger: false, abortOnError: false });
-    app.setGlobalPrefix('api');
+    app.setGlobalPrefix('api/v1');
     app.useGlobalFilters(new ValidationFilter());
     await app.listen(0, '127.0.0.1');
     const origin = await app.getUrl();
+    assert.equal((await fetch(`${origin}/api/content`)).status, 404);
     const request = async <T>(path: string, body?: object, status = body ? 201 : 200, method = body ? 'POST' : 'GET'): Promise<T> => {
-      const response = await fetch(`${origin}/api${path}`, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+      const response = await fetch(`${origin}/api/v1${path}`, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
       const result = await response.json();
       assert.equal(response.status, status, JSON.stringify(result));
       return result as T;
@@ -78,6 +77,10 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
 
     assert.equal((await request<Character[]>('/characters')).length, 10);
     const catalog = await request<Content>('/content');
+    assert.equal(catalog.balance.formulas?.version, 1);
+    assert.equal(catalog.statDefinitions!.find(stat => stat.id === 'strength')!.name, 'Своя сила');
+    const hpDefinition = catalog.statDefinitions!.find(stat => stat.id === 'maxHp')!;
+    assert.equal(hpDefinition.kind === 'derived' && hpDefinition.formula.constant, 60);
     assert.equal(catalog.skills.length, seedContent.skills.length + seedEffectSkills.length); assert.equal(catalog.balance.progression.startingSkillPoints, 4);
     assert.equal(catalog.balance.progression.statGrowth.maxEnergy, 0); assert.equal(catalog.balance.teamSize, 2);
     assert.equal(catalog.skills.find(skill => skill.id === 'strike')!.cost, 3);
@@ -92,6 +95,8 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     await verifyCharacterAttributes(request, app, catalog);
     await verifyRankedCrafting(request, app);
     await verifyBattleEffects(request, app);
+    await verifyModifierModel(request, app);
+    await verifyCombatFormulas(request, app);
     assert.equal((await request<Character>(`/characters/${character.id}`)).id, character.id);
     assert.equal((await request<object[]>(`/characters/${character.id}/inventory`)).length, character.inventory.length);
     const learned = await request<Character>(`/characters/${character.id}/skills`, { skillId: 'ember' });
@@ -110,12 +115,12 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     await eventually(async () => await cache.get('expires') === null, 3000);
 
     for (const battlefield of [{ size: 2 }, { size: 33 }, { size: 6, elementTypes: [] }, { size: 6, elementTypes: ['fire', 'fire'] }, { size: 6, elementTypes: ['fire', 'invalid'] }]) {
-      await request('/battles', { name: 'Неверное поле', characterId: character.id, kind: 'bot', rule: 'before', battlefield }, 400);
+      await request('/battles', { name: 'Неверное поле', characterId: character.id, kind: 'bot', rule: 'on-match', battlefield }, 400);
     }
-    const defaults = await request<Battle>('/battles', { name: 'Поле по умолчанию', characterId: character.id, kind: 'bot', rule: 'before' });
+    const defaults = await request<Battle>('/battles', { name: 'Поле по умолчанию', characterId: character.id, kind: 'bot', rule: 'on-match' });
     assert.deepEqual(defaults.battlefield?.size, { rows: 8, cols: 8 });
     assert.equal(defaults.battlefield?.elementTypes.length, 6);
-    const room = await request<Battle>('/battles', { name: 'Интеграционный бой', characterId: character.id, kind: 'bot', rule: 'before', battlefield: { size: { rows: 6, cols: 10 }, elementTypes: ['physical', 'water', 'defense'] } });
+    const room = await request<Battle>('/battles', { name: 'Интеграционный бой', characterId: character.id, kind: 'bot', rule: 'on-match', battlefield: { size: { rows: 6, cols: 10 }, elementTypes: ['physical', 'water', 'defense'] } });
     assert.deepEqual(room.battlefield?.size, { rows: 6, cols: 10 });
     assert.ok(room.board.flat().every(type => ['physical', 'water', 'defense'].includes(type)));
     const started = await request<Battle>(`/battles/${room.id}/start`, { characterId: character.id, version: room.version });
@@ -128,6 +133,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     const database = app.get(Database);
     // Test fixture: one legal move will finish the battle, without relying on random cascades.
     const strong = started.fighters.find(fighter => !fighter.npc)!;
+    started.attributeRngState = 0;
     strong.stats.attack = 10000;
     if (strong.attributes) strong.attributes.effective.physicalPower = 10000;
     started.board = Array.from({ length: 6 }, (_, row) => Array.from({ length: 10 }, (_, col) => (row + col) % 2 ? 'water' : 'physical'));
@@ -149,6 +155,11 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.deepEqual(moved.skillChoices?.map(choice => choice.skillId), ['strike']);
     const move = moved.boardMoves![0];
     assert.deepEqual(move.direct, { count: 6, byType: { physical: 3, water: 3, defense: 0 } });
+    assert.equal(move.generated.count, 0);
+    assert.equal(moved.matchPowerBps, 19000);
+    assert.equal(moved.pendingBattlefield, undefined);
+    const pendingMove = (await database.sql.selectFrom('battles').select('data').where('id', '=', room.id).executeTakeFirstOrThrow()).data.pendingBattlefield;
+    assert.ok(pendingMove);
     assert.equal(move.total.count, move.direct.count + move.generated.count);
     assert.equal(moved.board.length, 6);
     assert.ok(moved.board.every(row => row.length === 10));
@@ -159,7 +170,8 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     await request(`/battles/${room.id}/actions`, { characterId: character.id, version: started.version, action }, 409);
     const result = await request<Battle>(`/battles/${room.id}/actions`, { characterId: character.id, version: moved.version, action: { type: 'skill', skillId: 'strike', targetId: 'bot-opponent' } });
     assert.equal(result.status, 'finished');
-    assert.equal(result.fighters[0].skillEnergy, moved.fighters[0].skillEnergy! - 3);
+    assert.equal(result.fighters[0].skillEnergy, Math.min(30, moved.fighters[0].skillEnergy! - 3 + pendingMove.report.generated.count));
+    assert.equal(result.pendingBattlefield, undefined);
     assert.equal((await request<Character>(`/characters/${character.id}`)).level, 2);
     assert.equal((await request<Character>(`/characters/${character.id}`)).attributePoints, 5);
     assert.equal((await database.sql.selectFrom('battle_rewards').selectAll().execute()).length, 1);
@@ -168,10 +180,13 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     const archives = mongo.db(databaseName).collection('battleArchives');
     await eventually(async () => await archives.countDocuments({ id: room.id }) === 1);
     const archived = await archives.findOne({ id: room.id }, { projection: { _id: 0 } });
-    assert.deepEqual(archived, result);
+    const persistedResult = (await database.sql.selectFrom('battles').select('data').where('id', '=', room.id).executeTakeFirstOrThrow()).data;
+    assert.equal(result.attributeRngState, undefined);
+    assert.equal(typeof persistedResult.attributeRngState, 'number');
+    assert.deepEqual(archived, persistedResult);
     const outbox = await database.sql.selectFrom('battle_archive_outbox').selectAll().where('id', '=', room.id).executeTakeFirstOrThrow();
     await eventually(async () => (await database.sql.selectFrom('battle_archive_outbox').select('delivered_at').where('id', '=', room.id).executeTakeFirst())?.delivered_at != null);
-    assert.deepEqual(outbox.data, result);
+    assert.deepEqual(outbox.data, persistedResult);
     // MongoDB idempotency also protects a replay after BullMQ's completed job retention expires.
     await app.get(BattleHistoryRepository).archive(result);
     assert.equal(await archives.countDocuments({ id: room.id }), 1);
@@ -181,8 +196,11 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     twoStarted.board = Array.from({ length: 8 }, (_, row) => Array.from({ length: 8 }, (_, col) => (row + col) % 2 ? 'water' : 'physical'));
     await database.sql.updateTable('battles').set({ data: JSON.stringify(twoStarted) }).where('id', '=', twoStarted.id).execute();
     const twoMove = { from: { row: 1, col: 6 }, to: { row: 1, col: 7 } };
-    const settled = await request<Battle>(`/battles/${twoTypes.id}/actions`, { characterId: character.id, version: twoStarted.version, action: { type: 'swap', ...twoMove, targetId: 'bot-opponent' } });
-    assert.equal(settled.phase, 'choose');
+    const paused = await request<Battle>(`/battles/${twoTypes.id}/actions`, { characterId: character.id, version: twoStarted.version, action: { type: 'swap', ...twoMove, targetId: 'bot-opponent' } });
+    assert.equal(paused.phase, 'choose');
+    assert.deepEqual(paused.board, paused.boardMoves![0].steps[0].boardAfter);
+    const settled = await request<Battle>(`/battles/${twoTypes.id}/actions`, { characterId: character.id, version: paused.version, action: { type: 'end' } });
+    assert.equal(settled.pendingBattlefield, undefined);
     assert.equal(findBattlefieldMatches(settled.board).length, 0);
     assert.ok(findBattlefieldMove(settled.board));
     assert.ok(settled.board.flat().every(type => ['physical', 'water'].includes(type)));
@@ -410,7 +428,7 @@ async function verifyCharacterAttributes(request: TestRequest, app: INestApplica
     gainExperience(character, 100, content.balance.progression);
   }, context));
   assert.equal(grown.attributePoints, 5);
-  assert.equal(grown.attributes?.base.physicalPower, 8);
+  assert.equal(grown.attributes?.base.physicalPower, 9);
   const allocate = (allocations: Record<string, number>, expectedRevision: number, status = 201) => request<Character>(`/characters/${hero.id}/attributes`, { allocations, expectedRevision }, status);
   const race = await Promise.allSettled([allocate({ strength: 3 }, grown.attributeRevision!), allocate({ intelligence: 3 }, grown.attributeRevision!)]);
   assert.equal(race.filter(result => result.status === 'fulfilled').length, 1);
@@ -433,7 +451,7 @@ async function verifyCharacterAttributes(request: TestRequest, app: INestApplica
   await request(`/item-instances/${instanceId}/actions`, { action: 'equip', operationId: randomUUID() }, 400);
   const increased = await allocate({ vitality: 2 }, current.attributeRevision!);
   assert.equal(increased.attributePoints, 0);
-  assert.equal(increased.attributes?.base.maxHp, 144);
+  assert.equal(increased.attributes?.base.maxHp, 138);
   await request(`/item-instances/${instanceId}/actions`, { action: 'equip', operationId: randomUUID() });
   const equipped = await request<Character>(`/characters/${hero.id}`);
   assert.ok(equipped.attributes!.equipped.physicalPower > equipped.attributes!.base.physicalPower);
@@ -517,6 +535,9 @@ async function verifyRankedCrafting(request: TestRequest, app: INestApplication)
   const [first, replay] = await Promise.all([craft(), craft()]);
   assert.deepEqual(replay, first);
   const item = first.createdItems![0];
+  assert.equal(item.itemLevel, 1); assert.equal(item.quality!.version, 1);
+  const savedItem = await app.get(Database).sql.selectFrom('item_instances').selectAll().where('id', '=', item.id).executeTakeFirstOrThrow();
+  assert.equal(savedItem.item_level, 1); assert.equal(savedItem.definition_version, 1);
   assert.equal(item.quality!.rank.id, 'rare'); assert.equal(item.quality!.affixes.length, 3);
   let view = await inventory.get(hero.id);
   assert.deepEqual(view.items.find(value => value.id === item.id)!.quality, item.quality);
@@ -554,4 +575,108 @@ async function verifyRankedCrafting(request: TestRequest, app: INestApplication)
   assert.equal(after.professions.find(profession => profession.id === 'blacksmith')!.totalXp, 100);
   // Mongo enforces the separate boolean applicability flags.
   await assert.rejects(app.get(MongoDatabase).db.collection('modifierDefinitions').insertOne({ id: 'invalid-flags', allowSkill: true, allowWeapon: 1, allowArmor: false }));
+}
+
+async function verifyModifierModel(request: TestRequest, app: INestApplication) {
+  const mongo = app.get(MongoDatabase).db, content = app.get(ContentService), db = app.get(Database);
+  const current = await content.get(true);
+  const migrated = current.modifierDefinitions!.find(value => value.id === 'custom-strength')!;
+  assert.equal(migrated.formatVersion, 1); assert.equal(migrated.version, 1);
+  assert.equal(migrated.itemRoll!.minFactorBps, 2); assert.equal(migrated.itemRoll!.maxFactorBps, 7);
+  assert.equal(migrated.allowBuff, true); assert.equal(migrated.allowPotion, false);
+  const skill = structuredClone(seedEffectSkills[0]);
+  skill.id = 'probability-check'; skill.targeting = { kind: 'self' };
+  skill.effects = [{ ...skill.effects![0], id: 'never', activationChanceBps: 1 },
+    { id: 'guaranteed', recipient: 'caster', kind: 'stat_modifier', modifierDefinitionId: 'physical-power', modifierDefinitionVersion: current.modifierDefinitions!.find(value => value.id === 'physical-power')!.version,
+      coefficientBps: 5000, statId: 'physicalPower', operation: 'add_flat', magnitude: { unit: 'points', constant: 0 }, polarity: 'buff', durationTurns: 2, stackKey: 'probability-guaranteed', activationChanceBps: 10000 }];
+  await mongo.collection('skills').insertOne(skill); await content.get(true);
+  const first = await request<Character>('/characters', { name: 'Проверка шансов' });
+  const second = await request<Character>('/characters', { name: 'Вторая цель' });
+  await request(`/characters/${first.id}/skills`, { skillId: skill.id });
+  const room = await request<Battle>('/battles', { name: 'Проверка допов', characterId: first.id, kind: 'duel' });
+  await request(`/battles/${room.id}/join`, { characterId: second.id, team: 1 });
+  let battle = await request<Battle>(`/battles/${room.id}/start`, { characterId: first.id, version: 1 });
+  await app.get(UnitOfWork).run(async tx => {
+    const row = await app.get(BattlesRepository).lock(battle.id, tx); assert.ok(row);
+    row.battle.phase = 'choose'; row.battle.matchedElements = [skill.element]; row.battle.attributeRngState = 0;
+    row.battle.fighters.find(fighter => fighter.id === first.id)!.skillEnergy = 30;
+    await app.get(BattlesRepository).save(row.battle, tx);
+  });
+  const version = battle.version;
+  battle = await request<Battle>(`/battles/${battle.id}/actions`, { characterId: first.id, version, action: { type: 'skill', skillId: skill.id, targetId: first.id } });
+  assert.equal(battle.attributeRngState, undefined);
+  assert.deepEqual(battle.effectResults!.map(value => value.outcome), ['chance_failed', 'applied']);
+  const stored = (await db.sql.selectFrom('battles').select('data').where('id', '=', battle.id).executeTakeFirstOrThrow()).data;
+  assert.equal(stored.attributeRngState, 1013904223);
+  assert.equal(stored.fighters.find(fighter => fighter.id === first.id)!.activeEffects![0].magnitude, 5);
+  await request(`/battles/${battle.id}/actions`, { characterId: first.id, version, action: { type: 'skill', skillId: skill.id, targetId: first.id } }, 409);
+  assert.deepEqual((await db.sql.selectFrom('battles').select('data').where('id', '=', battle.id).executeTakeFirstOrThrow()).data, stored);
+
+  // Item level and all generated snapshots are persisted independently from subsequent catalog edits.
+  await mongo.collection('items').updateOne({ id: 'iron-sword' }, { $set: { itemLevel: 11 } });
+  try {
+    const crafted = await request<InventoryResult>(`/characters/${first.id}/crafting/recipes/craft-rare-sword/apply`, { operationId: randomUUID() });
+    assert.equal(crafted.createdItems![0].itemLevel, 11);
+    assert.ok(crafted.createdItems![0].quality!.affixes.every(value => value.minValue! >= 2));
+    const item = await request<{ itemLevel: number }>(`/item-instances/${crafted.createdItems![0].id}`);
+    assert.equal(item.itemLevel, 11);
+  } finally { await mongo.collection('items').updateOne({ id: 'iron-sword' }, { $set: { itemLevel: 1 } }); await content.get(true); }
+}
+
+
+async function verifyCombatFormulas(request: TestRequest, app: INestApplication) {
+  const first = await request<Character>('/characters', { name: 'Проверка точности' });
+  const second = await request<Character>('/characters', { name: 'Удачливый соперник' });
+  await request(`/characters/${first.id}/skills`, { skillId: 'ember' });
+  const room = await request<Battle>('/battles', { name: 'Формулы и удача', characterId: first.id, kind: 'duel' });
+  await request(`/battles/${room.id}/join`, { characterId: second.id, team: 1 });
+  let battle = await request<Battle>(`/battles/${room.id}/start`, { characterId: first.id, version: 1 });
+  assert.equal(battle.content.balance.formulas!.armorK, 30);
+  assert.ok(battle.fighters.every(fighter => fighter.combatLevel === 1));
+  const repository = app.get(BattlesRepository), uow = app.get(UnitOfWork);
+  const prepare = async (skillId: string, seed: number, legacy = false) => {
+    await uow.run(async tx => {
+      const row = (await repository.lock(battle.id, tx))!;
+      row.battle.activeId = first.id; row.battle.phase = 'choose'; row.battle.usedSkill = false;
+      row.battle.attributeRngState = seed; row.battle.matchedElements = [skillId === 'ember' ? 'fire' : 'physical'];
+      const actor = row.battle.fighters.find(fighter => fighter.id === first.id)!;
+      const target = row.battle.fighters.find(fighter => fighter.id === second.id)!;
+      actor.skillEnergy = 30; actor.cooldowns[skillId] = 0; actor.attributes!.effective.criticalChanceBps = 0;
+      target.attributes!.effective.luck = 110; target.hp = 120;
+      if (legacy) delete row.battle.content.balance.formulas;
+      row.battle.skillChoices = skillChoices(row.battle, actor);
+      await repository.save(row.battle, tx);
+    });
+    battle = await request<Battle>(`/battles/${battle.id}`);
+  };
+  const cast = (skillId: string, version = battle.version, status = 201) => request<Battle>(`/battles/${battle.id}/actions`, {
+    characterId: first.id, version, action: { type: 'skill', skillId, targetId: second.id },
+  }, status);
+  await prepare('ember', 2000);
+  const preview = battle.skillChoices!.find(choice => choice.skillId === 'ember')!.damagePreviews![0];
+  assert.equal(preview.hitChanceBps, 10000); assert.equal(preview.luckAvoidChanceBps, 500);
+  const database = app.get(Database);
+  const saved = () => database.sql.selectFrom('battles').select('data').where('id', '=', battle.id).executeTakeFirstOrThrow();
+  const before = (await saved()).data, save = repository.save;
+  repository.save = async () => { throw new Error('simulated formula save failure'); };
+  try { await cast('ember', battle.version, 500); } finally { repository.save = save; }
+  assert.deepEqual((await saved()).data, before);
+  const version = battle.version;
+  battle = await cast('ember');
+  assert.equal(battle.damageResults![0].outcome, 'luck_avoided');
+  assert.equal(battle.damageResults![0].hitChanceBps, 10000);
+  assert.equal(battle.fighters.find(fighter => fighter.id === second.id)!.hp, 120);
+  assert.equal(battle.fighters.find(fighter => fighter.id === first.id)!.skillEnergy, 28);
+  assert.equal(battle.attributeRngState, undefined);
+  assert.equal((await saved()).data.attributeRngState, 47986927);
+  await cast('ember', version, 409);
+  assert.deepEqual((await request<Battle>(`/battles/${battle.id}`)).damageResults, battle.damageResults);
+  await prepare('strike', 1950);
+  battle = await cast('strike');
+  assert.equal(battle.damageResults![0].outcome, 'miss');
+  assert.equal(battle.fighters.find(fighter => fighter.id === second.id)!.hp, 120);
+  await prepare('strike', 1950, true);
+  battle = await cast('strike');
+  assert.equal(battle.damageResults!.length, 0);
+  assert.equal(battle.fighters.find(fighter => fighter.id === second.id)!.hp, 110);
 }

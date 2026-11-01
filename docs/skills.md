@@ -1,6 +1,6 @@
 # Навыки: операции и уровни
 
-Здесь описана реализованная модель v2. Следующий этап —
+Здесь описана реализованная модель v1. Следующий этап —
 [цели, составные эффекты, бафы и длительность](skill-effects.md) и
 [расчёт от расширяемых характеристик](character.md). Расчёт характеристик уже
 реализован: в новых боях сила ранга задаёт коэффициент физической/магической
@@ -70,10 +70,10 @@
 
 | Метод | Путь | Тело / результат |
 | --- | --- | --- |
-| GET | `/api/skills`, `/api/skills/:id` | Каталог / описание |
-| GET | `/api/characters/:id/skills` | Известные навыки с `level`, актуальной `power` и `progression` |
-| POST | `/api/characters/:id/skills` | `{skillId}` → персонаж |
-| POST | `/api/characters/:id/skills/:skillId/upgrade` | `{expectedLevel}` → персонаж |
+| GET | `/api/v1/skills`, `/api/v1/skills/:id` | Каталог / описание |
+| GET | `/api/v1/characters/:id/skills` | Известные навыки с `level`, актуальной `power` и `progression` |
+| POST | `/api/v1/characters/:id/skills` | `{skillId}` → персонаж |
+| POST | `/api/v1/characters/:id/skills/:skillId/upgrade` | `{expectedLevel}` → персонаж |
 
 ## Эффекты и расширение
 

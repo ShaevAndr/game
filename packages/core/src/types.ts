@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { combatFormulaRulesSchema, type CombatFormulaRules, type DamageChances, type DamageResolution } from './combat/formulas';
+import { itemScalingProfileSchema, modifierAllowed, type ItemScalingProfile } from './modifiers';
 import { itemRankSchema, professionSchema, rankProfileSchema, modifierDefinitionSchema, validateCraftingProgression } from './item-progression';
 import type { ItemRank, CraftingProfession, RankProfile, ModifierDefinition } from './item-progression';
 import { elements, tileTypes, MAX_FIELD_SIDE } from './battlefield/types';
@@ -12,7 +14,7 @@ import type { BlindCraftRules, CraftingRecipe } from './crafting';
 import { statDefinitionsSchema } from './attributes/schema';
 import type { AttributeCalculation, StatDefinition, StatModifier, ScaledEquipmentBonus } from './attributes/types';
 import { skillEffectSchema, targetingSchema, validateSkillEffects } from './effects/schema';
-import type { ActiveEffect, EffectPreview, SkillEffect, SkillTargeting } from './effects/types';
+import type { ActiveEffect, EffectApplicationResult, EffectPreview, SkillEffect, SkillTargeting } from './effects/types';
 
 export type Element = typeof elements[number];
 export type TileType = typeof tileTypes[number];
@@ -32,16 +34,17 @@ export interface CharacterTemplate { id: string; name: string; description: stri
 export interface SkillLearning { pointCost: number; level: number; prerequisites: string[]; stats: Partial<Stats>; starter: boolean; requirements?: Record<string, number> }
 export interface Skill { id: string; name: string; description: string; element: Element; cost: number; power: number; effect: 'damage' | 'heal' | 'modifier' | 'dispel'; cooldown: number; learning: SkillLearning; progression?: SkillProgression; targeting?: SkillTargeting; effects?: SkillEffect[] }
 export interface SkillProgression { maxLevel: number; pointCost: number; powerPerLevel: number }
-export interface Enemy { id: string; name: string; stats: Stats; skillIds: string[] }
+export interface Enemy { id: string; name: string; level?: number; stats: Stats; skillIds: string[] }
 export interface Progression { baseExperience: number; experiencePerLevel: number; startingSkillPoints: number; skillPointsPerLevel: number; statGrowth: Stats; victoryExperience: Record<BattleKind, number> }
-export interface CombatRules { version: 2; energyCap: 30; energyPerTile: 1; defensePerTile: number }
-export interface Balance { combat?: CombatRules; characterStats: Stats; starterItems: ItemStack[]; damagePerTile: number; energyPerTile: number; teamSize: number; dungeonWaves: string[]; progression: Progression; crafting?: { blind: BlindCraftRules }; attributes?: { skillReferencePower: number } }
-export interface Content { itemRanks?: ItemRank[]; professions?: CraftingProfession[]; rankProfiles?: RankProfile[]; modifierDefinitions?: ModifierDefinition[]; itemGroups?: ItemGroup[]; skills: Skill[]; items: Item[]; enemies: Enemy[]; characterTemplates: CharacterTemplate[]; balance: Balance; recipes?: CraftingRecipe[]; statDefinitions?: StatDefinition[]; effectsVersion?: 1 }
+export interface CombatRules { version: 1; energyCap: 30; energyPerTile: 1; defensePerTile: number }
+export interface Balance { formulas?: CombatFormulaRules; combat?: CombatRules; characterStats: Stats; starterItems: ItemStack[]; damagePerTile: number; energyPerTile: number; teamSize: number; dungeonWaves: string[]; progression: Progression; crafting?: { blind: BlindCraftRules }; attributes?: { skillReferencePower: number } }
+export interface Content { modifierRulesVersion?: 1; itemScalingProfiles?: ItemScalingProfile[]; itemRanks?: ItemRank[]; professions?: CraftingProfession[]; rankProfiles?: RankProfile[]; modifierDefinitions?: ModifierDefinition[]; itemGroups?: ItemGroup[]; skills: Skill[]; items: Item[]; enemies: Enemy[]; characterTemplates: CharacterTemplate[]; balance: Balance; recipes?: CraftingRecipe[]; statDefinitions?: StatDefinition[]; effectsVersion?: 1 }
 const statsSchema = z.object({ maxHp: z.number().int().positive().max(100000), attack: z.number().int().nonnegative().max(10000), defense: z.number().int().nonnegative().max(10000), maxEnergy: z.number().int().positive().max(10000) });
 const contentId = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 const learningSchema = z.object({ pointCost: z.number().int().min(1).max(100), level: z.number().int().min(1).max(1000), prerequisites: z.array(contentId).max(20), stats: statsSchema.partial(), starter: z.boolean(), requirements: z.record(z.string(), z.number().int().min(0).max(1_000_000)).optional() });
 export const progressionSchema = z.object({ baseExperience: z.number().int().min(1).max(1000000), experiencePerLevel: z.number().int().min(0).max(1000000), startingSkillPoints: z.number().int().min(0).max(1000), skillPointsPerLevel: z.number().int().min(1).max(100), statGrowth: z.object({ maxHp: z.number().int().min(0).max(1000), attack: z.number().int().min(0).max(1000), defense: z.number().int().min(0).max(1000), maxEnergy: z.number().int().min(0).max(1000) }), victoryExperience: z.object({ duel: z.number().int().positive().max(1000000), bot: z.number().int().positive().max(1000000).default(100), team: z.number().int().positive().max(1000000), dungeon: z.number().int().positive().max(1000000) }) });
 export const contentSchema = z.object({
+  modifierRulesVersion: z.literal(1).optional(), itemScalingProfiles: z.array(itemScalingProfileSchema).max(64).optional(),
   itemRanks: z.array(itemRankSchema).optional(), professions: z.array(professionSchema).optional(),
   rankProfiles: z.array(rankProfileSchema).optional(), modifierDefinitions: z.array(modifierDefinitionSchema).optional(),
   effectsVersion: z.literal(1).optional(),
@@ -51,8 +54,8 @@ export const contentSchema = z.object({
   itemGroups: z.array(itemGroupSchema).default(defaultItemGroups),
   items: z.array(itemDefinitionSchema),
   recipes: z.array(craftingRecipeSchema).default([]),
-  enemies: z.array(z.object({ id: contentId, name: z.string().min(1).max(80), stats: statsSchema, skillIds: z.array(contentId).min(1) })).min(1),
-  balance: z.object({ characterStats: statsSchema, starterItems: z.array(z.object({ itemId: contentId, quantity: z.number().int().nonnegative().max(1000) })), damagePerTile: z.number().int().positive().max(100), energyPerTile: z.number().int().positive().max(100), teamSize: z.number().int().min(1).max(10), dungeonWaves: z.array(contentId).min(1).max(100), progression: progressionSchema, crafting: z.object({ blind: blindCraftRulesSchema }).optional(), combat: z.object({ version: z.literal(2), energyCap: z.literal(30), energyPerTile: z.literal(1), defensePerTile: z.number().int().min(1).max(100) }).optional(), attributes: z.object({ skillReferencePower: z.number().int().min(1).max(10000) }).optional() }),
+  enemies: z.array(z.object({ level: z.number().int().min(1).max(1000).optional(), id: contentId, name: z.string().min(1).max(80), stats: statsSchema, skillIds: z.array(contentId).min(1) })).min(1),
+  balance: z.object({ formulas: combatFormulaRulesSchema.optional(), characterStats: statsSchema, starterItems: z.array(z.object({ itemId: contentId, quantity: z.number().int().nonnegative().max(1000) })), damagePerTile: z.number().int().positive().max(100), energyPerTile: z.number().int().positive().max(100), teamSize: z.number().int().min(1).max(10), dungeonWaves: z.array(contentId).min(1).max(100), progression: progressionSchema, crafting: z.object({ blind: blindCraftRulesSchema }).optional(), combat: z.object({ version: z.literal(1), energyCap: z.literal(30), energyPerTile: z.literal(1), defensePerTile: z.number().int().min(1).max(100) }).optional(), attributes: z.object({ skillReferencePower: z.number().int().min(1).max(10000) }).optional() }),
 }).superRefine((content, ctx) => {
   const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
   try { validateCraftingProgression(content); } catch (error) { fail((error as Error).message); }
@@ -61,7 +64,12 @@ export const contentSchema = z.object({
   for (const skill of content.skills) for (const effect of skill.effects ?? []) {
     if (effect.kind !== 'stat_modifier' || !effect.modifierDefinitionId) continue;
     const definition = content.modifierDefinitions?.find(value => value.id === effect.modifierDefinitionId);
-    if (!definition?.allowSkill || definition.statId !== effect.statId || definition.operation !== effect.operation) fail(`Недопустимый общий эффект навыка ${skill.id}:${effect.id}`);
+    const incompatible = !definition || !modifierAllowed(definition, 'allowSkill') || definition.statId !== effect.statId || definition.operation !== effect.operation;
+    const forbiddenUse = content.modifierRulesVersion === 1 && definition && (
+      effect.polarity === 'neutral' || !modifierAllowed(definition, effect.polarity === 'buff' ? 'allowBuff' : 'allowDebuff')
+      || effect.modifierDefinitionVersion !== undefined && effect.modifierDefinitionVersion !== definition.version
+    );
+    if (incompatible || forbiddenUse) fail(`Недопустимый общий эффект навыка ${skill.id}:${effect.id}`);
   }
   for (const skill of content.skills) if (['modifier', 'dispel'].includes(skill.effect) && !skill.effects?.length) fail(`Навык ${skill.id} требует массив эффектов`);
   if (content.statDefinitions) {
@@ -70,9 +78,13 @@ export const contentSchema = z.object({
     if ((content.statDefinitions.find(definition => definition.id === 'maxHp')?.min ?? 0) < 1) fail('Минимальный maxHp должен быть не меньше 1');
     for (const skill of content.skills) for (const id of Object.keys(skill.learning.requirements ?? {})) if (!content.statDefinitions.some(definition => definition.id === id)) fail(`Неизвестное требование навыка ${skill.id}: ${id}`);
   }
+  if (content.balance.formulas) {
+    if (!content.statDefinitions || content.effectsVersion !== 1) fail('Новые формулы требуют характеристики и эффекты');
+    for (const id of ['accuracy', 'evasion']) if (!content.statDefinitions?.some(stat => stat.id === id && stat.unit === 'points' && stat.min >= 0)) fail(`Отсутствует рейтинг ${id}`);
+  }
   const starters = content.skills.filter(skill => skill.learning.starter);
   if (starters.length !== 1 || starters[0]?.element !== 'physical') fail('Должен быть ровно один стартовый физический навык');
-  const modern = content.balance.combat?.version === 2;
+  const modern = content.balance.combat?.version === 1;
   const basic = starters.find(s => s.cooldown === 0 && s.effect === 'damage' && (modern ? s.cost > 0 && s.cost <= 3 : s.cost === 0));
   if (!basic) fail('Нужен доступный стартовый атакующий навык без перезарядки');
   if (modern && content.skills.some(skill => skill.cost < 1 || skill.cost > 30)) fail('Стоимость навыка должна быть от 1 до 30 энергии');
@@ -125,28 +137,33 @@ export const contentSchema = z.object({
   for (const id of content.balance.dungeonWaves) if (!content.enemies.some(e => e.id === id)) fail(`Неизвестный противник ${id}`);
   for (const item of content.balance.starterItems) if (!content.items.some(i => i.id === item.itemId)) fail(`Неизвестный предмет ${item.itemId}`);
 });
-export const rules = ['before', 'before-after', 'on-match'] as const;
+export const rules = ['on-match'] as const;
 export type Rule = typeof rules[number];
 export type BattleKind = 'duel' | 'bot' | 'team' | 'dungeon';
-export interface Fighter { id: string; characterId?: string; name: string; team: number; npc: boolean; stats: Stats; hp: number; energy: Energy; skillEnergy?: number; inventory: ItemStack[]; cooldowns: Record<string, number>; skillIds: string[]; skillLevels?: Record<string, number>; guardDefense?: number;
-  attributes?: AttributeCalculation; attributeState?: { baseAttributes: Record<string, number>; permanentModifiers?: StatModifier[]; equipmentModifiers: StatModifier[]; equipmentScaling: ScaledEquipmentBonus[]; temporaryModifiers: StatModifier[] };
+export interface Fighter { combatLevel?: number; id: string; characterId?: string; name: string; team: number; npc: boolean; stats: Stats; hp: number; energy: Energy; skillEnergy?: number; inventory: ItemStack[]; cooldowns: Record<string, number>; skillIds: string[]; skillLevels?: Record<string, number>; guardDefense?: number;
+  attributes?: AttributeCalculation; attributeState?: { level?: number; baseAttributes: Record<string, number>; permanentModifiers?: StatModifier[]; equipmentModifiers: StatModifier[]; equipmentScaling: ScaledEquipmentBonus[]; temporaryModifiers: StatModifier[] };
   activeEffects?: ActiveEffect[]; turnsStarted?: number;
 }
 export type Board = TileType[][];
-export interface SkillChoice { skillId: string; enabled: boolean; reason?: string; magnitude?: number; targeting?: SkillTargeting; targetIds?: string[]; effectPreviews?: EffectPreview[] }
+export interface SkillChoice { skillId: string; enabled: boolean; reason?: string; magnitude?: number; targeting?: SkillTargeting; targetIds?: string[]; damagePreviews?: (DamageChances & { targetId: string })[]; effectPreviews?: EffectPreview[] }
 export interface Battle {
   id: string; name: string; kind: BattleKind; rule: Rule; status: 'waiting' | 'active' | 'finished';
-  combatVersion?: 2; skillChoices?: SkillChoice[]; matchedElements?: Element[];
+  combatVersion: 1; skillChoices?: SkillChoice[]; matchedElements?: Element[];
   attributeRngState?: number;
+  /** Persisted server-only continuation of the current board move. */
+  pendingBattlefield?: { board: Board; config: BattlefieldConfig; report: BattlefieldMoveEvent };
+  matchPowerBps?: number;
+  effectResults?: EffectApplicationResult[];
+  damageResults?: DamageResolution[];
   effectsVersion?: 1; effectSequence?: number;
   version: number; board: Board; battlefield?: BattlefieldConfig; boardMoves?: BattlefieldMoveEvent[]; fighters: Fighter[]; activeId: string | null; turn: number;
-  phase: 'before' | 'after' | 'choose'; usedSkill: boolean; pendingMatch: number;
+  phase: 'before' | 'choose'; usedSkill: boolean; pendingMatch: number;
   wave: number; totalWaves: number; winner: number | null; log: string[]; content: Content; createdAt: string;
   rewards?: { characterId: string; experience: number; levelsGained: number }[];
   playback?: BattleFrame[];
 }
 /** Committed presentation checkpoints; never accepted as commands from the client. */
-export type BattleFrame = Pick<Battle, 'board' | 'fighters' | 'activeId' | 'turn' | 'phase' | 'status' | 'usedSkill' | 'pendingMatch' | 'matchedElements' | 'skillChoices' | 'boardMoves' | 'log' | 'wave' | 'winner'>;
+export type BattleFrame = Pick<Battle, 'board' | 'fighters' | 'activeId' | 'turn' | 'phase' | 'status' | 'usedSkill' | 'pendingMatch' | 'matchPowerBps' | 'matchedElements' | 'skillChoices' | 'boardMoves' | 'log' | 'wave' | 'winner'>;
 export const createCharacterSchema = z.object({ name: z.string().trim().min(2).max(24), templateId: contentId.optional() }).strict();
 export const battlefieldOptionsSchema = z.object({
   size: z.union([z.number().int(), z.object({ rows: z.number().int(), cols: z.number().int() }).strict()]).optional(),

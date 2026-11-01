@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import type { Content, Item } from './types';
 import type { ItemInstance } from './inventory';
+import { defaultItemScalingProfiles, itemModifierRange, modifierAllowed, rollBelow, type ModifierDefinition } from './modifiers';
+export { modifierDefinitionSchema, rollBelow } from './modifiers';
+export type { ModifierDefinition } from './modifiers';
 
 const id = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 export const itemRankSchema = z.object({
@@ -13,17 +16,9 @@ export const professionSchema = z.object({ id, name: z.string().min(1).max(80), 
 export type CraftingProfession = z.infer<typeof professionSchema>;
 export const rankProfileSchema = z.object({ id, levels: z.array(z.object({ level: z.number().int().min(1).max(100), chances: z.array(z.object({ rankId: id, chanceBps: z.number().int().min(0).max(10000) }).strict()).min(1).max(7) }).strict()).length(100) }).strict();
 export type RankProfile = z.infer<typeof rankProfileSchema>;
-/** Parameterized modifier definition shared by skill content and rolled item affixes. */
-export const modifierDefinitionSchema = z.object({
-  id, version: z.number().int().min(1), name: z.string().min(1).max(80), statId: z.string().min(1).max(64),
-  operation: z.enum(['add_flat', 'add_percent', 'multiply', 'set']),
-  allowSkill: z.boolean(), allowWeapon: z.boolean(), allowArmor: z.boolean(),
-  minValue: z.number().int().min(0).max(10000), maxValue: z.number().int().min(0).max(10000),
-}).strict().refine(value => value.minValue <= value.maxValue, 'Неверный диапазон величин допа');
-export type ModifierDefinition = z.infer<typeof modifierDefinitionSchema>;
-export interface RolledAffix { effectId: string; effectVersion: number; name: string; statId: string; operation: ModifierDefinition['operation']; value: number }
+export interface RolledAffix { effectId: string; effectVersion: number; name: string; statId: string; operation: ModifierDefinition['operation']; value: number; activationChanceBps?: number; minValue?: number; maxValue?: number; profileId?: string; profileVersion?: number }
 /** Snapshots keep existing items independent of subsequent catalog edits. */
-export interface ItemQuality { rank: ItemRank; affixes: RolledAffix[] }
+export interface ItemQuality { version?: 1; itemLevel?: number; rank: ItemRank; affixes: RolledAffix[]; baseSnapshot?: Pick<Item, 'bonuses' | 'statModifiers' | 'scaledBonuses'> }
 export const defaultItemRanks: ItemRank[] = [
   ['common', 'Обычный', 10000, '#9ca3af'], ['fine', 'Добротный', 11500, '#65c46f'],
   ['superior', 'Превосходный', 13500, '#59c9e8'], ['rare', 'Редкий', 16000, '#608fff'],
@@ -43,7 +38,14 @@ export const defaultModifierDefinitions: ModifierDefinition[] = [
   ['physical-armor', 'Физическая защита', 'physicalResistance', 1, 4],
   ['healing-power', 'Сила лечения', 'healingPower', 1, 5],
   ['strength', 'Сила', 'strength', 1, 3], ['vitality', 'Выносливость', 'vitality', 1, 3],
-].map(([id, name, statId, minValue, maxValue]) => ({ id: String(id), version: 1, name: String(name), statId: String(statId), operation: 'add_flat', allowSkill: true, allowWeapon: true, allowArmor: true, minValue: Number(minValue), maxValue: Number(maxValue) }));
+].map(([id, name, statId, minValue, maxValue]) => ({
+  id: String(id), version: 1, name: String(name), statId: String(statId), operation: 'add_flat',
+  allowSkill: true, allowWeapon: true, allowArmor: true, allowPotion: false, allowBuff: true, allowDebuff: true, allowGem: false,
+  formatVersion: 1, baseValue: 10,
+  itemRoll: { minFactorBps: Number(minValue) * 1000, maxFactorBps: Number(maxValue) * 1000, scalingProfileId: 'flat-stat' },
+  craftWeight: 100, activationChanceBps: 10000,
+  minValue: Number(minValue), maxValue: Number(maxValue), // Fixed-range input; item-level profiles derive their range from itemRoll.
+}));
 /** Repeated promotion trials. Higher profession levels increase every upper-tail probability. */
 export const defaultRankProfiles: RankProfile[] = [{ id: 'standard', levels: Array.from({ length: 100 }, (_, index) => {
   const promotion = 0.08 + index * 0.006;
@@ -56,15 +58,10 @@ export function professionProgress(totalXp = 0) {
   while (level < 100 && xp >= 100 + 20 * (level - 1)) { xp -= 100 + 20 * (level - 1); level++; }
   return { level, xp: level === 100 ? 0 : xp, xpToNext: level === 100 ? 0 : 100 + 20 * (level - 1), totalXp };
 }
-export function rollBelow(roll: (max: number) => number, max: number) {
-  const value = roll(max);
-  if (!Number.isInteger(value) || value < 0 || value >= max) throw new Error('Некорректный результат генератора случайности');
-  return value;
-}
 export function professionForItem(item: Item, content: Pick<Content, 'professions'>) {
   return content.professions?.find(profession => profession.groupIds.includes(item.groupId));
 }
-export function qualityForItem(item: Item, policy: { mode: 'fixed'; rankId: string } | { mode: 'profession'; profileId: string }, level: number, content: Pick<Content, 'itemRanks' | 'rankProfiles' | 'modifierDefinitions'>, roll: (max: number) => number): ItemQuality {
+export function qualityForItem(item: Item, policy: { mode: 'fixed'; rankId: string } | { mode: 'profession'; profileId: string }, level: number, content: Pick<Content, 'itemRanks' | 'rankProfiles' | 'modifierDefinitions' | 'itemScalingProfiles' | 'modifierRulesVersion'>, roll: (max: number) => number): ItemQuality {
   const ranks = content.itemRanks ?? defaultItemRanks;
   let rankId: string;
   if (policy.mode === 'fixed') rankId = policy.rankId;
@@ -77,16 +74,28 @@ export function qualityForItem(item: Item, policy: { mode: 'fixed'; rankId: stri
   }
   const rank = ranks.find(entry => entry.id === rankId);
   if (!rank) throw new Error('Неизвестный ранг');
-  const pool = (content.modifierDefinitions ?? []).filter(effect => item.groupId === 'weapons' ? effect.allowWeapon : item.groupId === 'equipment' && effect.allowArmor);
+  const modern = content.modifierRulesVersion === 1;
+  const pool = compatibleItemModifiers(item, content.modifierDefinitions ?? [], modern);
   if (pool.length < rank.affixCount) throw new Error('Недостаточно совместимых допов для ранга');
   const affixes: RolledAffix[] = [];
   for (let i = 0; i < rank.affixCount; i++) {
-    const effect = pool.splice(rollBelow(roll, pool.length), 1)[0];
-    affixes.push({ effectId: effect.id, effectVersion: effect.version, name: effect.name, statId: effect.statId, operation: effect.operation, value: effect.minValue + rollBelow(roll, effect.maxValue - effect.minValue + 1) });
+    let index = rollBelow(roll, modern ? pool.reduce((sum, effect) => sum + (effect.craftWeight ?? 1), 0) : pool.length);
+    if (modern) {
+      let cursor = 0;
+      while (index >= (pool[cursor].craftWeight ?? 1)) { index -= pool[cursor].craftWeight ?? 1; cursor++; }
+      index = cursor;
+    }
+    const effect = pool.splice(index, 1)[0];
+    const range = modern ? itemModifierRange(effect, item.itemLevel ?? 1, content.itemScalingProfiles ?? defaultItemScalingProfiles) : { minValue: effect.minValue!, maxValue: effect.maxValue! };
+    affixes.push({ effectId: effect.id, effectVersion: effect.version, name: effect.name, statId: effect.statId, operation: effect.operation, value: range.minValue + rollBelow(roll, range.maxValue - range.minValue + 1), ...(modern ? { ...range, activationChanceBps: effect.activationChanceBps ?? 10000 } : {}) });
   }
-  return structuredClone({ rank, affixes });
+  return structuredClone({ rank, affixes, ...(modern ? { version: 1 as const, itemLevel: item.itemLevel ?? 1, baseSnapshot: { bonuses: item.bonuses, statModifiers: item.statModifiers, scaledBonuses: item.scaledBonuses } } : {}) });
 }
 export function rankedItemDefinition(item: Item, instance: Pick<ItemInstance, 'quality'>): Item {
+  if (instance.quality?.version === 1) {
+    const base = instance.quality.baseSnapshot ?? item;
+    return { ...item, bonuses: base.bonuses, statModifiers: base.statModifiers, scaledBonuses: base.scaledBonuses };
+  }
   const multiplier = instance.quality?.rank.multiplierBps ?? 10000;
   return { ...item,
     bonuses: item.bonuses && Object.fromEntries(Object.entries(item.bonuses).map(([key, value]) => [key, Math.floor(value * multiplier / 10000)])),
@@ -95,15 +104,29 @@ export function rankedItemDefinition(item: Item, instance: Pick<ItemInstance, 'q
   };
 }
 
-export function validateCraftingProgression(content: Pick<Content, 'itemRanks' | 'rankProfiles' | 'professions' | 'modifierDefinitions' | 'recipes' | 'items' | 'statDefinitions'>) {
+export function compatibleItemModifiers(item: Item, definitions: ModifierDefinition[], modern = true) {
+  const permission = item.groupId === 'weapons' ? 'allowWeapon' : item.groupId === 'equipment' ? 'allowArmor' : undefined;
+  return definitions.filter(effect => permission && modifierAllowed(effect, permission) && (!modern || (effect.craftWeight ?? 1) > 0 && (effect.activationChanceBps ?? 10000) === 10000))
+    .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
+export function validateCraftingProgression(content: Pick<Content, 'itemRanks' | 'rankProfiles' | 'professions' | 'modifierDefinitions' | 'recipes' | 'items' | 'statDefinitions' | 'modifierRulesVersion' | 'itemScalingProfiles'>) {
   const ranks = [...(content.itemRanks ?? [])].sort((a, b) => a.order - b.order);
   const unique = (values: { id: string }[], label: string) => { if (new Set(values.map(value => value.id)).size !== values.length) throw new Error(`Дубликат ${label}`); };
   unique(ranks, 'ранга'); unique(content.professions ?? [], 'профессии'); unique(content.rankProfiles ?? [], 'профиля'); unique(content.modifierDefinitions ?? [], 'эффекта');
   if (!ranks.length && !content.professions?.length && !content.modifierDefinitions?.length && !content.rankProfiles?.length) return;
-  if (!ranks.length || ranks.some((rank, index) => rank.order !== index + 1 || rank.affixCount !== index || (index > 0 && rank.multiplierBps <= ranks[index - 1].multiplierBps))) throw new Error('Неверный порядок рангов');
+  if (!ranks.length || ranks.some((rank, index) => rank.order !== index + 1 || rank.affixCount !== index || (content.modifierRulesVersion !== 1 && index > 0 && rank.multiplierBps <= ranks[index - 1].multiplierBps))) throw new Error('Неверный порядок рангов');
   if (new Set(ranks.map(rank => rank.frameColor.toLowerCase())).size !== ranks.length) throw new Error('Цвета рангов должны различаться');
+  unique(content.itemScalingProfiles ?? [], 'профиля силы');
+  if ((content.modifierDefinitions?.length ?? 0) > 512) throw new Error('Слишком много определений допов');
   for (const effect of content.modifierDefinitions ?? []) {
     if (!content.statDefinitions?.some(stat => stat.id === effect.statId)) throw new Error(`Неизвестная характеристика допа ${effect.statId}`);
+    if (content.modifierRulesVersion === 1 && effect.formatVersion !== 1) throw new Error('Новые правила требуют определение допа v1');
+    if (content.modifierRulesVersion === 1 && (effect.craftWeight ?? 0) > 0 && (effect.allowWeapon || effect.allowArmor) && effect.activationChanceBps !== 10000) throw new Error('Случайное срабатывание экипировки требует поддержанного trigger');
+    if (effect.formatVersion === 1 && effect.itemRoll) {
+      itemModifierRange(effect, 1, content.itemScalingProfiles ?? defaultItemScalingProfiles);
+      itemModifierRange(effect, 1000, content.itemScalingProfiles ?? defaultItemScalingProfiles);
+    }
   }
   for (const profile of content.rankProfiles ?? []) {
     let previous: number[] | undefined;
@@ -130,10 +153,11 @@ export function validateCraftingProgression(content: Pick<Content, 'itemRanks' |
       const policy = output.rankPolicy;
       if (!policy) throw new Error('Экипировка требует политику ранга');
       if (!(recipe.professionId || professionForItem(item, content))) throw new Error('Не определена профессия рецепта');
-      if (item.statModifiers?.some(modifier => modifier.value < 0 || modifier.operation !== 'add_flat')) throw new Error('Ранговая база поддерживает положительные плоские модификаторы');
+      if (content.modifierRulesVersion !== 1 && item.statModifiers?.some(modifier => modifier.value < 0 || modifier.operation !== 'add_flat')) throw new Error('Ранговая база поддерживает положительные плоские модификаторы');
       const allowedRanks = policy.mode === 'fixed' ? ranks.filter(rank => rank.id === policy.rankId) : ranks;
       if (policy.mode === 'fixed' && !allowedRanks.length || policy.mode === 'profession' && !content.rankProfiles?.some(profile => profile.id === policy.profileId)) throw new Error('Неизвестная политика ранга');
-      const pool = (content.modifierDefinitions ?? []).filter(effect => item.groupId === 'weapons' ? effect.allowWeapon : item.groupId === 'equipment' && effect.allowArmor);
+      const pool = compatibleItemModifiers(item, content.modifierDefinitions ?? [], content.modifierRulesVersion === 1);
+      if (content.modifierRulesVersion === 1) for (const effect of pool) itemModifierRange(effect, item.itemLevel ?? 1, content.itemScalingProfiles ?? defaultItemScalingProfiles);
       if (allowedRanks.some(rank => rank.affixCount > pool.length)) throw new Error('Недостаточно совместимых допов');
     }
   }
