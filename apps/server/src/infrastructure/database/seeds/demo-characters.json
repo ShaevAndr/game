@@ -5,7 +5,7 @@
     "templateId": "pyromancer",
     "level": 10,
     "experience": 0,
-    "skillPoints": 14,
+    "skillPoints": 11,
     "learnedSkillIds": [
       "strike",
       "ember",
@@ -13,7 +13,9 @@
       "inferno",
       "phoenix-warmth",
       "healing-flame",
-      "phoenix-heart"
+      "phoenix-heart",
+      "fire-vulnerability",
+      "meteor-shower"
     ],
     "stats": {
       "maxHp": 228,
@@ -32,7 +34,44 @@
     "inventory": [
       {
         "itemId": "potion",
-        "quantity": 3
+        "quantity": 3,
+        "effects": [
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 35,
+              "min": 0
+            }
+          }
+        ]
+      },
+      {
+        "itemId": "cleansing-potion",
+        "quantity": 1,
+        "effects": [
+          {
+            "id": "cleanse",
+            "kind": "dispel",
+            "recipient": "caster",
+            "polarityToRemove": "debuff",
+            "maxCount": 2
+          },
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 15,
+              "min": 0
+            }
+          }
+        ]
       },
       {
         "itemId": "iron-sword",
@@ -67,7 +106,9 @@
       "inferno": 1,
       "phoenix-warmth": 1,
       "healing-flame": 1,
-      "phoenix-heart": 1
+      "phoenix-heart": 1,
+      "fire-vulnerability": 1,
+      "meteor-shower": 1
     }
   },
   {
@@ -76,7 +117,7 @@
     "templateId": "phoenix",
     "level": 10,
     "experience": 0,
-    "skillPoints": 14,
+    "skillPoints": 11,
     "learnedSkillIds": [
       "strike",
       "ember",
@@ -84,7 +125,9 @@
       "inferno",
       "phoenix-warmth",
       "healing-flame",
-      "phoenix-heart"
+      "phoenix-heart",
+      "fire-vulnerability",
+      "meteor-shower"
     ],
     "stats": {
       "maxHp": 228,
@@ -103,7 +146,44 @@
     "inventory": [
       {
         "itemId": "potion",
-        "quantity": 3
+        "quantity": 3,
+        "effects": [
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 35,
+              "min": 0
+            }
+          }
+        ]
+      },
+      {
+        "itemId": "cleansing-potion",
+        "quantity": 1,
+        "effects": [
+          {
+            "id": "cleanse",
+            "kind": "dispel",
+            "recipient": "caster",
+            "polarityToRemove": "debuff",
+            "maxCount": 2
+          },
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 15,
+              "min": 0
+            }
+          }
+        ]
       },
       {
         "itemId": "iron-sword",
@@ -138,7 +218,9 @@
       "inferno": 1,
       "phoenix-warmth": 1,
       "healing-flame": 1,
-      "phoenix-heart": 1
+      "phoenix-heart": 1,
+      "fire-vulnerability": 1,
+      "meteor-shower": 1
     }
   },
   {
@@ -147,7 +229,7 @@
     "templateId": "tidekeeper",
     "level": 10,
     "experience": 0,
-    "skillPoints": 14,
+    "skillPoints": 9,
     "learnedSkillIds": [
       "strike",
       "spring",
@@ -155,7 +237,10 @@
       "renewal",
       "ice-shard",
       "ice-lance",
-      "glacier"
+      "glacier",
+      "purify",
+      "frost-lock",
+      "healing-rain"
     ],
     "stats": {
       "maxHp": 228,
@@ -174,7 +259,44 @@
     "inventory": [
       {
         "itemId": "potion",
-        "quantity": 3
+        "quantity": 3,
+        "effects": [
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 35,
+              "min": 0
+            }
+          }
+        ]
+      },
+      {
+        "itemId": "cleansing-potion",
+        "quantity": 1,
+        "effects": [
+          {
+            "id": "cleanse",
+            "kind": "dispel",
+            "recipient": "caster",
+            "polarityToRemove": "debuff",
+            "maxCount": 2
+          },
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 15,
+              "min": 0
+            }
+          }
+        ]
       },
       {
         "itemId": "iron-sword",
@@ -209,7 +331,10 @@
       "renewal": 1,
       "ice-shard": 1,
       "ice-lance": 1,
-      "glacier": 1
+      "glacier": 1,
+      "purify": 1,
+      "frost-lock": 1,
+      "healing-rain": 1
     }
   },
   {
@@ -218,7 +343,7 @@
     "templateId": "frostmage",
     "level": 10,
     "experience": 0,
-    "skillPoints": 14,
+    "skillPoints": 9,
     "learnedSkillIds": [
       "strike",
       "spring",
@@ -226,7 +351,10 @@
       "renewal",
       "ice-shard",
       "ice-lance",
-      "glacier"
+      "glacier",
+      "purify",
+      "frost-lock",
+      "healing-rain"
     ],
     "stats": {
       "maxHp": 228,
@@ -245,7 +373,44 @@
     "inventory": [
       {
         "itemId": "potion",
-        "quantity": 3
+        "quantity": 3,
+        "effects": [
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 35,
+              "min": 0
+            }
+          }
+        ]
+      },
+      {
+        "itemId": "cleansing-potion",
+        "quantity": 1,
+        "effects": [
+          {
+            "id": "cleanse",
+            "kind": "dispel",
+            "recipient": "caster",
+            "polarityToRemove": "debuff",
+            "maxCount": 2
+          },
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 15,
+              "min": 0
+            }
+          }
+        ]
       },
       {
         "itemId": "iron-sword",
@@ -280,7 +445,10 @@
       "renewal": 1,
       "ice-shard": 1,
       "ice-lance": 1,
-      "glacier": 1
+      "glacier": 1,
+      "purify": 1,
+      "frost-lock": 1,
+      "healing-rain": 1
     }
   },
   {
@@ -289,7 +457,7 @@
     "templateId": "geomancer",
     "level": 10,
     "experience": 0,
-    "skillPoints": 14,
+    "skillPoints": 11,
     "learnedSkillIds": [
       "strike",
       "pebble",
@@ -297,7 +465,9 @@
       "landslide",
       "lifesap",
       "grove",
-      "world-tree"
+      "world-tree",
+      "stone-skin",
+      "earthen-grasp"
     ],
     "stats": {
       "maxHp": 228,
@@ -316,7 +486,44 @@
     "inventory": [
       {
         "itemId": "potion",
-        "quantity": 3
+        "quantity": 3,
+        "effects": [
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 35,
+              "min": 0
+            }
+          }
+        ]
+      },
+      {
+        "itemId": "cleansing-potion",
+        "quantity": 1,
+        "effects": [
+          {
+            "id": "cleanse",
+            "kind": "dispel",
+            "recipient": "caster",
+            "polarityToRemove": "debuff",
+            "maxCount": 2
+          },
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 15,
+              "min": 0
+            }
+          }
+        ]
       },
       {
         "itemId": "iron-sword",
@@ -351,7 +558,9 @@
       "landslide": 1,
       "lifesap": 1,
       "grove": 1,
-      "world-tree": 1
+      "world-tree": 1,
+      "stone-skin": 1,
+      "earthen-grasp": 1
     }
   },
   {
@@ -360,7 +569,7 @@
     "templateId": "druid",
     "level": 10,
     "experience": 0,
-    "skillPoints": 14,
+    "skillPoints": 11,
     "learnedSkillIds": [
       "strike",
       "pebble",
@@ -368,7 +577,9 @@
       "landslide",
       "lifesap",
       "grove",
-      "world-tree"
+      "world-tree",
+      "stone-skin",
+      "earthen-grasp"
     ],
     "stats": {
       "maxHp": 228,
@@ -387,7 +598,44 @@
     "inventory": [
       {
         "itemId": "potion",
-        "quantity": 3
+        "quantity": 3,
+        "effects": [
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 35,
+              "min": 0
+            }
+          }
+        ]
+      },
+      {
+        "itemId": "cleansing-potion",
+        "quantity": 1,
+        "effects": [
+          {
+            "id": "cleanse",
+            "kind": "dispel",
+            "recipient": "caster",
+            "polarityToRemove": "debuff",
+            "maxCount": 2
+          },
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 15,
+              "min": 0
+            }
+          }
+        ]
       },
       {
         "itemId": "iron-sword",
@@ -422,7 +670,9 @@
       "landslide": 1,
       "lifesap": 1,
       "grove": 1,
-      "world-tree": 1
+      "world-tree": 1,
+      "stone-skin": 1,
+      "earthen-grasp": 1
     }
   },
   {
@@ -431,7 +681,7 @@
     "templateId": "stormcaller",
     "level": 10,
     "experience": 0,
-    "skillPoints": 14,
+    "skillPoints": 11,
     "learnedSkillIds": [
       "strike",
       "breeze",
@@ -439,7 +689,9 @@
       "tempest",
       "soothing-wind",
       "cloud-rest",
-      "sky-blessing"
+      "sky-blessing",
+      "arcane-focus",
+      "thunderclap"
     ],
     "stats": {
       "maxHp": 228,
@@ -458,7 +710,44 @@
     "inventory": [
       {
         "itemId": "potion",
-        "quantity": 3
+        "quantity": 3,
+        "effects": [
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 35,
+              "min": 0
+            }
+          }
+        ]
+      },
+      {
+        "itemId": "cleansing-potion",
+        "quantity": 1,
+        "effects": [
+          {
+            "id": "cleanse",
+            "kind": "dispel",
+            "recipient": "caster",
+            "polarityToRemove": "debuff",
+            "maxCount": 2
+          },
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 15,
+              "min": 0
+            }
+          }
+        ]
       },
       {
         "itemId": "iron-sword",
@@ -493,7 +782,9 @@
       "tempest": 1,
       "soothing-wind": 1,
       "cloud-rest": 1,
-      "sky-blessing": 1
+      "sky-blessing": 1,
+      "arcane-focus": 1,
+      "thunderclap": 1
     }
   },
   {
@@ -502,7 +793,7 @@
     "templateId": "windkeeper",
     "level": 10,
     "experience": 0,
-    "skillPoints": 14,
+    "skillPoints": 11,
     "learnedSkillIds": [
       "strike",
       "breeze",
@@ -510,7 +801,9 @@
       "tempest",
       "soothing-wind",
       "cloud-rest",
-      "sky-blessing"
+      "sky-blessing",
+      "arcane-focus",
+      "thunderclap"
     ],
     "stats": {
       "maxHp": 228,
@@ -529,7 +822,44 @@
     "inventory": [
       {
         "itemId": "potion",
-        "quantity": 3
+        "quantity": 3,
+        "effects": [
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 35,
+              "min": 0
+            }
+          }
+        ]
+      },
+      {
+        "itemId": "cleansing-potion",
+        "quantity": 1,
+        "effects": [
+          {
+            "id": "cleanse",
+            "kind": "dispel",
+            "recipient": "caster",
+            "polarityToRemove": "debuff",
+            "maxCount": 2
+          },
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 15,
+              "min": 0
+            }
+          }
+        ]
       },
       {
         "itemId": "iron-sword",
@@ -564,7 +894,9 @@
       "tempest": 1,
       "soothing-wind": 1,
       "cloud-rest": 1,
-      "sky-blessing": 1
+      "sky-blessing": 1,
+      "arcane-focus": 1,
+      "thunderclap": 1
     }
   },
   {
@@ -573,14 +905,18 @@
     "templateId": "duelist",
     "level": 10,
     "experience": 0,
-    "skillPoints": 16,
+    "skillPoints": 11,
     "learnedSkillIds": [
       "strike",
       "cleave",
       "execution",
       "lunge",
       "second-wind",
-      "blade-dance"
+      "blade-dance",
+      "battle-cry",
+      "weakening",
+      "rending-strike",
+      "concussive-blow"
     ],
     "stats": {
       "maxHp": 228,
@@ -599,7 +935,44 @@
     "inventory": [
       {
         "itemId": "potion",
-        "quantity": 3
+        "quantity": 3,
+        "effects": [
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 35,
+              "min": 0
+            }
+          }
+        ]
+      },
+      {
+        "itemId": "cleansing-potion",
+        "quantity": 1,
+        "effects": [
+          {
+            "id": "cleanse",
+            "kind": "dispel",
+            "recipient": "caster",
+            "polarityToRemove": "debuff",
+            "maxCount": 2
+          },
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 15,
+              "min": 0
+            }
+          }
+        ]
       },
       {
         "itemId": "iron-sword",
@@ -633,7 +1006,11 @@
       "execution": 1,
       "lunge": 1,
       "second-wind": 1,
-      "blade-dance": 1
+      "blade-dance": 1,
+      "battle-cry": 1,
+      "weakening": 1,
+      "rending-strike": 1,
+      "concussive-blow": 1
     }
   },
   {
@@ -642,14 +1019,18 @@
     "templateId": "veteran",
     "level": 10,
     "experience": 0,
-    "skillPoints": 16,
+    "skillPoints": 11,
     "learnedSkillIds": [
       "strike",
       "cleave",
       "execution",
       "lunge",
       "second-wind",
-      "blade-dance"
+      "blade-dance",
+      "battle-cry",
+      "weakening",
+      "rending-strike",
+      "concussive-blow"
     ],
     "stats": {
       "maxHp": 228,
@@ -668,7 +1049,44 @@
     "inventory": [
       {
         "itemId": "potion",
-        "quantity": 3
+        "quantity": 3,
+        "effects": [
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 35,
+              "min": 0
+            }
+          }
+        ]
+      },
+      {
+        "itemId": "cleansing-potion",
+        "quantity": 1,
+        "effects": [
+          {
+            "id": "cleanse",
+            "kind": "dispel",
+            "recipient": "caster",
+            "polarityToRemove": "debuff",
+            "maxCount": 2
+          },
+          {
+            "id": "heal",
+            "name": "Восстановление здоровья",
+            "kind": "heal",
+            "recipient": "caster",
+            "magnitude": {
+              "unit": "hp",
+              "constant": 15,
+              "min": 0
+            }
+          }
+        ]
       },
       {
         "itemId": "iron-sword",
@@ -702,7 +1120,11 @@
       "execution": 1,
       "lunge": 1,
       "second-wind": 1,
-      "blade-dance": 1
+      "blade-dance": 1,
+      "battle-cry": 1,
+      "weakening": 1,
+      "rending-strike": 1,
+      "concussive-blow": 1
     }
   }
 ]

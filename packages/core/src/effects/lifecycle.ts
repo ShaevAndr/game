@@ -1,5 +1,5 @@
-import type { Battle, Fighter, Skill } from '../types';
-import type { ActiveEffect, StatModifierEffect } from './types';
+import type { Battle, Fighter } from '../types';
+import type { ActiveEffect, ActiveStatEffect, EffectSource, StatModifierEffect, StunEffect } from './types';
 import { calculateAttributes, compatibilityStats, fillBaseAttributes, type StatModifier } from '../attributes';
 import { replaceFighterModifiers } from './stat-modifiers';
 import { addLog } from '../combat/log';
@@ -27,27 +27,27 @@ export function refreshEffectAttributes(battle: Battle, fighter: Fighter): void 
   const definitions = battle.content.statDefinitions;
   if (!definitions) throw new Error('Эффекты требуют реестр характеристик');
   initializeEffectFighter(battle, fighter);
-  const modifiers = (fighter.activeEffects ?? []).map(effect => ({ id: effect.instanceId, sourceId: effect.instanceId,
+  const modifiers = (fighter.activeEffects ?? []).filter((effect): effect is ActiveStatEffect => effect.kind === 'stat_modifier').map(effect => ({ id: effect.instanceId, sourceId: effect.instanceId,
     statId: effect.statId, operation: effect.operation, value: effect.magnitude * effect.stacks,
     priority: effect.priority, appliedSequence: effect.appliedSequence }));
   replaceFighterModifiers(fighter, modifiers, definitions);
 }
 
-export function effectGroupKey(skill: Skill, effect: StatModifierEffect): string { return effect.stackKey ?? `${skill.id}:${effect.id}`; }
+export function effectGroupKey(skill: { id: string; kind?: 'skill' | 'item' }, effect: { id: string; stackKey?: string }): string { return effect.stackKey ?? `${skill.kind ?? 'skill'}:${skill.id}:${effect.id}`; }
 
-export function applyStatEffect(battle: Battle, actor: Fighter, target: Fighter, skill: Skill, effect: StatModifierEffect, magnitude: number, duration: number): void {
+export function applyStatEffect(battle: Battle, actor: Fighter, target: Fighter, skill: EffectSource, effect: StatModifierEffect, magnitude: number, duration: number): void {
   initializeEffectFighter(battle, target);
   if (effect.operation === 'multiply' && magnitude < 0) throw new Error('Множитель не может быть отрицательным');
   const stackKey = effectGroupKey(skill, effect), stacking = effect.stacking ?? 'refresh';
   const existing = target.activeEffects!.filter(value => value.stackKey === stackKey).sort((a, b) => a.appliedSequence - b.appliedSequence || a.instanceId.localeCompare(b.instanceId));
-  if (existing.some(value => value.statId !== effect.statId || value.operation !== effect.operation || value.unit !== effect.magnitude.unit || value.polarity !== effect.polarity || value.stacking !== stacking)) throw new Error('Несовместимые эффекты одной группы');
-  if (stacking === 'replace_if_stronger' && existing.length && Math.abs(existing[0].magnitude) > Math.abs(magnitude)) {
+  if (existing.some(value => value.kind !== 'stat_modifier' || value.statId !== effect.statId || value.operation !== effect.operation || value.unit !== effect.magnitude.unit || value.polarity !== effect.polarity || value.stacking !== stacking)) throw new Error('Несовместимые эффекты одной группы');
+  if (stacking === 'replace_if_stronger' && existing.length && Math.abs(existing[0].magnitude ?? 0) > Math.abs(magnitude)) {
     addLog(battle, `${target.name}: «${effect.name ?? skill.name}» слабее действующего эффекта`); return;
   }
   const sequence = (battle.effectSequence ?? 0) + 1;
   const maxStacks = effect.maxStacks ?? (stacking === 'stack' || stacking === 'independent' ? 3 : 1);
-  const active: ActiveEffect = { instanceId: `${battle.id}:effect:${sequence}`, definitionId: `${skill.id}:${effect.id}`, name: effect.name ?? skill.name,
-    sourceFighterId: actor.id, sourceName: actor.name, sourceSkillId: skill.id, sourceRank: actor.skillLevels?.[skill.id] ?? 1, targetFighterId: target.id,
+  const active: ActiveEffect = { kind: 'stat_modifier', instanceId: `${battle.id}:effect:${sequence}`, definitionId: `${skill.id}:${effect.id}`, name: effect.name ?? skill.name,
+    sourceFighterId: actor.id, sourceName: actor.name, ...(skill.kind === 'item' ? { sourceItemId: skill.id } : { sourceSkillId: skill.id }), sourceRank: skill.rank, targetFighterId: target.id,
     polarity: effect.polarity, tags: [...(effect.tags ?? [])], dispellable: effect.dispellable ?? true, statId: effect.statId,
     operation: effect.operation, magnitude, unit: effect.magnitude.unit, priority: effect.priority ?? 0,
     remainingTurns: duration, eligibleFromTurn: (target.turnsStarted ?? 0) + 1, appliedSequence: sequence,
@@ -80,3 +80,20 @@ export function removeDeadEffects(battle: Battle): void {
     fighter.activeEffects = []; refreshEffectAttributes(battle, fighter);
   }
 }
+
+/** Control is a battle effect, never a fictitious character stat. Reapplying refreshes one shared stun. */
+export function applyStunEffect(battle: Battle, actor: Fighter, target: Fighter, source: EffectSource, effect: StunEffect): void {
+  initializeEffectFighter(battle, target);
+  const sequence = (battle.effectSequence ?? 0) + 1;
+  const next: ActiveEffect[] = (target.activeEffects ?? []).filter(value => value.kind !== 'stun');
+  next.push({ kind: 'stun', instanceId: `${battle.id}:effect:${sequence}`, definitionId: `${source.id}:${effect.id}`,
+    name: effect.name ?? source.name, sourceFighterId: actor.id, sourceName: actor.name, sourceSkillId: source.id,
+    sourceRank: source.rank, targetFighterId: target.id, polarity: 'debuff', tags: [...(effect.tags ?? ['control'])],
+    dispellable: effect.dispellable ?? true, remainingTurns: Math.max(effect.durationTurns, ...(target.activeEffects ?? []).filter(value => value.kind === 'stun').map(value => value.remainingTurns)),
+    eligibleFromTurn: (target.turnsStarted ?? 0) + 1, appliedSequence: sequence,
+    stackKey: 'control:stun', stacking: 'refresh', stacks: 1, maxStacks: 1 });
+  if (next.length > 64) throw new Error('Достигнут лимит активных эффектов');
+  target.activeEffects = next; battle.effectSequence = sequence;
+  addLog(battle, `${actor.name} → ${target.name}: оглушение, пропуск ${effect.durationTurns} ход.`);
+}
+export function isStunned(fighter: Fighter): boolean { return !!fighter.activeEffects?.some(effect => effect.kind === 'stun'); }

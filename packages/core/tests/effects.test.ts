@@ -31,7 +31,7 @@ function pass(battle: Battle) { battle.phase = 'choose'; applyAction(battle, bat
 
 test('seed effect skills form valid content and remain learnable, non-starter skills', () => {
   assert.equal(contentSchema.safeParse(content).success, true);
-  assert.equal(seedEffectSkills.length, 7);
+  assert.equal(seedEffectSkills.length, 13);
   assert.ok(seedEffectSkills.every(skill => !skill.learning.starter && skill.effects?.length && skill.targeting));
 });
 
@@ -213,7 +213,7 @@ test('content rejects unknown references, incompatible units and invalid stackin
 test('NPCs use the same buff and turn lifecycle, without refreshing a healthy effect forever', () => {
   const { first } = fixture();
   const battle = newBattle('npc-effects', 'Бот', 'bot', 'on-match', first, content); startBattle(battle);
-  const bot = battle.fighters[1]; battle.activeId = bot.id;
+  const bot = battle.fighters[1]; bot.skillIds = ['strike', 'battle-cry']; battle.activeId = bot.id;
   ready(battle, 'battle-cry'); runNpcTurns(battle);
   assert.equal(battle.activeId, first.id);
   assert.ok(battle.fighters.some(fighter => fighter.activeEffects?.length));

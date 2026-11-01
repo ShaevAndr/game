@@ -30,6 +30,10 @@ export class BattlesService {
   ) {}
 
   list() { return this.repository.list(); }
+  /** Call under the character lock when deciding whether equipment can change. */
+  isCharacterInActiveBattle(characterId: string, context?: TransactionContext) {
+    return this.repository.hasActiveCharacter(characterId, context);
+  }
   async get(id: string) {
     const battle = await this.repository.find(id);
     if (!battle) throw new NotFoundException('Бой не найден');

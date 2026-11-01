@@ -6,6 +6,7 @@ import { CharacterCreationService } from '../src/modules/characters/application/
 import { CharactersService } from '../src/modules/characters/application/characters.service';
 import { CharactersRepository } from '../src/modules/characters/ports/characters.repository';
 import { ContentService } from '../src/modules/content/application/content.service';
+import { BattlesService } from '../src/modules/battles/application/battles.service';
 import { InventoryService } from '../src/modules/inventory/application/inventory.service';
 import { InventoryRepository } from '../src/modules/inventory/ports/inventory.repository';
 import { SkillsService } from '../src/modules/skills/application/skills.service';
@@ -50,7 +51,7 @@ function fixture() {
     },
   } as unknown as InventoryRepository;
   const characters = new CharactersService(repository, content);
-  const inventory = new InventoryService(transactions, inventories, characters, content, {} as SkillsService);
+  const inventory = new InventoryService(transactions, inventories, characters, content, {} as SkillsService, { isCharacterInActiveBattle: async () => false } as unknown as BattlesService);
   const service = new CharacterCreationService(transactions, characters, inventory, content);
   return { service, state: () => state, failInventory: (value: boolean) => { failInventory = value; } };
 }

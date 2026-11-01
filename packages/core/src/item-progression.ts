@@ -76,7 +76,7 @@ export function qualityForItem(item: Item, policy: { mode: 'fixed'; rankId: stri
   if (!rank) throw new Error('Неизвестный ранг');
   const modern = content.modifierRulesVersion === 1;
   const pool = compatibleItemModifiers(item, content.modifierDefinitions ?? [], modern);
-  if (pool.length < rank.affixCount) throw new Error('Недостаточно совместимых допов для ранга');
+  if (rank.affixCount > 0 && !pool.length) throw new Error('Недостаточно совместимых допов для ранга');
   const affixes: RolledAffix[] = [];
   for (let i = 0; i < rank.affixCount; i++) {
     let index = rollBelow(roll, modern ? pool.reduce((sum, effect) => sum + (effect.craftWeight ?? 1), 0) : pool.length);
@@ -85,7 +85,7 @@ export function qualityForItem(item: Item, policy: { mode: 'fixed'; rankId: stri
       while (index >= (pool[cursor].craftWeight ?? 1)) { index -= pool[cursor].craftWeight ?? 1; cursor++; }
       index = cursor;
     }
-    const effect = pool.splice(index, 1)[0];
+    const effect = pool[index];
     const range = modern ? itemModifierRange(effect, item.itemLevel ?? 1, content.itemScalingProfiles ?? defaultItemScalingProfiles) : { minValue: effect.minValue!, maxValue: effect.maxValue! };
     affixes.push({ effectId: effect.id, effectVersion: effect.version, name: effect.name, statId: effect.statId, operation: effect.operation, value: range.minValue + rollBelow(roll, range.maxValue - range.minValue + 1), ...(modern ? { ...range, activationChanceBps: effect.activationChanceBps ?? 10000 } : {}) });
   }
@@ -158,7 +158,7 @@ export function validateCraftingProgression(content: Pick<Content, 'itemRanks' |
       if (policy.mode === 'fixed' && !allowedRanks.length || policy.mode === 'profession' && !content.rankProfiles?.some(profile => profile.id === policy.profileId)) throw new Error('Неизвестная политика ранга');
       const pool = compatibleItemModifiers(item, content.modifierDefinitions ?? [], content.modifierRulesVersion === 1);
       if (content.modifierRulesVersion === 1) for (const effect of pool) itemModifierRange(effect, item.itemLevel ?? 1, content.itemScalingProfiles ?? defaultItemScalingProfiles);
-      if (allowedRanks.some(rank => rank.affixCount > pool.length)) throw new Error('Недостаточно совместимых допов');
+      if (allowedRanks.some(rank => rank.affixCount > 0) && !pool.length) throw new Error('Недостаточно совместимых допов');
     }
   }
 }

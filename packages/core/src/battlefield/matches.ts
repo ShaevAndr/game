@@ -53,3 +53,16 @@ export function findBattlefieldMove<T extends string>(original: readonly (readon
   }
   return null;
 }
+
+/** Prefer a matching move; otherwise allow rearranging adjacent tiles. */
+export function findBattlefieldSwap<T extends string>(board: readonly (readonly T[])[]): BattlefieldMove | null {
+  const matching = findBattlefieldMove(board);
+  if (matching) return matching;
+  const { rows, cols } = battlefieldSize(board);
+  for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) for (const [dr, dc] of [[0, 1], [1, 0]]) {
+    const to = { row: row + dr, col: col + dc };
+    if (to.row < rows && to.col < cols && board[row][col] !== board[to.row][to.col]) return { from: { row, col }, to };
+  }
+  return cols > 1 ? { from: { row: 0, col: 0 }, to: { row: 0, col: 1 } }
+    : rows > 1 ? { from: { row: 0, col: 0 }, to: { row: 1, col: 0 } } : null;
+}

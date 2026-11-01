@@ -27,3 +27,41 @@ export const seedEffectSkills: Skill[] = [
       { id: 'rending-strike-hit', kind: 'damage', recipient: 'selected', damageType: 'physical', canCrit: true,
         magnitude: { unit: 'hp', terms: [{ scope: 'caster', statId: 'physicalPower', weightBps: 15000, weightPerRankBps: 1000 }], min: 0, max: 1000000 } }] },
 ];
+
+// Distinct v1 roles: control trades damage/energy efficiency for a chance to deny one turn.
+const hit = (damageType: 'physical' | 'fire' | 'water' | 'earth' | 'air', weightBps: number, growth: number): import('./types').DamageEffect => ({
+  id: 'hit', recipient: 'selected', kind: 'damage', damageType,
+  magnitude: { unit: 'hp', terms: [{ scope: 'caster', statId: damageType === 'physical' ? 'physicalPower' : 'magicPower', weightBps, weightPerRankBps: growth }], min: 0, max: 1000000 },
+});
+const stun = (chance: number, growth = 0, cap = chance): import('./types').StunEffect => ({
+  id: 'stun', name: 'Оглушение', recipient: 'selected', kind: 'stun', durationTurns: 1,
+  activationChanceBps: chance, ...(growth ? { chancePerSkillRankBps: growth } : {}), maxChanceBps: cap, dispellable: true, tags: ['control'],
+});
+seedEffectSkills.push(
+  { ...base, id: 'concussive-blow', name: 'Оглушающий удар', description: 'Умеренный физический урон и фиксированный шанс 50% пропустить следующий ход. Растёт только урон.',
+    element: 'physical', cost: 6, effect: 'damage', cooldown: 3, learning: { ...base.learning, level: 2, pointCost: 2, prerequisites: ['lunge'] },
+    targeting: { kind: 'enemy_single' }, effects: [hit('physical', 14000, 600), stun(5000)] },
+  { ...base, id: 'frost-lock', name: 'Ледяные оковы', description: 'Без урона: шанс пропуска следующего хода растёт с 65% до 80%, длительность неизменна.',
+    element: 'water', cost: 5, effect: 'modifier', cooldown: 3, learning: { ...base.learning, level: 2, pointCost: 2, prerequisites: ['ice-shard'] },
+    targeting: { kind: 'enemy_single' }, effects: [stun(6500, 200, 8000)] },
+  { ...base, id: 'thunderclap', name: 'Громовой удар', description: 'Воздушный урон и шанс оглушения 25–34%. Урон и шанс растут независимо.',
+    element: 'air', cost: 5, effect: 'damage', cooldown: 3, learning: { ...base.learning, level: 2, pointCost: 2, prerequisites: ['breeze'] },
+    targeting: { kind: 'enemy_single' }, effects: [hit('air', 12500, 700), stun(2500, 100, 3400)] },
+  { ...base, id: 'earthen-grasp', name: 'Каменная хватка', description: 'Урон земли и фиксированный шанс оглушения 40%. Один пропущенный ход на любом уровне.',
+    element: 'earth', cost: 6, effect: 'damage', cooldown: 3, learning: { ...base.learning, level: 2, pointCost: 2, prerequisites: ['pebble'] },
+    targeting: { kind: 'enemy_single' }, effects: [hit('earth', 18000, 800), stun(4000)] },
+  { ...base, id: 'meteor-shower', name: 'Метеоритный дождь', description: 'Умеренный огненный урон всем живым противникам. В дуэли менее выгоден одиночной атаке.',
+    element: 'fire', cost: 7, effect: 'damage', cooldown: 3, learning: { ...base.learning, level: 3, pointCost: 2, prerequisites: ['fireball'] },
+    targeting: { kind: 'enemies_all' }, effects: [hit('fire', 21000, 900)] },
+  { ...base, id: 'healing-rain', name: 'Целительный дождь', description: 'Лечит всех живых союзников, включая применяющего. Не воскрешает.',
+    element: 'water', cost: 7, effect: 'heal', cooldown: 3, learning: { ...base.learning, level: 3, pointCost: 2, prerequisites: ['tide'] },
+    targeting: { kind: 'allies_all', includeSelf: true }, effects: [{ id: 'heal', recipient: 'selected', kind: 'heal', magnitude: {
+      unit: 'hp', terms: [{ scope: 'caster', statId: 'healingPower', weightBps: 19000, weightPerRankBps: 1300 }], min: 0, max: 1000000 } }] },
+);
+
+/** NPC catalog additions for the server's complete effect-enabled content snapshot. */
+export const seedEnemySkillSets: Record<string, string[]> = {
+  sentinel: ['strike', 'pebble', 'quake', 'earthen-grasp'],
+  wisp: ['strike', 'ember', 'fireball'],
+  warden: ['strike', 'cleave', 'fireball', 'concussive-blow'],
+};

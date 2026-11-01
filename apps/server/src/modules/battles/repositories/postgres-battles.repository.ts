@@ -15,6 +15,12 @@ export class PostgresBattlesRepository extends BattlesRepository {
   async find(id: string) {
     return (await this.db.sql.selectFrom('battles').select('data').where('id', '=', id).executeTakeFirst())?.data;
   }
+  async hasActiveCharacter(characterId: string, context?: TransactionContext) {
+    const match = JSON.stringify({ status: 'active', fighters: [{ characterId }] });
+    const row = await this.db.session(context).selectFrom('battles').select('id')
+      .where(sql<boolean>`data @> ${match}::jsonb`).limit(1).executeTakeFirst();
+    return !!row;
+  }
   async create(battle: Battle) {
     await this.db.sql.insertInto('battles').values({ id: battle.id, version: battle.version, data: JSON.stringify(battle) }).execute();
   }

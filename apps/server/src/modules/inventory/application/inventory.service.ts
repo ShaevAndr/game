@@ -6,7 +6,10 @@ import { TransactionContext, UnitOfWork } from '../../../shared/application/unit
 import { CharactersService } from '../../characters/application/characters.service';
 import { ContentService } from '../../content/application/content.service';
 import { SkillsService } from '../../skills/application/skills.service';
+import { BattlesService } from '../../battles/application/battles.service';
 import { InventoryRepository } from '../ports/inventory.repository';
+
+const equipmentLockedReason = 'Нельзя менять экипировку во время активного боя';
 
 @Injectable()
 export class InventoryService {
@@ -16,6 +19,7 @@ export class InventoryService {
     @Inject(CharactersService) private readonly characters: CharactersService,
     @Inject(ContentService) private readonly content: ContentService,
     @Inject(SkillsService) private readonly skills: SkillsService,
+    @Inject(BattlesService) private readonly battles: BattlesService,
   ) {}
 
   /** Creates the owner's backpack and starting items in the character creation transaction. */
@@ -31,6 +35,7 @@ export class InventoryService {
       await this.repository.ensurePrimary(ownerId, character.inventory, Object.fromEntries(content.items.map(item => [item.id, item.stackLimit])), context, content.items);
       const state = await this.repository.load(ownerId, context);
       const groups = content.itemGroups ?? [];
+      const equipmentLocked = await this.battles.isCharacterInActiveBattle(ownerId, context);
       return {
         ...state, definitions: content.items, groups, statDefinitions: content.statDefinitions,
         items: state.items.map(instance => {
@@ -44,6 +49,9 @@ export class InventoryService {
           if (definition?.grantedSkillId && character.learnedSkillIds.includes(definition.grantedSkillId)) {
             const read = actions.find(action => action.id === 'read');
             if (read) { read.enabled = false; read.reason = 'Навык уже известен'; }
+          }
+          if (equipmentLocked) for (const action of actions) {
+            if (action.id === 'equip' || action.id === 'unequip') { action.enabled = false; action.reason = equipmentLockedReason; }
           }
           const common = content.itemRanks?.find(rank => rank.order === 1);
           const quality = instance.quality ?? (definition?.equipSlot && common ? { rank: common, affixes: [] } : undefined);
@@ -114,6 +122,10 @@ export class InventoryService {
         states.push(await this.state(ownerId, content, context));
       }
       if ('instanceId' in command && !states.some(state => state.items.some(item => item.id === command.instanceId))) throw new ConflictException('Предмет перемещён. Повторите действие.');
+      if (command.type === 'equip' || command.type === 'unequip') {
+        const owner = states.find(state => state.items.some(item => item.id === command.instanceId))!;
+        if (await this.battles.isCharacterInActiveBattle(owner.ownerId, context)) throw new ConflictException(equipmentLockedReason);
+      }
       if (command.type === 'equip' && content.statDefinitions) {
         const state = states.find(state => state.items.some(item => item.id === command.instanceId))!;
         const instance = state.items.find(item => item.id === command.instanceId)!;

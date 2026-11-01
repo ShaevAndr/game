@@ -1,4 +1,4 @@
-import { Action, Battle, Fighter, isBattleConsumable, skillPower } from '@game/core';
+import { Action, Battle, Fighter, consumableEffects, isBattleConsumable, skillPower } from '@game/core';
 import { symbols } from '../../../shared/ui/game-labels';
 import { EffectSkillOption } from './EffectSkillOption';
 import '../effects.css';
@@ -35,8 +35,8 @@ export function BattleSkills({ battle, me, myTurn, busy, targetId, healTarget, o
       const quantity = me.inventory.filter(stack => stack.itemId === item.id).reduce((total, stack) => total + stack.quantity, 0);
       if (!quantity) return null;
       return <button key={item.id} className="ghost potion"
-        disabled={!myTurn || busy || battle.usedSkill || battle.phase !== 'before' || me.hp === me.stats.maxHp}
-        onClick={() => onCommand({ type: 'item', itemId: item.id })}>✚ {item.name} · +{item.heal} HP · ×{quantity}</button>;
+        disabled={!myTurn || busy || battle.usedSkill || battle.phase !== 'before' || me.hp === me.stats.maxHp && consumableEffects(item).every(effect => effect.kind === 'heal')}
+        onClick={() => onCommand({ type: 'item', itemId: item.id })}>✚ {item.name} · {item.description} · ×{quantity}</button>;
     })}
     {choiceOnly && <button className="primary end-turn" disabled={!myTurn || busy || !endEnabled} onClick={() => onCommand({ type: 'end' })}>Сохранить энергию и завершить ход →</button>}
   </section>;

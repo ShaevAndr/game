@@ -24,7 +24,7 @@ export type Energy = Record<Element, number> & { defense?: number };
 export const emptyEnergy = (): Energy => ({ fire: 0, water: 0, earth: 0, air: 0, physical: 0, defense: 0 });
 export interface Stats { maxHp: number; attack: number; defense: number; maxEnergy: number }
 export type Item = ItemDefinition;
-export interface ItemStack { itemId: string; quantity: number }
+export interface ItemStack { itemId: string; quantity: number; effects?: SkillEffect[] }
 export interface Character { id: string; name: string; templateId?: string; level: number; experience: number; skillPoints: number; learnedSkillIds: string[]; skillLevels?: Record<string, number>; equipmentBonuses?: Partial<Stats>; stats: Stats; energy: Energy; inventory: ItemStack[]; createdAt: string;
   attributeVersion?: 1; baseAttributes?: Record<string, number>; attributePoints?: number; attributeRevision?: number; attributes?: AttributeCalculation;
   craftingProfessionXp?: Record<string, number>;
@@ -55,16 +55,17 @@ export const contentSchema = z.object({
   items: z.array(itemDefinitionSchema),
   recipes: z.array(craftingRecipeSchema).default([]),
   enemies: z.array(z.object({ level: z.number().int().min(1).max(1000).optional(), id: contentId, name: z.string().min(1).max(80), stats: statsSchema, skillIds: z.array(contentId).min(1) })).min(1),
-  balance: z.object({ formulas: combatFormulaRulesSchema.optional(), characterStats: statsSchema, starterItems: z.array(z.object({ itemId: contentId, quantity: z.number().int().nonnegative().max(1000) })), damagePerTile: z.number().int().positive().max(100), energyPerTile: z.number().int().positive().max(100), teamSize: z.number().int().min(1).max(10), dungeonWaves: z.array(contentId).min(1).max(100), progression: progressionSchema, crafting: z.object({ blind: blindCraftRulesSchema }).optional(), combat: z.object({ version: z.literal(1), energyCap: z.literal(30), energyPerTile: z.literal(1), defensePerTile: z.number().int().min(1).max(100) }).optional(), attributes: z.object({ skillReferencePower: z.number().int().min(1).max(10000) }).optional() }),
+  balance: z.object({ formulas: combatFormulaRulesSchema.optional(), characterStats: statsSchema, starterItems: z.array(z.object({ itemId: contentId, quantity: z.number().int().nonnegative().max(1000), effects: z.array(skillEffectSchema).optional() })), damagePerTile: z.number().int().positive().max(100), energyPerTile: z.number().int().positive().max(100), teamSize: z.number().int().min(1).max(10), dungeonWaves: z.array(contentId).min(1).max(100), progression: progressionSchema, crafting: z.object({ blind: blindCraftRulesSchema }).optional(), combat: z.object({ version: z.literal(1), energyCap: z.literal(30), energyPerTile: z.literal(1), defensePerTile: z.number().int().min(1).max(100) }).optional(), attributes: z.object({ skillReferencePower: z.number().int().min(1).max(10000) }).optional() }),
 }).superRefine((content, ctx) => {
   const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
   try { validateCraftingProgression(content); } catch (error) { fail((error as Error).message); }
   if (content.effectsVersion === 1 && !content.statDefinitions) fail('Эффекты требуют реестр характеристик');
   try { validateSkillEffects(content.skills, content.statDefinitions ?? []); } catch (error) { fail((error as Error).message); }
-  for (const skill of content.skills) for (const effect of skill.effects ?? []) {
+  try { validateSkillEffects(content.items.filter(item => item.effects?.length).map(item => ({ ...item, targeting: { kind: 'self' as const } })), content.statDefinitions ?? [], true); } catch (error) { fail((error as Error).message); }
+  for (const [permission, sources] of [['allowSkill', content.skills], ['allowPotion', content.items]] as const) for (const skill of sources) for (const effect of skill.effects ?? []) {
     if (effect.kind !== 'stat_modifier' || !effect.modifierDefinitionId) continue;
     const definition = content.modifierDefinitions?.find(value => value.id === effect.modifierDefinitionId);
-    const incompatible = !definition || !modifierAllowed(definition, 'allowSkill') || definition.statId !== effect.statId || definition.operation !== effect.operation;
+    const incompatible = !definition || !modifierAllowed(definition, permission) || definition.statId !== effect.statId || definition.operation !== effect.operation;
     const forbiddenUse = content.modifierRulesVersion === 1 && definition && (
       effect.polarity === 'neutral' || !modifierAllowed(definition, effect.polarity === 'buff' ? 'allowBuff' : 'allowDebuff')
       || effect.modifierDefinitionVersion !== undefined && effect.modifierDefinitionVersion !== definition.version
@@ -93,6 +94,7 @@ export const contentSchema = z.object({
   if (new Set(content.items.map(item => item.id)).size !== content.items.length) fail('ID предметов должны быть уникальными');
   for (const item of content.items) {
     if (!groups.has(item.groupId)) fail(`Неизвестная группа предмета ${item.id}`);
+    if (item.effects?.length && !content.itemGroups.find(group => group.id === item.groupId)?.actions.includes('use-in-battle')) fail(`Эффекты требуют расходуемый боевой предмет ${item.id}`);
     if (item.grantedSkillId && !content.skills.some(skill => skill.id === item.grantedSkillId)) fail(`Неизвестный навык свитка ${item.id}`);
     if (content.statDefinitions) {
       const definitions = new Map(content.statDefinitions.map(definition => [definition.id, definition]));

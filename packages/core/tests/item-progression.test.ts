@@ -42,13 +42,13 @@ test('the same rank roll produces a higher rank at a higher profession level', (
   assert.ok(high.rank.order > 1);
 });
 
-test('each rank adds one distinct compatible affix, inclusive rolled values and fixed ranks do not roll rank', () => {
+test('each rank adds compatible affix slots with repetitions, inclusive rolled values and fixed ranks do not roll rank', () => {
   for (const rank of defaultItemRanks) {
     const maxima: number[] = [];
     const quality = qualityForItem(sword, { mode: 'fixed', rankId: rank.id }, 1, content, max => { maxima.push(max); return max - 1; });
     assert.equal(quality.affixes.length, rank.order - 1);
     assert.equal(maxima.length, rank.affixCount * 2);
-    assert.equal(new Set(quality.affixes.map(affix => affix.effectId)).size, rank.affixCount);
+    if (rank.affixCount) assert.equal(new Set(quality.affixes.map(affix => affix.effectId)).size, 1);
     for (const affix of quality.affixes) assert.equal(affix.value, content.modifierDefinitions!.find(effect => effect.id === affix.effectId)!.maxValue);
   }
   const disallowed = { ...content, modifierDefinitions: content.modifierDefinitions!.map(effect => ({ ...effect, allowWeapon: false })) };

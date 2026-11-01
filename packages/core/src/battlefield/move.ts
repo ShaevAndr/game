@@ -23,9 +23,10 @@ export function moveBattlefield<T extends string = BattlefieldElement>(field: Ba
   const board = field.board.map(row => [...row]);
   swapCells(board, from, to);
   let cells = findBattlefieldMatches(board);
-  if (!cells.length) throw new Error('Перестановка должна собрать хотя бы три фишки');
   const direct = emptyCounts(config.elementTypes), generated = emptyCounts(config.elementTypes), total = emptyCounts(config.elementTypes);
   const steps: RemovalStep<T>[] = [];
+  // A setup swap keeps its new positions, even when no matching move is available yet.
+  if (!cells.length) return { board, config, direct, generated, total, cascades: 0, steps, shuffled: false, regeneration: null };
   let regeneration: BattlefieldMoveResult<T>['regeneration'] = null;
   while (cells.length) {
     if (steps.length >= MAX_RESOLUTION_STEPS) { regeneration = 'cascade-limit'; break; }

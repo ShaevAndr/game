@@ -2,11 +2,12 @@ import { damageChances } from './formulas';
 import { Action, Battle, Fighter, SkillChoice, elements } from '../types';
 import { BattlefieldEngine, defaultBattlefieldEngine, normalizeBattlefieldOptions } from '../battlefield';
 import { skillMagnitude, skillPower } from '../skills';
-import { isBattleConsumable } from '../items';
+import { consumableEffects, isBattleConsumable } from '../items';
 import { addLog, damage, nextTurn, target } from './common';
 import { combatRules, skillEnergy } from './rules';
 import { legalSkillTargets, resolveSkillTargets, skillTargeting } from '../targeting';
-import { applySkillEffects, effectSkillUtility, previewSkillEffects } from '../effects/skill-effects';
+import { applySkillEffects, applyItemEffects, effectSkillUtility, previewSkillEffects } from '../effects/skill-effects';
+import { isStunned } from '../effects/lifecycle';
 import { matchPowerBps, scaleMatchPower } from './match-power';
 
 function finishMatchedTurn(battle: Battle, actor: Fighter, onBeforeCascades?: (battle: Battle) => void) {
@@ -54,6 +55,7 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
   if (battle.status !== 'active') throw new Error('Бой не активен');
   const actor = battle.fighters.find(fighter => fighter.id === actorId);
   if (!actor || actor.hp <= 0 || battle.activeId !== actorId) throw new Error('Сейчас ход другого участника');
+  if (isStunned(actor)) throw new Error('Участник оглушён и пропускает ход');
   if (action.type === 'swap') {
     if (battle.phase !== 'before') throw new Error('Разрешена одна перестановка за ход');
     const config = battle.battlefield ?? normalizeBattlefieldOptions({ size: { rows: battle.board.length, cols: battle.board[0]?.length ?? 0 } });
@@ -76,7 +78,8 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
     battle.matchedElements = elements.filter(type => (report.direct.byType[type] ?? 0) > 0);
     battle.phase = 'choose';
     battle.skillChoices = skillChoices(battle, actor);
-    addLog(battle, `${actor.name}: прямо ${report.direct.count}, сила навыка ×${matchPowerBps(battle) / 10000}. Общая энергия: +${actor.skillEnergy - previous} (${actor.skillEnergy}/${rules.energyCap})${guard ? `. Защита +${guard} до следующего собственного хода` : ''}`);
+    addLog(battle, report.direct.count === 0 ? `${actor.name}: перестановка без совпадений, ход завершён`
+      : `${actor.name}: прямо ${report.direct.count}, сила навыка ×${matchPowerBps(battle) / 10000}. Общая энергия: +${actor.skillEnergy - previous} (${actor.skillEnergy}/${rules.energyCap})${guard ? `. Защита +${guard} до следующего собственного хода` : ''}`);
     // Matching tiles never deals damage. No learned matching skills means energy/guard only and an automatic end.
     if (!battle.skillChoices.length) finishMatchedTurn(battle, actor, onBeforeCascades);
     return;
@@ -116,10 +119,16 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
     const stack = actor.inventory.find(stack => stack.itemId === action.itemId && stack.quantity > 0);
     const item = battle.content.items.find(item => item.id === action.itemId);
     if (!stack || !item || !isBattleConsumable(item, battle.content.itemGroups)) throw new Error('Предмет недоступен');
-    if (actor.hp === actor.stats.maxHp) throw new Error('Здоровье уже полное');
-    const healed = Math.min(item.heal!, actor.stats.maxHp - actor.hp);
-    stack.quantity--; actor.hp += healed; battle.usedSkill = true;
-    addLog(battle, `${actor.name}: ${item.name}, +${healed} HP. Теперь обязательна перестановка.`);
+    const effects = structuredClone(stack.effects ?? consumableEffects(item));
+    if (actor.hp === actor.stats.maxHp && effects.every(effect => effect.kind === 'heal')) throw new Error('Здоровье уже полное');
+    const draft = structuredClone(battle), caster = draft.fighters.find(fighter => fighter.id === actor.id)!;
+    caster.inventory.find(value => value.itemId === stack.itemId && value.quantity > 0)!.quantity--;
+    draft.usedSkill = true;
+    addLog(draft, `${actor.name}: ${item.name}. Теперь обязательна перестановка.`);
+    applyItemEffects(draft, caster, { id: item.id, name: item.name, effects });
+    Object.assign(actor, caster);
+    draft.fighters[draft.fighters.findIndex(fighter => fighter.id === actor.id)] = actor;
+    Object.assign(battle, draft);
     return;
   }
   if (battle.phase !== 'choose') throw new Error('Сначала выполните перестановку');
@@ -154,4 +163,6 @@ export function runMatchedNpcTurns(battle: Battle, fieldEngine: BattlefieldEngin
     applyMatchedAction(battle, actor.id, { type: 'skill', skillId: skill.id, targetId: victim.id }, Math.random, fieldEngine, onAction);
     onAction?.(battle);
   }
+  // A control chain must never commit an NPC-owned turn that clients cannot advance.
+  if (battle.status === 'active' && battle.fighters.find(fighter => fighter.id === battle.activeId)?.npc) throw new Error('Превышен предел автоматических ходов; команда отменена');
 }

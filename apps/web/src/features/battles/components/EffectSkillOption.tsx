@@ -27,7 +27,7 @@ export function EffectSkillOption({ battle, actor, skill, choice, busy, enabled,
         {damagePreviews.map(preview => <small key={preview.targetId}>{chanceText(preview).slice(3)}</small>)}
         {previews.map(effect => <small key={`${effect.effectId}:${effect.targetId}`}>{effect.kind === 'stat_modifier'
           ? `${battle.content.statDefinitions?.find(definition => definition.id === effect.statId)?.name ?? effect.statId} ${effectValue(effect.operation!, effect.magnitude!, effect.unit!)} · ${effect.durationTurns} ход.`
-          : effect.kind === 'dispel' ? 'Снятие эффектов' : `${effect.kind === 'damage' ? 'Урон до защиты и крита' : 'Лечение'}: ${effect.magnitude}`}{effect.activationChanceBps !== undefined ? ` · срабатывание ${effect.activationChanceBps / 100}%` : ''}{chanceText(effect)}</small>)}
+          : effect.kind === 'stun' ? `Пропуск хода · ${effect.durationTurns} ход.` : effect.kind === 'dispel' ? 'Снятие эффектов' : `${effect.kind === 'damage' ? 'Урон до защиты и крита' : 'Лечение'}: ${effect.magnitude}`}{effect.activationChanceBps !== undefined ? ` · срабатывание ${effect.activationChanceBps / 100}%` : ''}{chanceText(effect)}</small>)}
         {choice.reason && <small>{choice.reason}</small>}
       </span><b>{skill.cost}</b>
     </button>

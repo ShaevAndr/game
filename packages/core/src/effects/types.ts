@@ -25,14 +25,23 @@ export interface DispelEffect extends EffectBase {
 }
 export interface DamageEffect extends EffectBase { kind: 'damage'; magnitude: EffectExpression; damageType: Element; canCrit?: boolean }
 export interface HealEffect extends EffectBase { kind: 'heal'; magnitude: EffectExpression }
-export type SkillEffect = StatModifierEffect | DispelEffect | DamageEffect | HealEffect;
-export interface ActiveEffect {
-  instanceId: string; definitionId: string; name: string; sourceFighterId: string; sourceName?: string; sourceSkillId: string; sourceRank: number;
-  targetFighterId: string; polarity: StatModifierEffect['polarity']; tags: string[]; dispellable: boolean;
-  statId: string; operation: StatModifier['operation']; magnitude: number; unit: EffectUnit; priority: number;
+export interface StunEffect extends EffectBase { kind: 'stun'; durationTurns: number; tags?: string[]; dispellable?: boolean }
+export type SkillEffect = StatModifierEffect | DispelEffect | DamageEffect | HealEffect | StunEffect;
+export interface EffectSource { kind: 'skill' | 'item'; id: string; name: string; rank: number; element?: Element; effects: SkillEffect[] }
+interface ActiveEffectBase {
+  instanceId: string; definitionId: string; name: string; sourceFighterId: string; sourceName?: string;
+  sourceSkillId?: string; sourceItemId?: string; sourceRank: number; targetFighterId: string;
+  polarity: StatModifierEffect['polarity']; tags: string[]; dispellable: boolean;
   remainingTurns: number; eligibleFromTurn: number; appliedSequence: number;
   stackKey: string; stacking: NonNullable<StatModifierEffect['stacking']>; stacks: number; maxStacks: number;
 }
+export interface ActiveStatEffect extends ActiveEffectBase {
+  kind: 'stat_modifier'; statId: string; operation: StatModifier['operation']; magnitude: number; unit: EffectUnit; priority: number;
+}
+export interface ActiveStunEffect extends ActiveEffectBase {
+  kind: 'stun'; statId?: never; operation?: never; magnitude?: never; unit?: never; priority?: never;
+}
+export type ActiveEffect = ActiveStatEffect | ActiveStunEffect;
 export interface EffectPreview {
   hitChanceBps?: number; luckAvoidChanceBps?: number;
   activationChanceBps?: number;
@@ -40,4 +49,4 @@ export interface EffectPreview {
   magnitude?: number; unit?: EffectUnit; durationTurns?: number; statId?: string;
   operation?: StatModifier['operation']; polarity?: StatModifierEffect['polarity'];
 }
-export interface EffectApplicationResult { effectId: string; sourceFighterId: string; sourceSkillId: string; targetId: string; chanceBps: number; outcome: 'applied' | 'chance_failed' | 'skipped_dead_target' }
+export interface EffectApplicationResult { effectId: string; sourceFighterId: string; sourceSkillId?: string; sourceItemId?: string; targetId: string; chanceBps: number; outcome: 'applied' | 'chance_failed' | 'skipped_dead_target' }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Battlefield, BattlefieldOptions, battlefieldOptionsSchema, createBattlefield, tileTypes, findBattlefieldMatches, findBattlefieldMove, moveBattlefield, normalizeBattlefieldOptions, resolveSwap } from '../src';
+import { Battlefield, BattlefieldOptions, battlefieldOptionsSchema, createBattlefield, defaultBattlefieldEngine, tileTypes, findBattlefieldMatches, findBattlefieldMove, moveBattlefield, normalizeBattlefieldOptions, resolveSwap } from '../src';
 
 function rng(seed: number) { return () => { seed = Math.imul(1664525, seed) + 1013904223 | 0; return (seed >>> 0) / 4294967296; }; }
 function sequence(values: number[], otherwise = 0.2) { let index = 0; return () => values[index++] ?? otherwise; }
@@ -11,6 +11,33 @@ function example(): Battlefield<string> {
   };
 }
 const from = { row: 1, col: 1 }, to = { row: 2, col: 1 };
+
+test('nonmatching swaps keep the rearranged tiles without removals, refills or regeneration', () => {
+  const field = example(), before = structuredClone(field);
+  const a = { row: 0, col: 0 }, b = { row: 0, col: 1 };
+  const noRandomness = () => { throw new Error('A setup swap must not use randomness'); };
+  const result = moveBattlefield(field, a, b, noRandomness);
+  assert.deepEqual(result.board, [['C', 'B', 'B'], ['C', 'A', 'C'], ['A', 'B', 'A']]);
+  for (const counts of [result.direct, result.generated, result.total]) assert.deepEqual(counts, { count: 0, byType: { A: 0, B: 0, C: 0 } });
+  assert.deepEqual(result.steps, []); assert.equal(result.cascades, 0);
+  assert.equal(result.shuffled, false); assert.equal(result.regeneration, null);
+  assert.deepEqual(moveBattlefield(result, a, b, noRandomness).board, before.board);
+  assert.deepEqual(field, before);
+});
+
+test('NPC move selection prefers matches and falls back to legal swaps on narrow nonmatching boards', () => {
+  const field = createBattlefield({}, rng(1));
+  assert.deepEqual(defaultBattlefieldEngine.possibleMove(field.board), findBattlefieldMove(field.board));
+  for (const board of [[['fire', 'water', 'earth', 'air']], [['fire'], ['water'], ['earth'], ['air']]] as const) {
+    assert.equal(findBattlefieldMove(board), null);
+    const move = defaultBattlefieldEngine.possibleMove(board)!;
+    assert.ok(move);
+    const field = { board: board.map(row => [...row]), config: normalizeBattlefieldOptions({ size: { rows: board.length, cols: board[0].length } }) };
+    const result = moveBattlefield(field, move.from, move.to, () => { throw new Error('No refill expected'); });
+    assert.equal(result.total.count, 0); assert.equal(result.regeneration, null);
+    assert.notDeepEqual(result.board, board);
+  }
+});
 
 test('square size and omitted element types use the complete default set', () => {
   const field = createBattlefield({ size: 6 }, rng(1));

@@ -1,15 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Character, createCharacter, experienceToNextLevel, gainExperience, learnSkill, seedContent } from '@game/core';
+import { Character, createCharacter, experienceToNextLevel, gainExperience, learnSkill, seedEffectSkills, seedContent } from '@game/core';
 import characters from '../src/infrastructure/database/seeds/demo-characters.json';
 
 test('migration contains ten unique level 10 heroes with valid learned skills and remaining points', () => {
   assert.equal(characters.length, 10); assert.equal(new Set(characters.map(c => c.id)).size, 10);
   assert.equal(new Set(characters.map(c => c.templateId)).size, 10);
-  const content = structuredClone(seedContent);
+  const content = structuredClone({ ...seedContent, skills: [...seedContent.skills, ...seedEffectSkills] });
   const experience = Array.from({ length: 9 }, (_, i) => experienceToNextLevel(i + 1, content.balance.progression)).reduce((a, b) => a + b, 0);
   for (const snapshot of characters) {
-    const character: Character = { ...snapshot, skillLevels: Object.fromEntries(Object.entries(snapshot.skillLevels)) };
+    const character = snapshot as unknown as Character;
     const reconstructed = createCharacter(character.id, character.name, content, character.templateId);
     gainExperience(reconstructed, experience, content.balance.progression);
     for (const id of character.learnedSkillIds) if (!reconstructed.learnedSkillIds.includes(id)) learnSkill(reconstructed, id, content);

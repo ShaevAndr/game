@@ -24,6 +24,36 @@ function cast(battle: Battle, id = 'strike', targetId = 'enemy') {
   applyAction(battle, battle.activeId!, { type: 'skill', skillId: id, targetId });
 }
 
+test('a nonmatching swap spends exactly one turn without energy, guard, damage or skill choice', () => {
+  const battle = duel(['ember']);
+  battle.battlefield = { size: { rows: 3, cols: 3 }, elementTypes: ['fire', 'water', 'earth'] };
+  battle.board = [['water', 'earth', 'water'], ['earth', 'fire', 'earth'], ['fire', 'water', 'fire']];
+  battle.fighters[0].skillEnergy = 9;
+  const before = structuredClone(battle);
+  applyAction(battle, 'hero', { type: 'swap', from: { row: 0, col: 0 }, to: { row: 0, col: 1 }, targetId: 'enemy' });
+  assert.deepEqual(battle.board, [['earth', 'water', 'water'], ['earth', 'fire', 'earth'], ['fire', 'water', 'fire']]);
+  assert.equal(battle.turn, before.turn + 1); assert.equal(battle.activeId, 'enemy');
+  assert.equal(battle.phase, 'before'); assert.deepEqual(battle.skillChoices, []);
+  assert.equal(skillEnergy(battle.fighters[0]), 9);
+  assert.equal(battle.fighters[0].guardDefense ?? 0, before.fighters[0].guardDefense ?? 0);
+  assert.deepEqual(battle.fighters.map(fighter => fighter.hp), before.fighters.map(fighter => fighter.hp));
+  assert.equal(battle.pendingBattlefield, undefined); assert.equal(battle.matchPowerBps, undefined);
+  assert.equal(battle.boardMoves?.length, 1); assert.equal(battle.boardMoves[0].total.count, 0);
+  assert.deepEqual(battle.boardMoves[0].steps, []);
+  assert.throws(() => applyAction(battle, 'hero', { type: 'skill', skillId: 'ember', targetId: 'enemy' }), /другого участника/);
+});
+
+test('an NPC can end its turn by rearranging a board with no matching moves', () => {
+  const battle = duel();
+  battle.activeId = 'enemy'; battle.fighters[1].npc = true;
+  battle.battlefield = { size: { rows: 1, cols: 4 }, elementTypes: [...tileTypes] };
+  battle.board = [['fire', 'water', 'earth', 'air']];
+  runNpcTurns(battle);
+  assert.equal(battle.activeId, 'hero'); assert.equal(battle.turn, 2);
+  assert.deepEqual(battle.board, [['water', 'fire', 'earth', 'air']]);
+  assert.equal(skillEnergy(battle.fighters[1]), 0); assert.equal(battle.boardMoves?.[0].total.count, 0);
+});
+
 test('all new templates start with only one physical skill, four unspent points and six field types', () => {
   for (const templateId of [undefined, ...seedContent.characterTemplates.map(template => template.id)]) {
     const character = createCharacter('hero', 'Герой', seedContent, templateId);
@@ -45,7 +75,7 @@ test('only direct energy is available when skills are chosen; cascades are award
   assert.ok(battle.pendingBattlefield);
   assert.equal(battle.fighters[1].hp, 120); // Neither direct nor secondary matches deal damage.
   cast(battle, 'ember');
-  assert.equal(skillEnergy(battle.fighters[0]), 10);
+  assert.equal(skillEnergy(battle.fighters[0]), 9);
   assert.equal(battle.fighters[1].hp, 105); // Base skill power + attack - defense.
   assert.equal(battle.pendingBattlefield, undefined);
   assert.equal(battle.boardMoves?.at(-1)?.continuation, true);
@@ -136,7 +166,7 @@ test('healing is restricted to directly matched types, costs energy and receives
   const battle = duel(['spring']); battle.fighters[0].hp = 60;
   swap(battle, { water: 3 }, { water: 20 });
   cast(battle, 'spring', 'hero');
-  assert.equal(battle.fighters[0].hp, 72); assert.equal(skillEnergy(battle.fighters[0]), 21);
+  assert.equal(battle.fighters[0].hp, 72); assert.equal(skillEnergy(battle.fighters[0]), 20);
 });
 
 test('a potion before the board replaces the skill without replacing the mandatory board move', () => {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Migration, sql } from 'kysely';
-import { seedContent } from '@game/core';
+import { seedContent, consumableEffects } from '@game/core';
 import characters from '../seeds/demo-characters.json';
 
 /** Pre-release v1 baseline. Schema changes belong here until a new release is explicitly started. */
@@ -39,9 +39,11 @@ export const initialMigration: Migration = {
       .addColumn('quantity', 'integer', c => c.notNull())
       .addColumn('equipped_slot', 'varchar(64)')
       .addColumn('quality', 'jsonb')
+      .addColumn('effects', 'jsonb')
       .addColumn('item_level', 'integer', c => c.notNull().defaultTo(1))
       .addColumn('definition_version', 'integer', c => c.notNull().defaultTo(1))
       .addForeignKeyConstraint('item_inventory_owner', ['inventory_id', 'owner_id'], 'inventories', ['id', 'owner_id'])
+      .addCheckConstraint('item_effects_array', sql`effects is null or jsonb_typeof(effects) = 'array'`)
       .addCheckConstraint('item_quantity_positive', sql`quantity > 0`)
       .addCheckConstraint('item_quality_equipment_check', sql`quality is null or (quantity = 1 and jsonb_typeof(quality) = 'object')`)
       .addCheckConstraint('item_level_bounds', sql`item_level between 1 and 1000`)
@@ -59,7 +61,7 @@ export const initialMigration: Migration = {
         const definition = seedContent.items.find(item => item.id === stack.itemId)!;
         for (let remaining = stack.quantity; remaining > 0; remaining -= definition.stackLimit) {
           await db.insertInto('item_instances').values({ id: randomUUID(), owner_id: character.id, inventory_id: character.id,
-            item_id: stack.itemId, quantity: Math.min(remaining, definition.stackLimit), item_level: definition.itemLevel ?? 1, definition_version: definition.version ?? 1 }).execute();
+            item_id: stack.itemId, effects: consumableEffects(definition).length ? JSON.stringify(consumableEffects(definition)) : null, quantity: Math.min(remaining, definition.stackLimit), item_level: definition.itemLevel ?? 1, definition_version: definition.version ?? 1 }).execute();
         }
       }
     }

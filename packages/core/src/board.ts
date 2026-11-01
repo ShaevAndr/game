@@ -16,5 +16,5 @@ export function resolveSwap(board: Board, from: Cell, to: Cell, random = Math.ra
   if (result.regeneration === 'cascade-limit') throw new Error('Превышен предел каскадов');
   const energy = emptyEnergy();
   for (const type of Object.keys(energy) as (keyof typeof energy)[]) energy[type] = result.total.byType[type] ?? 0;
-  return { ...result, energy, count: result.total.count, cascades: result.cascades + 1 };
+  return { ...result, energy, count: result.total.count, cascades: result.steps.length };
 }

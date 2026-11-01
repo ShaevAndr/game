@@ -5,7 +5,7 @@ import {
   defaultItemRanks, defaultItemScalingProfiles, defaultModifierDefinitions, defaultProfessions, defaultRankProfiles,
   defaultStatDefinitions, itemModifierRange, joinBattle, modifierDefinitionSchema, newBattle, previewSkillEffects,
   modifierAllowed, modifierPermissionFields,
-  canMergeInstances,
+  canMergeInstances, equipmentAttributeSources,
   qualityForItem, rankedItemDefinition, seedContent, seedEffectSkills, startBattle,
   type Battle, type Content, type InventoryState, type ModifierDefinition, type Skill, type StatModifierEffect,
 } from '../src';
@@ -59,7 +59,7 @@ test('rank changes affix count; item level changes ranges; legacy quality retain
   assert.ok(quality.affixes.every(affix => affix.profileVersion === 1 && affix.activationChanceBps === 10000));
 });
 
-test('weighted choice has exact slot boundaries, excludes zero weights and samples without replacement', () => {
+test('weighted choice has exact slot boundaries, excludes zero weights and allows repeated affixes', () => {
   const content = catalog(), item = content.items.find(item => item.id === 'iron-sword')!;
   const definition = defaultModifierDefinitions[0];
   content.modifierDefinitions = [
@@ -67,8 +67,20 @@ test('weighted choice has exact slot boundaries, excludes zero weights and sampl
   ];
   const pick = (draw: number) => { let calls = 0; return qualityForItem(item, { mode: 'fixed', rankId: 'fine' }, 1, content, () => calls++ === 0 ? draw : 0); };
   assert.equal(pick(0).affixes[0].effectId, 'a'); assert.equal(pick(1).affixes[0].effectId, 'b'); assert.equal(pick(3).affixes[0].effectId, 'b');
-  assert.deepEqual(qualityForItem(item, { mode: 'fixed', rankId: 'superior' }, 1, content, () => 0).affixes.map(affix => affix.effectId), ['a', 'b']);
-  assert.throws(() => qualityForItem(item, { mode: 'fixed', rankId: 'rare' }, 1, content, () => 0), /Недостаточно/);
+  assert.deepEqual(qualityForItem(item, { mode: 'fixed', rankId: 'superior' }, 1, content, () => 0).affixes.map(affix => affix.effectId), ['a', 'a']);
+  assert.deepEqual(qualityForItem(item, { mode: 'fixed', rankId: 'rare' }, 1, content, () => 0).affixes.map(affix => affix.effectId), ['a', 'a', 'a']);
+  content.modifierDefinitions = [{ ...definition, id: 'only', craftWeight: 1 }];
+  assert.ok(contentSchema.safeParse(content).success);
+  const rolls = [0, 0, 0, 1, 0, 2];
+  const repeated = qualityForItem(item, { mode: 'fixed', rankId: 'rare' }, 1, content, () => rolls.shift()!);
+  assert.deepEqual(repeated.affixes.map(affix => affix.value), [1, 2, 3]);
+  const sources = equipmentAttributeSources({ ownerId: 'hero', inventories: [], items: [{ id: 'repeat', itemId: item.id, ownerId: 'hero', inventoryId: null, quantity: 1, equippedSlot: item.equipSlot!, quality: repeated }] }, content.items);
+  const modifiers = sources.modifiers.filter(modifier => modifier.id.includes(':affix:'));
+  assert.equal(new Set(modifiers.map(modifier => modifier.id)).size, 3);
+  assert.equal(modifiers.reduce((sum, modifier) => sum + modifier.value, 0), 6);
+  content.modifierDefinitions = [];
+  assert.equal(contentSchema.safeParse(content).success, false);
+  assert.throws(() => qualityForItem(item, { mode: 'fixed', rankId: 'fine' }, 1, content, () => 0), /Недостаточно/);
 });
 
 test('scaling handles signed ranges, neutral multipliers and configured caps', () => {
@@ -152,7 +164,7 @@ test('invalid final effect rolls back consumed RNG, first effect, energy and coo
   const battle = fixture(skill); battle.attributeRngState = 0;
   // First refresh replaces the existing group; second new group overflows the cap.
   const target = battle.fighters[0];
-  target.activeEffects = Array.from({ length: 64 }, (_, index) => ({ instanceId: `effect-${index}`, definitionId: 'old', name: 'old', sourceFighterId: 'hero', sourceSkillId: 'old', sourceRank: 1,
+  target.activeEffects = Array.from({ length: 64 }, (_, index) => ({ kind: 'stat_modifier' as const, instanceId: `effect-${index}`, definitionId: 'old', name: 'old', sourceFighterId: 'hero', sourceSkillId: 'old', sourceRank: 1,
     targetFighterId: 'hero', polarity: 'buff', tags: [], dispellable: true, statId: 'strength', operation: 'add_percent', magnitude: 0, unit: 'basis_points', priority: 0,
     remainingTurns: 2, eligibleFromTurn: 2, appliedSequence: index, stackKey: index === 0 ? (skill.effects![0] as StatModifierEffect).stackKey! : `group-${index}`, stacking: 'refresh', stacks: 1, maxStacks: 1 }));
   const before = structuredClone(battle);

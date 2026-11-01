@@ -29,12 +29,13 @@ export const skillEffectSchema = z.discriminatedUnion('kind', [
     durationTurns: z.union([z.number().int().min(1).max(20), effectExpressionSchema]), tags: z.array(id).max(16).optional(), dispellable: z.boolean().optional(),
     stackKey: id.optional(), stacking: z.enum(['refresh', 'replace_if_stronger', 'stack', 'independent']).optional(), maxStacks: z.number().int().min(1).max(20).optional(), priority: integer.optional(),
   }).strict(),
+  z.object({ ...base, kind: z.literal('stun'), durationTurns: z.number().int().min(1).max(3), tags: z.array(id).max(16).optional(), dispellable: z.boolean().optional() }).strict(),
   z.object({ ...base, kind: z.literal('dispel'), polarityToRemove: z.enum(['buff', 'debuff']), maxCount: z.number().int().min(1).max(64), tags: z.array(id).max(16).optional() }).strict(),
   z.object({ ...base, kind: z.literal('damage'), magnitude: effectExpressionSchema, damageType: z.enum(elements), canCrit: z.boolean().optional() }).strict(),
   z.object({ ...base, kind: z.literal('heal'), magnitude: effectExpressionSchema }).strict(),
 ]);
 
-export function validateSkillEffects(skills: { id: string; targeting?: SkillTargeting; effects?: SkillEffect[] }[], definitions: StatDefinition[]): void {
+export function validateSkillEffects(skills: { id: string; targeting?: SkillTargeting; effects?: SkillEffect[] }[], definitions: StatDefinition[], allowConstantHealing = false): void {
   const byId = new Map(definitions.map(definition => [definition.id, definition]));
   const groups = new Map<string, string>();
   for (const skill of skills) {
@@ -49,11 +50,15 @@ export function validateSkillEffects(skills: { id: string; targeting?: SkillTarg
         if (effect.coefficientPerSkillRankBps !== undefined && effect.coefficientBps === undefined) throw new Error('Рост коэффициента требует начальный коэффициент');
         if (effect.coefficientBps !== undefined && effect.coefficientBps + 9 * (effect.coefficientPerSkillRankBps ?? 0) < 0) throw new Error('Отрицательный коэффициент допа');
       }
+      if (effect.kind === 'stun') {
+        if (effect.recipient !== 'selected' || !['enemy_single', 'enemies_all'].includes(skill.targeting.kind)) throw new Error('Стан требует цель-противника');
+        continue;
+      }
       if (effect.kind === 'dispel') continue;
       const expressions = [effect.magnitude, ...(effect.kind === 'stat_modifier' && typeof effect.durationTurns !== 'number' ? [effect.durationTurns] : [])];
       for (const expression of expressions) for (const term of expression.terms ?? []) if (!byId.has(term.statId)) throw new Error(`Неизвестная характеристика эффекта ${term.statId}`);
       if (effect.kind !== 'stat_modifier') {
-        if (effect.magnitude.unit !== 'hp' || !effect.magnitude.terms?.length || (effect.magnitude.min ?? -1) < 0) throw new Error(`Урон и лечение ${skill.id} требуют неотрицательной формулы HP от характеристик`);
+        if (effect.magnitude.unit !== 'hp' || (!effect.magnitude.terms?.length && !(allowConstantHealing && effect.kind === 'heal' && (effect.magnitude.constant ?? -1) >= 0)) || (effect.magnitude.min ?? -1) < 0) throw new Error(`Урон и лечение ${skill.id} требуют неотрицательной формулы HP от характеристик`);
         continue;
       }
       const definition = byId.get(effect.statId);

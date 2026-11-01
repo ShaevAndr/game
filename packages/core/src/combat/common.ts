@@ -3,7 +3,7 @@ import { effectiveStats } from '../skills';
 import { ENERGY_CAP, totalEnergy } from './rules';
 import { projectCharacterAttributes } from '../attributes/character';
 import { addLog } from './log';
-import { endEffectTurn, initializeEffectFighter, removeDeadEffects } from '../effects/lifecycle';
+import { endEffectTurn, initializeEffectFighter, isStunned, removeDeadEffects } from '../effects/lifecycle';
 export { addLog } from './log';
 export { damage } from './damage';
 
@@ -60,24 +60,29 @@ export function finishOrWave(b: Battle): boolean {
   addLog(b, b.winner === null ? 'Ничья' : `Победила команда ${b.winner + 1}`); return true;
 }
 export function nextTurn(b: Battle) {
-  if (b.effectsVersion === 1) {
-    const current = b.fighters.find(fighter => fighter.id === b.activeId);
-    if (current) endEffectTurn(b, current);
-    removeDeadEffects(b);
-  }
-  const currentIndex = b.fighters.findIndex(f => f.id === b.activeId);
-  if (finishOrWave(b)) return;
-  // A wave may replace the enemy but keeps the player roster in order.
-  const index = b.fighters.findIndex(f => f.id === b.activeId);
-  const start = index >= 0 ? index : Math.max(0, currentIndex - 1);
-  for (let i = 1; i <= b.fighters.length; i++) {
-    const next = b.fighters[(start + i) % b.fighters.length];
-    if (next.hp <= 0) continue;
-    next.guardDefense = 0; b.skillChoices = []; b.matchedElements = [];
-    if (b.effectsVersion === 1) { initializeEffectFighter(b, next); next.turnsStarted = (next.turnsStarted ?? 0) + 1; }
-    b.activeId = next.id; b.turn++; b.phase = 'before'; b.usedSkill = false; b.pendingMatch = 0;
-    for (const id of Object.keys(next.cooldowns)) next.cooldowns[id] = Math.max(0, next.cooldowns[id] - 1);
-    addLog(b, `Ход ${b.turn}: ${next.name}`); return;
+  // A stunned turn starts and ends normally, but grants no action or board move.
+  while (true) {
+    if (b.effectsVersion === 1) {
+      const current = b.fighters.find(fighter => fighter.id === b.activeId);
+      if (current) endEffectTurn(b, current);
+      removeDeadEffects(b);
+    }
+    const currentIndex = b.fighters.findIndex(f => f.id === b.activeId);
+    if (finishOrWave(b)) return;
+    // A wave may replace the enemy but keeps the player roster in order.
+    const index = b.fighters.findIndex(f => f.id === b.activeId);
+    const start = index >= 0 ? index : Math.max(0, currentIndex - 1);
+    for (let i = 1; i <= b.fighters.length; i++) {
+      const next = b.fighters[(start + i) % b.fighters.length];
+      if (next.hp <= 0) continue;
+      next.guardDefense = 0; b.skillChoices = []; b.matchedElements = [];
+      if (b.effectsVersion === 1) { initializeEffectFighter(b, next); next.turnsStarted = (next.turnsStarted ?? 0) + 1; }
+      b.activeId = next.id; b.turn++; b.phase = 'before'; b.usedSkill = false; b.pendingMatch = 0;
+      for (const id of Object.keys(next.cooldowns)) next.cooldowns[id] = Math.max(0, next.cooldowns[id] - 1);
+      addLog(b, `Ход ${b.turn}: ${next.name}`);
+      if (isStunned(next)) { addLog(b, `${next.name} оглушён и пропускает ход`); break; }
+      return;
+    }
   }
 }
 export function target(b: Battle, actor: Fighter, id: string, ally = false): Fighter {

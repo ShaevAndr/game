@@ -1,9 +1,9 @@
-import { Battle, Character, ItemQuality, CraftingResult, InventoryResult } from '@game/core';
+import { Battle, Character, ItemQuality, SkillEffect, CraftingResult, InventoryResult } from '@game/core';
 import { ColumnType } from 'kysely';
 
 export interface Tables {
   inventories: { id: string; owner_id: string; name: string; capacity: number; is_primary: boolean };
-  item_instances: { item_level: ColumnType<number, number | undefined, number>; definition_version: ColumnType<number, number | undefined, number>; quality: ColumnType<ItemQuality | null, string | null | undefined, string | null>; id: string; owner_id: string; inventory_id: string | null; item_id: string; quantity: number; equipped_slot: string | null };
+  item_instances: { effects: ColumnType<SkillEffect[] | null, string | null | undefined, string | null>; item_level: ColumnType<number, number | undefined, number>; definition_version: ColumnType<number, number | undefined, number>; quality: ColumnType<ItemQuality | null, string | null | undefined, string | null>; id: string; owner_id: string; inventory_id: string | null; item_id: string; quantity: number; equipped_slot: string | null };
   inventory_operations: { id: string; signature: string; result: ColumnType<InventoryResult | null, string | null, string> };
   crafting_operations: { id: string; signature: string; result: ColumnType<CraftingResult | null, string | null, string> };
   characters: { id: string; data: ColumnType<Character, string, string> };

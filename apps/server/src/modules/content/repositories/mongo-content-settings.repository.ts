@@ -1,5 +1,5 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
-import { Balance, Enemy, seedContent, defaultCombatFormulaRules } from '@game/core';
+import { Balance, Enemy, seedContent, seedEnemySkillSets, defaultCombatFormulaRules } from '@game/core';
 import { MongoDatabase } from '../../../infrastructure/mongo/mongo.service';
 import { ContentSettingsRepository } from '../ports/content-settings.repository';
 
@@ -14,7 +14,7 @@ export class MongoContentSettingsRepository extends ContentSettingsRepository im
     const enemies = this.mongo.db.collection<Enemy>('enemies');
     await enemies.createIndex({ id: 1 }, { unique: true });
     for (const enemy of seedContent.enemies) {
-      await enemies.updateOne({ id: enemy.id }, { $setOnInsert: enemy }, { upsert: true });
+      await enemies.updateOne({ id: enemy.id }, { $setOnInsert: { ...enemy, skillIds: seedEnemySkillSets[enemy.id] ?? enemy.skillIds } }, { upsert: true });
     }
   }
 

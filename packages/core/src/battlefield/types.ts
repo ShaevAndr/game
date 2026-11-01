@@ -23,7 +23,7 @@ export interface BattlefieldMoveReport<T extends string = BattlefieldElement> {
   direct: RemovedElements<T>;
   generated: RemovedElements<T>;
   total: RemovedElements<T>;
-  /** Number of additional reductions after the first match. */
+  /** Number of additional reductions after the first match; zero for a nonmatching swap. */
   cascades: number;
   steps: RemovalStep<T>[];
   shuffled: boolean;

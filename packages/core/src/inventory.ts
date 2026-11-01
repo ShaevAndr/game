@@ -1,17 +1,19 @@
 import { rankedItemDefinition } from './item-progression';
+import type { SkillEffect } from './effects/types';
 import type { ItemQuality } from './item-progression';
 import type { Item, ItemStack, Stats } from './types';
-import { defaultItemGroups, ItemGroup, itemActionNames, ItemActionId } from './items';
+import { consumableEffects, defaultItemGroups, ItemGroup, itemActionNames, ItemActionId } from './items';
 import { legacyEquipmentAttributes } from './attributes/equipment';
 import type { ScaledEquipmentBonus, StatDefinition, StatModifier } from './attributes/types';
 
 export interface InventoryContainer { id: string; ownerId: string; name: string; capacity: number; primary: boolean }
-export interface ItemInstance { itemLevel?: number; definitionVersion?: number; quality?: ItemQuality; id: string; ownerId: string; inventoryId: string | null; itemId: string; quantity: number; equippedSlot: string | null }
+export interface ItemInstance { effects?: SkillEffect[]; itemLevel?: number; definitionVersion?: number; quality?: ItemQuality; id: string; ownerId: string; inventoryId: string | null; itemId: string; quantity: number; equippedSlot: string | null }
 export interface InventoryState { ownerId: string; inventories: InventoryContainer[]; items: ItemInstance[] }
 export function canMergeInstances(source: ItemInstance, target: ItemInstance, stackLimit: number): boolean {
   return source.id !== target.id && !source.equippedSlot && !target.equippedSlot
     && source.ownerId === target.ownerId && source.inventoryId === target.inventoryId && source.itemId === target.itemId
     && (source.itemLevel ?? 1) === (target.itemLevel ?? 1) && (source.definitionVersion ?? 1) === (target.definitionVersion ?? 1)
+    && JSON.stringify(source.effects) === JSON.stringify(target.effects)
     && JSON.stringify(source.quality) === JSON.stringify(target.quality) && source.quantity + target.quantity <= stackLimit;
 }
 export interface InventoryView extends InventoryState { items: (ItemInstance & { actions: AvailableItemAction[] })[]; definitions: Item[]; groups: ItemGroup[]; statDefinitions?: StatDefinition[] }
@@ -30,9 +32,14 @@ function positive(value: number) {
 }
 export function backpackStacks(state: InventoryState): ItemStack[] {
   const primary = state.inventories.find(inventory => inventory.primary);
-  const totals = new Map<string, number>();
-  for (const item of state.items.filter(item => item.inventoryId === primary?.id && !item.equippedSlot)) totals.set(item.itemId, (totals.get(item.itemId) ?? 0) + item.quantity);
-  return [...totals].map(([itemId, quantity]) => ({ itemId, quantity }));
+  const totals = new Map<string, ItemStack>();
+  for (const item of state.items.filter(item => item.inventoryId === primary?.id && !item.equippedSlot)) {
+    const key = JSON.stringify([item.itemId, item.effects]);
+    const stack = totals.get(key);
+    if (stack) stack.quantity += item.quantity;
+    else totals.set(key, { itemId: item.itemId, quantity: item.quantity, ...(item.effects ? { effects: structuredClone(item.effects) } : {}) });
+  }
+  return [...totals.values()];
 }
 export function equipmentBonuses(state: InventoryState, definitions: Item[]): Partial<Stats> {
   const result: Partial<Stats> = {};
@@ -110,7 +117,7 @@ export function applyInventoryCommand(input: InventoryState[], command: Inventor
     if (inventoryId === undefined || (inventoryId && container(inventoryId).state.ownerId !== state.ownerId)) throw new Error('Инвентарь не принадлежит получателю');
     for (let remaining = command.quantity; remaining > 0;) {
       const quantity = Math.min(remaining, item.stackLimit);
-      const instance: ItemInstance = { id: newId(), ownerId: state.ownerId, inventoryId, itemId: item.id, itemLevel: item.itemLevel ?? 1, definitionVersion: item.version ?? 1, quantity, equippedSlot: null };
+      const instance: ItemInstance = { id: newId(), ownerId: state.ownerId, inventoryId, itemId: item.id, itemLevel: item.itemLevel ?? 1, definitionVersion: item.version ?? 1, quantity, equippedSlot: null, ...(consumableEffects(item).length ? { effects: consumableEffects(item) } : {}) };
       state.items.push(instance); result.itemIds.push(instance.id); remaining -= quantity;
     }
   } else {

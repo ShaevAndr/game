@@ -33,10 +33,12 @@ test('the single v1 init creates the complete schema, seeds heroes and preserves
     for (const character of initial) for (const stack of character.data.inventory) {
       const instances = items.filter(item => item.owner_id === character.id && item.item_id === stack.itemId);
       assert.equal(instances.reduce((sum, item) => sum + item.quantity, 0), stack.quantity);
+      if (stack.effects) assert.ok(instances.every(item => JSON.stringify(item.effects) === JSON.stringify(stack.effects)));
     }
     const firstItem = items[0];
     for (const item_level of [0, 1001]) await assert.rejects(database.sql.updateTable('item_instances').set({ item_level }).where('id', '=', firstItem.id).execute());
     await assert.rejects(database.sql.updateTable('item_instances').set({ definition_version: 0 }).where('id', '=', firstItem.id).execute());
+    await assert.rejects(database.sql.updateTable('item_instances').set({ effects: '{}' }).where('id', '=', firstItem.id).execute());
     await assert.rejects(database.sql.updateTable('item_instances').set({ quantity: 0 }).where('id', '=', firstItem.id).execute());
     await assert.rejects(database.sql.updateTable('item_instances').set({ quality: '{}', quantity: 2 }).where('id', '=', firstItem.id).execute());
     await assert.rejects(database.sql.insertInto('inventories').values({ id: randomUUID(), owner_id: initial[0].id, name: 'Повторный основной', capacity: 50, is_primary: true }).execute());

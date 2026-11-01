@@ -7,5 +7,5 @@ export * from './move';
 import { BattlefieldEngine } from './types';
 import { createBattlefield } from './generation';
 import { moveBattlefield } from './move';
-import { findBattlefieldMove } from './matches';
-export const defaultBattlefieldEngine: BattlefieldEngine = { create: createBattlefield, move: moveBattlefield, possibleMove: findBattlefieldMove };
+import { findBattlefieldSwap } from './matches';
+export const defaultBattlefieldEngine: BattlefieldEngine = { create: createBattlefield, move: moveBattlefield, possibleMove: findBattlefieldSwap };

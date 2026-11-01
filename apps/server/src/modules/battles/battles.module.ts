@@ -17,5 +17,6 @@ import { BattlesGateway } from './http/battles.gateway';
   controllers: [BattlesController],
   providers: [BattlesService, BattlesGateway, { provide: BattleEvents, useExisting: BattlesGateway },
     { provide: BattlesRepository, useClass: PostgresBattlesRepository }],
+  exports: [BattlesService],
 })
 export class BattlesModule {}

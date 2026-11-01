@@ -6,6 +6,7 @@ import { Character, InventoryResult, InventoryState, createCharacter, seedConten
 import { CharactersService } from '../src/modules/characters/application/characters.service';
 import { CharactersRepository } from '../src/modules/characters/ports/characters.repository';
 import { ContentService } from '../src/modules/content/application/content.service';
+import { BattlesService } from '../src/modules/battles/application/battles.service';
 import { InventoryService } from '../src/modules/inventory/application/inventory.service';
 import { InventoryRepository } from '../src/modules/inventory/ports/inventory.repository';
 import { SkillsService } from '../src/modules/skills/application/skills.service';
@@ -16,8 +17,9 @@ function fixture() {
   type State = {
     characters: Record<string, Character>; inventories: Record<string, InventoryState>;
     receipts: Record<string, { signature: string; result: InventoryResult | null }>;
+    activeCharacters: string[];
   };
-  let state: State = { characters: {}, inventories: {}, receipts: {} };
+  let state: State = { characters: {}, inventories: {}, receipts: {}, activeCharacters: [] };
   let failSave = false;
   const drafts = new Map<TransactionContext, State>();
   const draft = (context: TransactionContext) => {
@@ -63,7 +65,9 @@ function fixture() {
       return draft(context).receipts[id] ??= { signature, result: null };
     },
     async finishOperation(id, result, context) { draft(context).receipts[id].result = structuredClone(result); },
-  }, characters, content, skills);
+  }, characters, content, skills, {
+    isCharacterInActiveBattle: async (ownerId: string, context: TransactionContext) => draft(context).activeCharacters.includes(ownerId),
+  } as unknown as BattlesService);
   const seed = (name: string) => {
     const hero = createCharacter(randomUUID(), name, seedContent);
     state.characters[hero.id] = hero;
@@ -98,6 +102,33 @@ test('inventory service persists equip, replacement and unequip with character p
   assert.ok((await f.inventory.get(hero.id)).items.every(item => !item.equippedSlot));
   assert.equal(f.state().characters[hero.id].equipmentBonuses?.attack ?? 0, 0);
   assert.equal(f.state().characters[hero.id].inventory.find(stack => stack.itemId === 'iron-sword')?.quantity, 2);
+});
+
+test('active battles block equip, replacement and unequip; views explain the block and rejected receipts roll back', async () => {
+  const f = fixture(), hero = f.seed('Участник'), other = f.seed('Вне боя');
+  const sword = (await f.inventory.get(hero.id)).items.find(item => item.itemId === 'iron-sword')!;
+  const equipId = randomUUID();
+  const equipped = await f.inventory.execute({ type: 'equip', instanceId: sword.id }, equipId);
+  const received = await f.inventory.receive(hero.id, 'iron-sword', 1, randomUUID());
+  const replacementId = received.itemIds[0];
+  f.state().activeCharacters.push(hero.id);
+  const view = await f.inventory.get(hero.id);
+  for (const [instanceId, actionId] of [[sword.id, 'unequip'], [replacementId, 'equip']]) {
+    const action = view.items.find(item => item.id === instanceId)!.actions.find(action => action.id === actionId)!;
+    assert.equal(action.enabled, false); assert.match(action.reason!, /активного боя/);
+  }
+  const before = structuredClone(f.state()), failedId = randomUUID();
+  await assert.rejects(f.inventory.execute({ type: 'unequip', instanceId: sword.id }, failedId), error => (error as { getStatus(): number }).getStatus() === 409);
+  await assert.rejects(f.inventory.execute({ type: 'equip', instanceId: replacementId }, randomUUID()), /активного боя/);
+  assert.deepEqual(f.state(), before);
+  // Returning a committed receipt does not perform a new equipment mutation.
+  assert.deepEqual(await f.inventory.execute({ type: 'equip', instanceId: sword.id }, equipId), equipped);
+  assert.deepEqual(f.state(), before);
+  const otherSword = (await f.inventory.get(other.id)).items.find(item => item.itemId === 'iron-sword')!;
+  await f.inventory.execute({ type: 'equip', instanceId: otherSword.id }, randomUUID());
+  f.state().activeCharacters = [];
+  await f.inventory.execute({ type: 'unequip', instanceId: sword.id }, failedId);
+  assert.equal((await f.inventory.get(hero.id)).items.find(item => item.id === sword.id)!.equippedSlot, null);
 });
 
 test('inventory service persists transfers for both owners and replays deletion without double consumption', async () => {

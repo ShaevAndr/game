@@ -26,7 +26,7 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, animatin
     else if (!choosing && dialog.current?.open) dialog.current.close();
   }, [choosing]);
   const lastMove = [...(battle.boardMoves ?? [])].reverse().find(move => move.actorId === characterId) ?? battle.boardMoves?.[battle.boardMoves.length - 1];
-  const phaseLabel = animating ? fieldMotion ? fieldMotion.stage === 'remove' ? 'Фишки исчезают…' : fieldMotion.stage === 'fall' ? 'Фишки падают…' : 'Перестановка…' : active?.npc ? 'Бот готовит ход…' : 'Ход выполняется…' : battle.status === 'active' ? battle.phase === 'choose' ? 'Выбери навык' : 'Собери три в ряд' : 'Общее поле';
+  const phaseLabel = animating ? fieldMotion ? fieldMotion.stage === 'remove' ? 'Фишки исчезают…' : fieldMotion.stage === 'fall' ? 'Фишки падают…' : 'Перестановка…' : active?.npc ? 'Бот готовит ход…' : 'Ход выполняется…' : battle.status === 'active' ? battle.phase === 'choose' ? 'Выбери навык' : 'Переставь соседние фишки' : 'Общее поле';
   return <div className="main-column">
     <section className="panel battle-top">
       <div className="section-heading"><div>
