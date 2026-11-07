@@ -4,6 +4,7 @@ import { ENERGY_CAP, totalEnergy } from './rules';
 import { projectCharacterAttributes } from '../attributes/character';
 import { addLog } from './log';
 import { endEffectTurn, initializeEffectFighter, isStunned, removeDeadEffects } from '../effects/lifecycle';
+import { battleBelt } from './belt';
 export { addLog } from './log';
 export { damage } from './damage';
 
@@ -12,7 +13,7 @@ export function characterFighter(character: Character, team: number, content: Co
   const stats = effectiveStats(character); stats.maxEnergy = Math.min(ENERGY_CAP, stats.maxEnergy);
   const energy = emptyEnergy();
   for (const type of tileTypes) energy[type] = Math.min(ENERGY_CAP, Math.max(0, character.energy[type] ?? 0));
-  return { ...(content.balance.formulas ? { combatLevel: character.level } : {}), id: character.id, characterId: character.id, name: character.name, team, npc: false, stats, hp: stats.maxHp, energy, skillEnergy: totalEnergy(energy), guardDefense: 0, inventory: structuredClone(character.inventory), cooldowns: {}, skillLevels: { ...character.skillLevels }, skillIds: content.skills.filter(s => character.learnedSkillIds.includes(s.id) || s.learning?.starter).map(s => s.id),
+  return { ...(content.balance.formulas ? { combatLevel: character.level } : {}), id: character.id, characterId: character.id, name: character.name, team, npc: false, stats, hp: stats.maxHp, energy, skillEnergy: totalEnergy(energy), guardDefense: 0, inventory: battleBelt(character.inventory, content), cooldowns: {}, skillLevels: { ...character.skillLevels }, skillIds: content.skills.filter(s => character.learnedSkillIds.includes(s.id) || s.learning?.starter).map(s => s.id),
     ...(content.statDefinitions && character.attributes ? { attributes: structuredClone(character.attributes), attributeState: { ...(content.balance.formulas ? { level: character.level } : {}), baseAttributes: { ...character.baseAttributes }, equipmentModifiers: structuredClone(character.equipmentModifiers ?? []), equipmentScaling: structuredClone(character.equipmentScaling ?? []), temporaryModifiers: [] } } : {}) };
 }
 export function spawnWave(b: Battle) {
@@ -34,22 +35,23 @@ export function joinBattle(b: Battle, character: Character, team: number) {
   if (b.fighters.filter(f => f.team === team).length >= limit) throw new Error('Команда заполнена');
   b.fighters.push(characterFighter(character, team, b.content)); addLog(b, `${character.name} вступает в команду ${team + 1}`);
 }
-export function startBattle(b: Battle) {
+export function startBattle(b: Battle, random: () => number = Math.random) {
   if (b.status !== 'waiting') throw new Error('Бой уже начался');
   if (b.kind === 'bot') {
     if (b.fighters.length !== 1 || b.fighters[0].npc || b.fighters[0].team !== 0) throw new Error('Для боя с ботом нужен один игрок');
     const hero = b.fighters[0];
-    b.fighters.push({ ...(hero.combatLevel ? { combatLevel: hero.combatLevel } : {}), id: 'bot-opponent', name: `Бот: ${hero.name}`, team: 1, npc: true, stats: { ...hero.stats }, hp: hero.stats.maxHp, energy: emptyEnergy(), skillEnergy: 0, guardDefense: 0, inventory: [], cooldowns: {}, skillIds: [...hero.skillIds], skillLevels: { ...hero.skillLevels }, ...(hero.attributes ? { attributes: structuredClone(hero.attributes), attributeState: structuredClone(hero.attributeState) } : {}) });
+    b.fighters.push({ ...(hero.combatLevel ? { combatLevel: hero.combatLevel } : {}), id: 'bot-opponent', name: `Бот: ${hero.name}`, team: 1, npc: true, stats: { ...hero.stats }, hp: hero.stats.maxHp, energy: emptyEnergy(), skillEnergy: 0, guardDefense: 0, inventory: [], equipment: structuredClone(hero.equipment ?? []), backpack: [], cooldowns: {}, skillIds: [...hero.skillIds], skillLevels: { ...hero.skillLevels }, ...(hero.attributes ? { attributes: structuredClone(hero.attributes), attributeState: structuredClone(hero.attributeState) } : {}) });
     addLog(b, 'Бот готов: характеристики и навыки соответствуют вашему герою.');
   }
   if (b.kind === 'dungeon') spawnWave(b);
   if (!b.fighters.some(f => f.team === 0) || !b.fighters.some(f => f.team === 1)) throw new Error('Нужен хотя бы один участник в каждой команде');
   // Interleave teams so a full party cannot act repeatedly before its opponent.
-  const teams = [b.fighters.filter(f => f.team === 0), b.fighters.filter(f => f.team === 1)];
+  const firstTeam = random() < 0.5 ? 0 : 1;
+  const teams = [b.fighters.filter(f => f.team === firstTeam), b.fighters.filter(f => f.team !== firstTeam)];
   b.fighters = Array.from({ length: Math.max(...teams.map(t => t.length)) }, (_, i) => teams.flatMap(t => t[i] ? [t[i]] : [])).flat();
   b.status = 'active'; b.turn = 1; b.activeId = b.fighters[0].id; b.phase = 'before'; b.usedSkill = false; b.pendingMatch = 0;
   if (b.effectsVersion === 1) { for (const fighter of b.fighters) initializeEffectFighter(b, fighter); b.fighters[0].turnsStarted = 1; }
-  addLog(b, `Бой начался. Ход: ${b.fighters[0].name}`);
+  addLog(b, `Жеребьёвка: первой ходит команда ${firstTeam + 1}. Бой начался. Ход: ${b.fighters[0].name}`);
 }
 export function finishOrWave(b: Battle): boolean {
   const livingTeams = new Set(b.fighters.filter(f => f.hp > 0).map(f => f.team));
@@ -57,6 +59,7 @@ export function finishOrWave(b: Battle): boolean {
   if (b.kind === 'dungeon' && livingTeams.has(0) && b.wave < b.totalWaves) { b.wave++; spawnWave(b); return false; }
   b.status = 'finished'; b.winner = [...livingTeams][0] ?? null; b.activeId = null;
   b.skillChoices = []; b.matchedElements = [];
+  delete b.pendingBattlefield; delete b.matchPowerBps;
   addLog(b, b.winner === null ? 'Ничья' : `Победила команда ${b.winner + 1}`); return true;
 }
 export function nextTurn(b: Battle) {

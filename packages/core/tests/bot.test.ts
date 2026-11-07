@@ -5,7 +5,7 @@ import { fieldWithMatch, match } from './helpers/combat';
 
 function botBattle() {
   const character = createCharacter('hero', 'Герой', seedContent, 'pyromancer');
-  const battle = newBattle('test', 'Бот', 'bot', 'on-match', character, seedContent); startBattle(battle); return battle;
+  const battle = newBattle('test', 'Бот', 'bot', 'on-match', character, seedContent); startBattle(battle, () => 0); return battle;
 }
 test('bot mirrors the hero without sharing mutable state or character identity', () => {
   const battle = botBattle(), [hero, bot] = battle.fighters;

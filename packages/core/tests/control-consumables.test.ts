@@ -19,7 +19,7 @@ function fixture() {
   hero.learnedSkillIds = content.skills.map(skill => skill.id);
   hero.skillLevels = Object.fromEntries(hero.learnedSkillIds.map(id => [id, 1]));
   const battle = newBattle('control', 'Контроль', 'duel', 'on-match', hero, content);
-  joinBattle(battle, enemy, 1); startBattle(battle); battle.attributeRngState = 0;
+  joinBattle(battle, enemy, 1); startBattle(battle, () => 0); battle.attributeRngState = 0;
   return battle;
 }
 function guaranteed(battle: Battle): Skill {
@@ -107,7 +107,7 @@ test('crafted potion preserves its concrete effects through reload and later cat
   content.items.find(item => item.id === 'potion')!.effects![0] = { id: 'heal', kind: 'heal', recipient: 'caster', magnitude: { unit: 'hp', constant: 999, min: 0 } };
   assert.equal(canMergeInstances(bottle, { ...bottle, id: 'other', effects: content.items.find(item => item.id === 'potion')!.effects }, 99), false);
   const hero = createCharacter('hero', 'Герой', content); hero.inventory = backpackStacks(restored);
-  const battle = newBattle('potion', 'Зелье', 'bot', 'on-match', hero, content); startBattle(battle);
+  const battle = newBattle('potion', 'Зелье', 'bot', 'on-match', hero, content); startBattle(battle, () => 0);
   battle.fighters[0].hp = 30;
   applyAction(battle, 'hero', { type: 'item', itemId: 'potion' });
   assert.equal(battle.fighters[0].hp, 65); assert.equal(battle.usedSkill, true); assert.equal(battle.phase, 'before');
@@ -178,7 +178,7 @@ test('an excessive automatic stun chain fails instead of leaving a battle stuck 
   control.cost = 3; control.cooldown = 0;
   Object.assign(control.effects![0], { activationChanceBps: 10000, maxChanceBps: 10000, chancePerSkillRankBps: 0 });
   const hero = createCharacter('hero', 'Герой', content); hero.learnedSkillIds.push(control.id);
-  const battle = newBattle('chain', 'Цепочка контроля', 'bot', 'on-match', hero, content); startBattle(battle);
+  const battle = newBattle('chain', 'Цепочка контроля', 'bot', 'on-match', hero, content); startBattle(battle, () => 0);
   const bot = battle.fighters[1]; bot.skillIds = [control.id]; battle.activeId = bot.id;
   assert.throws(() => runNpcTurns(battle, fieldWithMatch('water')), /предел автоматических ходов/);
 });

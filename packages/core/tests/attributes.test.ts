@@ -70,15 +70,15 @@ test('HP changes clamp current health without free healing or resurrection', () 
 
 test('new leveling gives five unspent points and allocation is atomic', () => {
   let hero = createCharacter('hero', 'Герой', content);
-  assert.equal(hero.attributePoints, 0);
-  gainExperience(hero, 100, content.balance.progression);
   assert.equal(hero.attributePoints, 5);
+  gainExperience(hero, 100, content.balance.progression);
+  assert.equal(hero.attributePoints, 10);
   assert.deepEqual(hero.baseAttributes, baseAttributes);
   const before = structuredClone(hero);
-  assert.throws(() => allocateAttributes(hero, { strength: 6 }, content), /Недостаточно/);
+  assert.throws(() => allocateAttributes(hero, { strength: 11 }, content), /Недостаточно/);
   assert.deepEqual(hero, before);
   hero = allocateAttributes(hero, { strength: 3, vitality: 2 }, content);
-  assert.equal(hero.attributePoints, 0); assert.equal(hero.baseAttributes?.strength, 13);
+  assert.equal(hero.attributePoints, 5); assert.equal(hero.baseAttributes?.strength, 13);
   assert.equal(hero.attributes?.base.maxHp, 144);
   assert.equal(hero.attributeRevision, 2);
   assert.throws(() => allocateAttributes(hero, { physicalPower: 1 }, content), /первичная/);
@@ -88,7 +88,7 @@ test('old heroes are recalculated with level points and retain their progress; r
   const legacy = createCharacter('legacy', 'Старый герой', seedContent);
   legacy.level = 10; legacy.experience = 34; legacy.stats.maxHp = 999;
   const hero = normalizeCharacter(legacy, content);
-  assert.equal(hero.attributePoints, 45); assert.equal(hero.stats.maxHp, 120);
+  assert.equal(hero.attributePoints, 50); assert.equal(hero.stats.maxHp, 120);
   assert.equal(hero.experience, 34); assert.equal(hero.level, 10);
   assert.deepEqual(hero.inventory, legacy.inventory);
   assert.deepEqual(hero.skillLevels, legacy.skillLevels);
@@ -113,7 +113,7 @@ test('registry rejects cycles, unknown references, duplicate IDs, bad units and 
 
 test('magic uses magic power and its own resistance; battle RNG survives a snapshot round trip', () => {
   const hero = createCharacter('hero', 'Герой', content), battle = newBattle('battle', 'Проверка', 'bot', 'on-match', hero, content);
-  startBattle(battle);
+  startBattle(battle, () => 0);
   const [actor, victim] = battle.fighters;
   replaceFighterModifiers(actor, [modifier('no-crit', 'criticalChanceBps', 'set', 0), modifier('magic', 'magicPower', 'set', 20)], definitions);
   replaceFighterModifiers(victim, [modifier('fire-protection', 'fireResistance', 'add_flat', 10)], definitions);

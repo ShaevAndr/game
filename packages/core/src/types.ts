@@ -5,6 +5,7 @@ import { itemRankSchema, professionSchema, rankProfileSchema, modifierDefinition
 import type { ItemRank, CraftingProfession, RankProfile, ModifierDefinition } from './item-progression';
 import { elements, tileTypes, MAX_FIELD_SIDE } from './battlefield/types';
 import type { BattlefieldConfig, BattlefieldMoveEvent } from './battlefield/types';
+import type { ItemInstance } from './inventory';
 import { normalizeBattlefieldOptions } from './battlefield/config';
 export { elements, tileTypes } from './battlefield/types';
 import { itemDefinitionSchema, itemGroupSchema, defaultItemGroups } from './items';
@@ -24,7 +25,7 @@ export type Energy = Record<Element, number> & { defense?: number };
 export const emptyEnergy = (): Energy => ({ fire: 0, water: 0, earth: 0, air: 0, physical: 0, defense: 0 });
 export interface Stats { maxHp: number; attack: number; defense: number; maxEnergy: number }
 export type Item = ItemDefinition;
-export interface ItemStack { itemId: string; quantity: number; effects?: SkillEffect[] }
+export interface ItemStack { itemId: string; quantity: number; effects?: SkillEffect[]; instanceId?: string }
 export interface Character { id: string; name: string; templateId?: string; level: number; experience: number; skillPoints: number; learnedSkillIds: string[]; skillLevels?: Record<string, number>; equipmentBonuses?: Partial<Stats>; stats: Stats; energy: Energy; inventory: ItemStack[]; createdAt: string;
   attributeVersion?: 1; baseAttributes?: Record<string, number>; attributePoints?: number; attributeRevision?: number; attributes?: AttributeCalculation;
   craftingProfessionXp?: Record<string, number>;
@@ -143,6 +144,7 @@ export const rules = ['on-match'] as const;
 export type Rule = typeof rules[number];
 export type BattleKind = 'duel' | 'bot' | 'team' | 'dungeon';
 export interface Fighter { combatLevel?: number; id: string; characterId?: string; name: string; team: number; npc: boolean; stats: Stats; hp: number; energy: Energy; skillEnergy?: number; inventory: ItemStack[]; cooldowns: Record<string, number>; skillIds: string[]; skillLevels?: Record<string, number>; guardDefense?: number;
+  equipment?: ItemInstance[]; backpack?: ItemInstance[]; surrendered?: boolean;
   attributes?: AttributeCalculation; attributeState?: { level?: number; baseAttributes: Record<string, number>; permanentModifiers?: StatModifier[]; equipmentModifiers: StatModifier[]; equipmentScaling: ScaledEquipmentBonus[]; temporaryModifiers: StatModifier[] };
   activeEffects?: ActiveEffect[]; turnsStarted?: number;
 }
@@ -163,6 +165,7 @@ export interface Battle {
   wave: number; totalWaves: number; winner: number | null; log: string[]; content: Content; createdAt: string;
   rewards?: { characterId: string; experience: number; levelsGained: number }[];
   playback?: BattleFrame[];
+  turnDurationSeconds?: number; turnDeadlineAt?: number; serverTime?: number;
 }
 /** Committed presentation checkpoints; never accepted as commands from the client. */
 export type BattleFrame = Pick<Battle, 'board' | 'fighters' | 'activeId' | 'turn' | 'phase' | 'status' | 'usedSkill' | 'pendingMatch' | 'matchPowerBps' | 'matchedElements' | 'skillChoices' | 'boardMoves' | 'log' | 'wave' | 'winner'>;
@@ -181,7 +184,8 @@ export const actionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('swap'), from: cellSchema, to: cellSchema, targetId: z.string().max(80).default('') }).strict(),
   z.object({ type: z.literal('skill'), skillId: z.string().max(80), targetId: z.string().max(80) }).strict(),
   z.object({ type: z.literal('end') }).strict(),
-  z.object({ type: z.literal('item'), itemId: z.string().max(80) }).strict(),
+  z.object({ type: z.literal('surrender') }).strict(),
+  z.object({ type: z.literal('item'), itemId: z.string().max(80), instanceId: z.string().uuid().optional() }).strict(),
 ]);
 export const commandSchema = z.object({ characterId: z.string().uuid(), version: z.number().int().nonnegative(), action: actionSchema }).strict();
 export type Action = z.infer<typeof actionSchema>;

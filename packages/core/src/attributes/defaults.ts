@@ -28,4 +28,5 @@ export const defaultStatDefinitions: StatDefinition[] = [
   derived('guardPerCell', 'Защита за клетку', 'points_per_cell', [['physicalResistance', 10000], ['vitality', 7000]], 32),
 ];
 export const ATTRIBUTE_POINTS_PER_LEVEL = 5;
+export const STARTING_ATTRIBUTE_POINTS = 5;
 export const DEFAULT_WEAPON_SCALING_BPS = 500;

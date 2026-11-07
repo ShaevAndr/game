@@ -21,7 +21,7 @@ const count = (state: InventoryState[], itemId = 'iron-ore') => state.flatMap(ow
 test('skill grants are idempotent, cost no points and never upgrade an existing skill', () => {
   const character = hero();
   assert.equal(grantSkill(character, 'ember', seedContent), true);
-  assert.equal(character.skillPoints, 4); assert.equal(skillLevel(character, 'ember'), 1);
+  assert.equal(character.skillPoints, 2); assert.equal(skillLevel(character, 'ember'), 1);
   assert.equal(grantSkill(character, 'ember', seedContent), false);
   assert.equal(character.learnedSkillIds.filter(id => id === 'ember').length, 1);
 });
@@ -45,11 +45,11 @@ test('unlearned or unaffordable upgrades do not change the character', () => {
 });
 
 test('legacy learned skills become rank one and new battles freeze ranks and equipment bonuses', () => {
-  const character = hero(); delete character.skillLevels;
+  const character = hero(); character.skillPoints = 3; delete character.skillLevels;
   const normalized = normalizeCharacter(character, seedContent);
   assert.equal(normalized.skillLevels?.strike, 1);
   normalized.equipmentBonuses = { attack: 3 }; upgradeSkill(normalized, 'strike', seedContent);
-  const battle = newBattle('battle', 'Тест', 'bot', 'on-match', normalized, seedContent); startBattle(battle);
+  const battle = newBattle('battle', 'Тест', 'bot', 'on-match', normalized, seedContent); startBattle(battle, () => 0);
   upgradeSkill(normalized, 'strike', seedContent);
   assert.equal(battle.fighters[0].skillLevels?.strike, 2);
   assert.equal(battle.fighters[1].skillLevels?.strike, 2);
@@ -165,7 +165,7 @@ test('receiving respects stack limits and invalid quantities cannot mutate state
 });
 
 test('weapons and resources cannot be consumed as healing potions in battle', () => {
-  const battle = newBattle('battle', 'Тест', 'bot', 'on-match', hero(), seedContent); startBattle(battle);
+  const battle = newBattle('battle', 'Тест', 'bot', 'on-match', hero(), seedContent); startBattle(battle, () => 0);
   battle.fighters[0].hp = 60;
   const before = structuredClone(battle);
   assert.throws(() => applyAction(battle, 'hero', { type: 'item', itemId: 'iron-sword' }), /недоступен/);
@@ -178,9 +178,9 @@ test('new potions and custom skill growth work from catalog data', () => {
   content.items.push({ id: 'minor-potion', name: 'Малое зелье', description: '', groupId: 'potions', stackLimit: 10, heal: 9 });
   const character = hero();
   upgradeSkill(character, 'strike', content);
-  assert.equal(character.skillPoints, 2); assert.equal(skillPower(content.skills[0], 2), content.skills[0].power + 7);
+  assert.equal(character.skillPoints, 0); assert.equal(skillPower(content.skills[0], 2), content.skills[0].power + 7);
   character.inventory.push({ itemId: 'minor-potion', quantity: 2 });
-  const battle = newBattle('battle', 'Тест', 'bot', 'on-match', character, content); startBattle(battle);
+  const battle = newBattle('battle', 'Тест', 'bot', 'on-match', character, content); startBattle(battle, () => 0);
   battle.fighters[0].hp = 30;
   applyAction(battle, character.id, { type: 'item', itemId: 'minor-potion' });
   assert.equal(battle.fighters[0].hp, 39);

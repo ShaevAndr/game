@@ -6,7 +6,7 @@ import { Character, InventoryResult, InventoryState, createCharacter, seedConten
 import { CharactersService } from '../src/modules/characters/application/characters.service';
 import { CharactersRepository } from '../src/modules/characters/ports/characters.repository';
 import { ContentService } from '../src/modules/content/application/content.service';
-import { BattlesService } from '../src/modules/battles/application/battles.service';
+import { BattleParticipationService } from '../src/modules/battles/application/battle-participation.service';
 import { InventoryService } from '../src/modules/inventory/application/inventory.service';
 import { InventoryRepository } from '../src/modules/inventory/ports/inventory.repository';
 import { SkillsService } from '../src/modules/skills/application/skills.service';
@@ -67,7 +67,7 @@ function fixture() {
     async finishOperation(id, result, context) { draft(context).receipts[id].result = structuredClone(result); },
   }, characters, content, skills, {
     isCharacterInActiveBattle: async (ownerId: string, context: TransactionContext) => draft(context).activeCharacters.includes(ownerId),
-  } as unknown as BattlesService);
+  } as unknown as BattleParticipationService);
   const seed = (name: string) => {
     const hero = createCharacter(randomUUID(), name, seedContent);
     state.characters[hero.id] = hero;

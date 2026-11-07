@@ -58,5 +58,5 @@ export function learnSkill(character: Character, skillId: string, content: Conte
 }
 export function victoryRecipients(battle: Battle): string[] {
   if (battle.status !== 'finished' || battle.winner === null) return [];
-  return [...new Set(battle.fighters.filter(f => !f.npc && f.characterId && f.team === battle.winner).map(f => f.characterId!))].sort();
+  return [...new Set(battle.fighters.filter(f => !f.npc && !f.surrendered && f.characterId && f.team === battle.winner).map(f => f.characterId!))].sort();
 }

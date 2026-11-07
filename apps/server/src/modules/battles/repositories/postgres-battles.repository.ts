@@ -18,11 +18,19 @@ export class PostgresBattlesRepository extends BattlesRepository {
   async hasActiveCharacter(characterId: string, context?: TransactionContext) {
     const match = JSON.stringify({ status: 'active', fighters: [{ characterId }] });
     const row = await this.db.session(context).selectFrom('battles').select('id')
-      .where(sql<boolean>`data @> ${match}::jsonb`).limit(1).executeTakeFirst();
+      .where(sql<boolean>`data @> ${match}::jsonb`)
+      .where(sql<boolean>`EXISTS (SELECT 1 FROM jsonb_array_elements(data->'fighters') AS fighter
+        WHERE fighter->>'characterId' = ${characterId} AND COALESCE((fighter->>'surrendered')::boolean, false) = false)`)
+      .limit(1).executeTakeFirst();
     return !!row;
   }
   async create(battle: Battle) {
     await this.db.sql.insertInto('battles').values({ id: battle.id, version: battle.version, data: JSON.stringify(battle) }).execute();
+  }
+  async expired(now: number, limit: number) {
+    return (await this.db.sql.selectFrom('battles').select('id')
+      .where(sql<boolean>`data->>'status' = 'active' AND (data->>'turnDeadlineAt')::bigint <= ${now}`)
+      .orderBy(sql`(data->>'turnDeadlineAt')::bigint`).limit(limit).execute()).map(row => row.id);
   }
   async lock(id: string, context: TransactionContext) {
     const row = await this.db.session(context).selectFrom('battles').selectAll().where('id', '=', id).forUpdate().executeTakeFirst();

@@ -26,6 +26,8 @@ import { UnitOfWork } from '../src/shared/application/unit-of-work';
 import { MongoDatabase } from '../src/infrastructure/mongo/mongo.service';
 import { BattlesRepository } from '../src/modules/battles/ports/battles.repository';
 import { BattlesService } from '../src/modules/battles/application/battles.service';
+import { BattleRuntime } from '../src/modules/battles/ports/battle-runtime';
+import { BattleTimeoutService } from '../src/modules/battles/application/battle-timeout.service';
 import { ContentService } from '../src/modules/content/application/content.service';
 
 async function eventually(check: () => Promise<boolean>, timeout = 15000) {
@@ -64,6 +66,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     await mongo.db(databaseName).collection('statDefinitions').insertOne({ ...combatStatDefinitions.find(stat => stat.id === 'strength')!, name: 'Своя сила' });
     await mongo.db(databaseName).collection('modifierDefinitions').insertOne({ ...defaultModifierDefinitions[0], id: 'custom-strength', name: 'Свой доп', statId: 'strength', allowArmor: false, baseValue: 10000, itemRoll: { minFactorBps: 2, maxFactorBps: 7, scalingProfileId: 'flat-stat' } });
     app = await NestFactory.create(AppModule, { logger: false, abortOnError: false });
+    app.get(BattleRuntime).random = () => 0; // Existing scenarios choose team 0; lottery has its own test.
     app.setGlobalPrefix('api/v1');
     app.useGlobalFilters(new ValidationFilter());
     await app.listen(0, '127.0.0.1');
@@ -72,6 +75,8 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     const request = async <T>(path: string, body?: object, status = body ? 201 : 200, method = body ? 'POST' : 'GET'): Promise<T> => {
       const response = await fetch(`${origin}/api/v1${path}`, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
       const result = await response.json();
+      // Server clock is intentionally volatile; compare canonical snapshots below.
+      if (result && !Array.isArray(result) && 'serverTime' in result) delete result.serverTime;
       assert.equal(response.status, status, JSON.stringify(result));
       return result as T;
     };
@@ -82,7 +87,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.equal(catalog.statDefinitions!.find(stat => stat.id === 'strength')!.name, 'Своя сила');
     const hpDefinition = catalog.statDefinitions!.find(stat => stat.id === 'maxHp')!;
     assert.equal(hpDefinition.kind === 'derived' && hpDefinition.formula.constant, 60);
-    assert.equal(catalog.skills.length, seedContent.skills.length + seedEffectSkills.length); assert.equal(catalog.balance.progression.startingSkillPoints, 4);
+    assert.equal(catalog.skills.length, seedContent.skills.length + seedEffectSkills.length); assert.equal(catalog.balance.progression.startingSkillPoints, 2);
     assert.equal(catalog.balance.progression.statGrowth.maxEnergy, 0); assert.equal(catalog.balance.teamSize, 2);
     assert.equal(catalog.skills.find(skill => skill.id === 'strike')!.cost, 3);
     assert.equal(catalog.skills.find(skill => skill.id === 'inferno')!.learning.stats.maxEnergy, 30);
@@ -91,7 +96,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.equal((await request<object[]>('/items')).length, seedContent.items.length);
     await request('/battles/not-a-uuid', undefined, 400);
     const character = await request<Character>('/characters', { name: 'Интеграционный герой' });
-    assert.equal(character.skillPoints, 4); assert.deepEqual(character.learnedSkillIds, ['strike']);
+    assert.equal(character.skillPoints, 2); assert.deepEqual(character.learnedSkillIds, ['strike']);
     await verifyCharacterCreation(character, request, app);
     await verifyCharacterAttributes(request, app, catalog);
     await verifyRankedCrafting(request, app);
@@ -100,6 +105,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     await verifyCombatFormulas(request, app);
     await verifyEquipmentLock(request, app);
     await verifyStunAndPotionSnapshots(request, app);
+    await verifyBattleSession(request, app);
     assert.equal((await request<Character>(`/characters/${character.id}`)).id, character.id);
     assert.equal((await request<object[]>(`/characters/${character.id}/inventory`)).length, character.inventory.length);
     const learned = await request<Character>(`/characters/${character.id}/skills`, { skillId: 'ember' });
@@ -194,7 +200,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.equal(result.fighters[0].skillEnergy, Math.min(30, moved.fighters[0].skillEnergy! - 3 + pendingMove.report.generated.count));
     assert.equal(result.pendingBattlefield, undefined);
     assert.equal((await request<Character>(`/characters/${character.id}`)).level, 2);
-    assert.equal((await request<Character>(`/characters/${character.id}`)).attributePoints, 5);
+    assert.equal((await request<Character>(`/characters/${character.id}`)).attributePoints, 10);
     assert.equal((await database.sql.selectFrom('battle_rewards').selectAll().where('battle_id', '=', room.id).execute()).length, 1);
     await eventually(async () => snapshots.some(value => value.id === room.id && value.version === result.version));
 
@@ -442,13 +448,13 @@ async function verifyOperations(character: Character, request: TestRequest, app:
 
 async function verifyCharacterAttributes(request: TestRequest, app: INestApplication, content: Content) {
   const hero = await request<Character>('/characters', { name: 'Распределение очков' });
-  assert.equal(hero.attributePoints, 0);
+  assert.equal(hero.attributePoints, 5);
   assert.equal(hero.attributes?.base.physicalPower, 8);
   const service = app.get(CharactersService);
   const grown = await app.get(UnitOfWork).run(context => service.update(hero.id, content, character => {
     gainExperience(character, 100, content.balance.progression);
   }, context));
-  assert.equal(grown.attributePoints, 5);
+  assert.equal(grown.attributePoints, 10);
   assert.equal(grown.attributes?.base.physicalPower, 9);
   const allocate = (allocations: Record<string, number>, expectedRevision: number, status = 201) => request<Character>(`/characters/${hero.id}/attributes`, { allocations, expectedRevision }, status);
   const race = await Promise.allSettled([allocate({ strength: 3 }, grown.attributeRevision!), allocate({ intelligence: 3 }, grown.attributeRevision!)]);
@@ -456,11 +462,11 @@ async function verifyCharacterAttributes(request: TestRequest, app: INestApplica
   const rejected = race.find(result => result.status === 'rejected');
   assert.equal(rejected?.status === 'rejected' ? rejected.reason.actual : undefined, 409);
   const current = await request<Character>(`/characters/${hero.id}`);
-  assert.equal(current.attributePoints, 2);
-  await allocate({ strength: 3 }, current.attributeRevision!, 400);
+  assert.equal(current.attributePoints, 7);
+  await allocate({ strength: 8 }, current.attributeRevision!, 400);
   await allocate({ strength: -1 }, current.attributeRevision!, 400);
   await allocate({ physicalPower: 1 }, current.attributeRevision!, 400);
-  assert.equal((await request<Character>(`/characters/${hero.id}`)).attributePoints, 2);
+  assert.equal((await request<Character>(`/characters/${hero.id}`)).attributePoints, 7);
 
   const item = { ...seedContent.items.find(item => item.id === 'iron-sword')!, id: 'attribute-test-sword', attributeRequirements: { vitality: 12 } };
   await app.get(MongoDatabase).db.collection('items').insertOne(item);
@@ -471,20 +477,21 @@ async function verifyCharacterAttributes(request: TestRequest, app: INestApplica
   assert.equal(blocked.enabled, false); assert.match(blocked.reason!, /Выносливость 12/);
   await request(`/item-instances/${instanceId}/actions`, { action: 'equip', operationId: randomUUID() }, 400);
   const increased = await allocate({ vitality: 2 }, current.attributeRevision!);
-  assert.equal(increased.attributePoints, 0);
+  assert.equal(increased.attributePoints, 5);
   assert.equal(increased.attributes?.base.maxHp, 138);
   await request(`/item-instances/${instanceId}/actions`, { action: 'equip', operationId: randomUUID() });
   const equipped = await request<Character>(`/characters/${hero.id}`);
   assert.ok(equipped.attributes!.equipped.physicalPower > equipped.attributes!.base.physicalPower);
   assert.deepEqual(equipped.baseAttributes, increased.baseAttributes);
   const persisted = await app.get(Database).sql.selectFrom('characters').select('data').where('id', '=', hero.id).executeTakeFirstOrThrow();
-  assert.equal(persisted.data.attributePoints, 0);
+  assert.equal(persisted.data.attributePoints, 5);
   assert.equal(persisted.data.baseAttributes?.vitality, 12);
 }
 
 async function verifyBattleEffects(request: TestRequest, app: INestApplication) {
   const first = await request<Character>('/characters', { name: 'Маг усилений' });
   const second = await request<Character>('/characters', { name: 'Маг ослаблений' });
+  await app.get(UnitOfWork).run(context => app.get(CharactersService).update(first.id, seedContent, character => { character.skillPoints = 3; }, context));
   for (const id of ['battle-cry', 'weakening', 'purify']) await request(`/characters/${first.id}/skills`, { skillId: id });
   await request(`/characters/${second.id}/skills`, { skillId: 'weakening' });
   const created = await request<Battle>('/battles', { name: 'Проверка бафов', characterId: first.id, kind: 'duel' });
@@ -727,7 +734,7 @@ async function verifyEquipmentLock(request: TestRequest, app: INestApplication) 
   if (equip.status === 'fulfilled') assert.deepEqual(await inventory.execute({ type: 'equip', instanceId: sword.id }, equipOperationId), equip.value);
 
   const another = await request<Battle>('/battles', { name: 'Второй активный бой', characterId: hero.id, kind: 'bot' });
-  const anotherStarted = await request<Battle>(`/battles/${another.id}/start`, { characterId: hero.id, version: another.version });
+  await request(`/battles/${another.id}/start`, { characterId: hero.id, version: another.version }, 409);
   const finish = async (battle: Battle) => {
     await app.get(UnitOfWork).run(async context => {
       const repository = app.get(BattlesRepository), row = await repository.lock(battle.id, context); assert.ok(row);
@@ -740,6 +747,7 @@ async function verifyEquipmentLock(request: TestRequest, app: INestApplication) 
     assert.equal(finished.status, 'finished');
   };
   await finish(start.value);
+  const anotherStarted = await request<Battle>(`/battles/${another.id}/start`, { characterId: hero.id, version: another.version });
   assert.equal((await inventory.get(hero.id)).items.find(item => item.id === sword.id)!.actions.find(value => value.id === action)!.enabled, false);
   await finish(anotherStarted);
   assert.equal((await inventory.get(hero.id)).items.find(item => item.id === sword.id)!.actions.find(value => value.id === action)!.enabled, true);
@@ -800,4 +808,90 @@ async function verifyStunAndPotionSnapshots(request: TestRequest, app: INestAppl
     assert.equal(potionBattle.effectResults![0].sourceItemId, 'potion');
     assert.equal(potionBattle.usedSkill, true); assert.equal(potionBattle.phase, 'before');
   } finally { await potions.updateOne({ id: 'potion' }, { $set: { effects: original } }); }
+}
+
+async function verifyBattleSession(request: TestRequest, app: INestApplication) {
+  const hero = await request<Character>('/characters', { name: 'Пояс и таймер' });
+  const enemy = await request<Character>('/characters', { name: 'Соперник таймера' });
+  const inventory = app.get(InventoryService), database = app.get(Database), repository = app.get(BattlesRepository);
+  await inventory.receive(hero.id, 'potion', 20, randomUUID());
+  const initial = await inventory.get(hero.id);
+  const sword = initial.items.find(item => item.itemId === 'iron-sword')!;
+  await inventory.execute({ type: 'equip', instanceId: sword.id }, randomUUID());
+  const room = await request<Battle>('/battles', { name: 'Жеребьёвка и пояс', characterId: hero.id, kind: 'duel' });
+  const joined = await request<Battle>(`/battles/${room.id}/join`, { characterId: enemy.id, team: 1 });
+  const runtime = app.get(BattleRuntime), random = runtime.random;
+  runtime.random = () => 0.99;
+  let battle: Battle;
+  try { battle = await request<Battle>(`/battles/${room.id}/start`, { characterId: hero.id, version: joined.version }); }
+  finally { runtime.random = random; }
+  assert.equal(battle.activeId, enemy.id);
+  assert.equal(battle.turnDurationSeconds, 30);
+  assert.ok(battle.turnDeadlineAt! > Date.now() + 28000 && battle.turnDeadlineAt! <= Date.now() + 30000);
+  const fighter = battle.fighters.find(fighter => fighter.id === hero.id)!;
+  assert.equal(fighter.inventory.reduce((sum, stack) => sum + stack.quantity, 0), 10);
+  assert.ok(fighter.inventory.every(stack => stack.instanceId));
+  assert.equal(fighter.equipment?.find(item => item.id === sword.id)?.equippedSlot, 'main-hand');
+  assert.ok(fighter.backpack?.some(item => item.itemId === 'potion'));
+  const bottle = fighter.inventory.find(stack => stack.itemId === 'potion')!;
+  await request(`/item-instances/${bottle.instanceId}/actions`, { action: 'split', quantity: 1, operationId: randomUUID() }, 409);
+  // Simulate a deadline persisted before a process restart; no browser or WS drives it.
+  await app.get(UnitOfWork).run(async context => {
+    const row = (await repository.lock(room.id, context))!;
+    row.battle.turnDeadlineAt = Date.now() - 1;
+    await repository.save(row.battle, context);
+  });
+  await app.get(BattleTimeoutService).tick();
+  await eventually(async () => (await request<Battle>(`/battles/${room.id}`)).activeId === hero.id);
+  battle = await request<Battle>(`/battles/${room.id}`);
+  assert.equal(battle.turn, 2);
+  const deadline = battle.turnDeadlineAt;
+  await app.get(UnitOfWork).run(async context => {
+    const row = (await repository.lock(room.id, context))!;
+    row.battle.fighters.find(fighter => fighter.id === hero.id)!.hp = 30;
+    await repository.save(row.battle, context);
+  });
+  const beforeInventory = await inventory.get(hero.id), save = repository.save;
+  const use = { characterId: hero.id, version: battle.version, action: { type: 'item', itemId: bottle.itemId, instanceId: bottle.instanceId } };
+  repository.save = async () => { throw new Error('simulated battle save after potion consumption'); };
+  try { await request(`/battles/${room.id}/actions`, use, 500); }
+  finally { repository.save = save; }
+  assert.deepEqual(await inventory.get(hero.id), beforeInventory);
+  assert.equal((await request<Battle>(`/battles/${room.id}`)).version, battle.version);
+  battle = await request<Battle>(`/battles/${room.id}/actions`, use);
+  assert.equal(battle.turnDeadlineAt, deadline);
+  assert.equal(battle.fighters.find(fighter => fighter.id === hero.id)!.hp, 65);
+  assert.equal(battle.fighters.find(fighter => fighter.id === hero.id)!.inventory.reduce((sum, stack) => sum + stack.quantity, 0), 9);
+  const potionCount = (view: InventoryView) => view.items.filter(item => item.itemId === 'potion').reduce((sum, item) => sum + item.quantity, 0);
+  assert.equal(potionCount(await inventory.get(hero.id)), potionCount(beforeInventory) - 1);
+  await request(`/battles/${room.id}/actions`, use, 409);
+  assert.equal(potionCount(await inventory.get(hero.id)), potionCount(beforeInventory) - 1);
+  battle = await request<Battle>(`/battles/${room.id}/actions`, { characterId: enemy.id, version: battle.version, action: { type: 'surrender' } });
+  assert.equal(battle.status, 'finished'); assert.equal(battle.winner, 0); assert.equal(battle.turnDeadlineAt, undefined);
+  assert.ok(battle.rewards?.some(reward => reward.characterId === hero.id));
+  assert.ok(!battle.rewards?.some(reward => reward.characterId === enemy.id));
+  assert.equal(potionCount(await inventory.get(hero.id)), potionCount(beforeInventory) - 1);
+  const next = await request<Battle>('/battles', { name: 'Следующий пояс', characterId: hero.id, kind: 'bot' });
+  const nextBattle = await request<Battle>(`/battles/${next.id}/start`, { characterId: hero.id, version: next.version });
+  assert.equal(nextBattle.fighters.find(fighter => fighter.id === hero.id)!.inventory.reduce((sum, stack) => sum + stack.quantity, 0), 10);
+  assert.equal(potionCount(await inventory.get(hero.id)), potionCount(beforeInventory) - 1);
+  // Real PostgreSQL owner locks prevent two starts from copying the same loadout.
+  await request(`/battles/${next.id}/actions`, { characterId: hero.id, version: nextBattle.version, action: { type: 'surrender' } });
+  const rooms = await Promise.all(['Первый старт', 'Второй старт'].map(name => request<Battle>('/battles', { name, characterId: hero.id, kind: 'bot' })));
+  const starts = await Promise.allSettled(rooms.map(room => request<Battle>(`/battles/${room.id}/start`, { characterId: hero.id, version: room.version })));
+  assert.equal(starts.filter(result => result.status === 'fulfilled').length, 1);
+  const rejected = starts.find(result => result.status === 'rejected') as PromiseRejectedResult;
+  assert.equal(rejected.reason.actual, 409);
+  assert.ok((await database.sql.selectFrom('item_instances').selectAll().where('owner_id', '=', hero.id).execute()).every(item => item.quantity > 0));
+  const [leaver, teammate, foe] = await Promise.all(['Сдавшийся участник', 'Оставшийся союзник', 'Противник команды'].map(name => request<Character>('/characters', { name })));
+  const team = await request<Battle>('/battles', { name: 'Сдача без остановки союзника', characterId: leaver.id, kind: 'team' });
+  await request(`/battles/${team.id}/join`, { characterId: teammate.id, team: 0 });
+  const teamJoined = await request<Battle>(`/battles/${team.id}/join`, { characterId: foe.id, team: 1 });
+  const teamStarted = await request<Battle>(`/battles/${team.id}/start`, { characterId: leaver.id, version: teamJoined.version });
+  const afterSurrender = await request<Battle>(`/battles/${team.id}/actions`, { characterId: leaver.id, version: teamStarted.version, action: { type: 'surrender' } });
+  assert.equal(afterSurrender.status, 'active'); assert.equal(afterSurrender.activeId, foe.id);
+  const leaverInventory = await inventory.get(leaver.id);
+  assert.equal(leaverInventory.items.find(item => item.itemId === 'iron-sword')!.actions.find(action => action.id === 'equip')!.enabled, true);
+  const personal = await request<Battle>('/battles', { name: 'После сдачи', characterId: leaver.id, kind: 'bot' });
+  await request(`/battles/${personal.id}/start`, { characterId: leaver.id, version: personal.version });
 }

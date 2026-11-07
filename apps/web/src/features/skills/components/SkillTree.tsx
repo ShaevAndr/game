@@ -11,7 +11,7 @@ export function SkillTree({ character, content, busy, onLearn, onUpgrade }: Prop
   return <section className="panel skill-tree-screen">
     <div className="section-label">РАЗВИТИЕ ПЕРСОНАЖА</div>
     <div className="section-heading"><div><h2>Пять путей мастерства</h2><p>{character ? `${character.name} · уровень ${character.level}` : 'Выбери персонажа, чтобы изучать навыки.'}</p></div><div className="points-badge"><strong>{character?.skillPoints ?? '—'}</strong><span>ОЧКОВ НАВЫКОВ</span></div></div>
-    <p className="tree-help">Изучи предыдущие навыки ветки, достигни нужного уровня и характеристик. Каждое повышение уровня даёт {content.balance.progression.skillPointsPerLevel} очка навыков. Новые навыки и характеристики применяются при старте боя. Уже начатые бои сохраняют свой набор.</p>
+    <p className="tree-help">Изучи предыдущие навыки ветки, достигни нужного уровня и характеристик. Каждое повышение уровня даёт очки навыков: {content.balance.progression.skillPointsPerLevel}. Новые навыки и характеристики применяются при старте боя. Уже начатые бои сохраняют свой набор.</p>
     <div className="skill-branches">{elements.map(element => <section className="skill-branch" key={element} aria-label={`Ветка: ${elementNames[element]}`}>
       <div className="branch-title"><span className={`element-icon ${element}`}>{symbols[element]}</span><h3>{elementNames[element]}</h3></div>
       <div className="branch-heroes"><div className="section-label">ГЕРОИ ВЕТКИ</div>{content.characterTemplates.filter(t => t.element === element).map(template => <p key={template.id}><strong>{template.name}</strong><span>Рекомендуемый навык: {skills.find(s => s.id === template.skillId)?.name}</span></p>)}</div>

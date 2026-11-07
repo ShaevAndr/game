@@ -1,6 +1,6 @@
 import type { Character, Content, Stats } from '../types';
 import { calculateAttributes, fillBaseAttributes } from './calculation';
-import { ATTRIBUTE_POINTS_PER_LEVEL } from './defaults';
+import { ATTRIBUTE_POINTS_PER_LEVEL, STARTING_ATTRIBUTE_POINTS } from './defaults';
 import { legacyEquipmentAttributes } from './equipment';
 
 export function compatibilityStats(values: Record<string, number>): Stats {
@@ -17,7 +17,7 @@ export function projectCharacterAttributes(character: Character, content: Conten
   const attributes = calculateAttributes({ level: content.balance.formulas ? character.level : 1, definitions: content.statDefinitions, baseAttributes, equipmentModifiers, equipmentScaling });
   const stats = compatibilityStats(attributes.base), equipped = compatibilityStats(attributes.equipped);
   const equipmentBonuses = Object.fromEntries(Object.keys(stats).map(key => [key, equipped[key as keyof Stats] - stats[key as keyof Stats]]));
-  return { ...character, attributeVersion: 1, baseAttributes, attributePoints: character.attributePoints ?? (character.level - 1) * ATTRIBUTE_POINTS_PER_LEVEL, attributeRevision: character.attributeRevision ?? 0,
+  return { ...character, attributeVersion: 1, baseAttributes, attributePoints: character.attributePoints ?? STARTING_ATTRIBUTE_POINTS + (character.level - 1) * ATTRIBUTE_POINTS_PER_LEVEL, attributeRevision: character.attributeRevision ?? 0,
     equipmentModifiers, equipmentScaling, attributes, stats, equipmentBonuses };
 }
 

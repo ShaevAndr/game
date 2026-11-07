@@ -19,6 +19,8 @@ export * from './targeting';
 export * from './battlefield';
 export * from './combat/rules';
 export { skillChoices } from './combat/matched';
+export { expireMatchedTurn } from './combat/matched';
+export * from './combat/belt';
 
 export * from './item-progression';
 export * from './modifiers';

@@ -1,15 +1,16 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { Content, InventoryCommand, InventoryState, ItemInstance, applyInventoryCommand, availableItemActions, backpackStacks, equipmentBonuses, equipmentAttributeSources, equipmentRequirementBlockers, projectCharacterAttributes } from '@game/core';
+import { Content, InventoryCommand, InventoryState, ItemInstance, ItemStack, applyInventoryCommand, availableItemActions, backpackStacks, equipmentBonuses, equipmentAttributeSources, equipmentRequirementBlockers, projectCharacterAttributes, isBattleConsumable } from '@game/core';
 import { z } from 'zod';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
 import { CharactersService } from '../../characters/application/characters.service';
 import { ContentService } from '../../content/application/content.service';
 import { SkillsService } from '../../skills/application/skills.service';
-import { BattlesService } from '../../battles/application/battles.service';
+import { BattleParticipationService } from '../../battles/application/battle-participation.service';
 import { InventoryRepository } from '../ports/inventory.repository';
 
 const equipmentLockedReason = 'Нельзя менять экипировку во время активного боя';
+const consumableLockedReason = 'Нельзя перемещать или удалять зелья во время активного боя';
 
 @Injectable()
 export class InventoryService {
@@ -19,7 +20,7 @@ export class InventoryService {
     @Inject(CharactersService) private readonly characters: CharactersService,
     @Inject(ContentService) private readonly content: ContentService,
     @Inject(SkillsService) private readonly skills: SkillsService,
-    @Inject(BattlesService) private readonly battles: BattlesService,
+    @Inject(BattleParticipationService) private readonly battles: BattleParticipationService,
   ) {}
 
   /** Creates the owner's backpack and starting items in the character creation transaction. */
@@ -52,6 +53,7 @@ export class InventoryService {
           }
           if (equipmentLocked) for (const action of actions) {
             if (action.id === 'equip' || action.id === 'unequip') { action.enabled = false; action.reason = equipmentLockedReason; }
+            if (definition && isBattleConsumable(definition, groups)) { action.enabled = false; action.reason = consumableLockedReason; }
           }
           const common = content.itemRanks?.find(rank => rank.order === 1);
           const quality = instance.quality ?? (definition?.equipSlot && common ? { rank: common, affixes: [] } : undefined);
@@ -107,6 +109,22 @@ export class InventoryService {
     }
   }
 
+  /** A successful combat command consumes the original bottle in the same transaction. */
+  async consumeBattleItem(ownerId: string, stack: ItemStack, content: Content, context: TransactionContext) {
+    const state = await this.state(ownerId, content, context);
+    const instance = state.items.find(item => item.id === stack.instanceId && item.itemId === stack.itemId);
+    const primary = state.inventories.find(inventory => inventory.primary);
+    const definition = content.items.find(item => item.id === stack.itemId);
+    if (!instance || !primary || instance.inventoryId !== primary.id || instance.equippedSlot || instance.quantity < 1
+      || !definition || !isBattleConsumable(definition, content.itemGroups)
+      || JSON.stringify(instance.effects ?? []) !== JSON.stringify(stack.effects ?? [])) {
+      throw new ConflictException('Зелье из боевого пояса больше недоступно');
+    }
+    instance.quantity--;
+    state.items = state.items.filter(item => item.quantity > 0);
+    await this.commit([state], content, context);
+  }
+
   async execute(command: InventoryCommand, operationId: string) {
     z.string().uuid().parse(operationId);
     const signature = JSON.stringify(Object.fromEntries(Object.entries(command).sort(([left], [right]) => left.localeCompare(right))));
@@ -122,6 +140,13 @@ export class InventoryService {
         states.push(await this.state(ownerId, content, context));
       }
       if ('instanceId' in command && !states.some(state => state.items.some(item => item.id === command.instanceId))) throw new ConflictException('Предмет перемещён. Повторите действие.');
+      if ('instanceId' in command) {
+        for (const state of states) {
+          const affected = state.items.filter(item => item.id === command.instanceId || command.type === 'merge' && item.id === command.targetInstanceId);
+          if (affected.some(item => content.items.some(definition => definition.id === item.itemId && isBattleConsumable(definition, content.itemGroups)))
+            && await this.battles.isCharacterInActiveBattle(state.ownerId, context)) throw new ConflictException(consumableLockedReason);
+        }
+      }
       if (command.type === 'equip' || command.type === 'unequip') {
         const owner = states.find(state => state.items.some(item => item.id === command.instanceId))!;
         if (await this.battles.isCharacterInActiveBattle(owner.ownerId, context)) throw new ConflictException(equipmentLockedReason);

@@ -11,6 +11,7 @@ export const initialMigration: Migration = {
     await db.schema.createTable('battles').addColumn('id', 'uuid', c => c.primaryKey())
       .addColumn('data', 'jsonb', c => c.notNull())
       .addColumn('version', 'integer', c => c.notNull().defaultTo(0)).execute();
+    await sql`CREATE INDEX battles_turn_deadline ON battles (((data->>'turnDeadlineAt')::bigint)) WHERE data->>'status' = 'active'`.execute(db);
     await db.schema.createTable('battle_rewards')
       .addColumn('battle_id', 'uuid', c => c.notNull().references('battles.id'))
       .addColumn('character_id', 'uuid', c => c.notNull().references('characters.id'))

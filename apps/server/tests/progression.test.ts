@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Battle, BattlefieldOptions, createBoard, Character, emptyEnergy, joinBattle, newBattle, possibleMove, seedContent, startBattle } from '@game/core';
 import { BattlefieldService } from '../src/modules/battlefield/application/battlefield.service';
+import { InventoryService } from '../src/modules/inventory/application/inventory.service';
 import { BattlesService } from '../src/modules/battles/application/battles.service';
 import { battleView } from '../src/modules/battles/http/battle-view';
 import { BattleEvents } from '../src/modules/battles/ports/battle-events';
@@ -28,7 +29,7 @@ interface State { characters: Record<string, { data: Character }>; battles: Reco
 function fixture(kind: 'duel' | 'bot' = 'duel', battlefield: BattlefieldOptions = {}) {
   const winner = hero(winnerId), loser = hero(loserId);
   const battle = newBattle(battleId, 'test', kind, 'on-match', winner, seedContent, battlefield);
-  if (kind === 'duel') joinBattle(battle, loser, 1); startBattle(battle); battle.fighters[0].stats.attack = 1000;
+  if (kind === 'duel') joinBattle(battle, loser, 1); startBattle(battle, () => 0); battle.fighters[0].stats.attack = 1000;
   battle.phase = 'choose'; battle.matchedElements = ['physical']; battle.fighters[0].skillEnergy = 3;
   if (battle.battlefield!.elementTypes.includes('physical') && battle.battlefield!.elementTypes.includes('water')) {
     const { rows, cols } = battle.battlefield!.size;
@@ -82,15 +83,49 @@ function fixture(kind: 'duel' | 'bot' = 'duel', battlefield: BattlefieldOptions 
   const skills = new SkillsService(adapter, characters, content, {} as SkillsCatalogService);
   const rewards = new RewardsService(new PostgresRewardsRepository(adapter), characters);
   const history = new BattleHistoryService(new PostgresBattleArchiveOutbox(adapter), {} as BattleHistoryRepository, {} as TaskQueue);
-  const service = new BattlesService(adapter, new PostgresBattlesRepository(adapter), characters, content, rewards, history, events, new BattlefieldService());
+  const battles = new PostgresBattlesRepository(adapter);
+  battles.hasActiveCharacter = async id => Object.values(state.battles).some(row => row.data.status === 'active' && row.data.fighters.some(f => f.characterId === id));
+  let time = 100000;
+  battles.expired = async now => Object.values(state.battles).filter(row => row.data.status === 'active' && row.data.turnDeadlineAt !== undefined && row.data.turnDeadlineAt <= now).map(row => row.data.id);
+  const inventory = { state: async (ownerId: string) => ({ ownerId, inventories: [], items: [] }) } as unknown as InventoryService;
+  const service = new BattlesService(adapter, battles, characters, content, rewards, history, events, new BattlefieldService(), inventory, { now: () => time, random: () => 0 });
   const command = () => ({ characterId: winnerId, version: 0, action: { type: 'skill', skillId: 'strike', targetId: battle.fighters[1].id } });
-  return { service, characters, skills, command, published, locks, state: () => state, failWrite: () => { failCharacterWrite = true; }, failOutbox: () => { failOutboxWrite = true; } };
+  return { service, characters, skills, command, published, locks, setTime: (now: number) => { time = now; }, state: () => state, failWrite: () => { failCharacterWrite = true; }, failOutbox: () => { failOutboxWrite = true; } };
 }
+test('server timeout advances an abandoned turn exactly once under concurrent ticks', async () => {
+  const f = fixture(), battle = f.state().battles[battleId].data;
+  battle.phase = 'before'; battle.turnDeadlineAt = 100000;
+  const board = structuredClone(battle.board);
+  await Promise.all([f.service.expireTurns(), f.service.expireTurns()]);
+  const current = f.state().battles[battleId].data;
+  assert.equal(current.activeId, loserId); assert.equal(current.version, 1);
+  assert.deepEqual(current.board, board); assert.equal(current.turnDeadlineAt, 130000);
+  assert.equal(f.published.length, 1);
+});
+
+test('a command arriving after its deadline cannot cast a finishing skill or grant rewards', async () => {
+  const f = fixture(), battle = f.state().battles[battleId].data;
+  battle.turnDeadlineAt = 100000;
+  const result = await f.service.command(battleId, f.command());
+  assert.equal(result.status, 'active'); assert.equal(result.activeId, loserId);
+  assert.equal(result.fighters.find(fighter => fighter.id === loserId)!.hp, 120);
+  assert.equal(f.state().receipts.length, 0);
+});
+
+test('a successful swap that opens skill selection does not reset the turn deadline', async () => {
+  const f = fixture(), battle = f.state().battles[battleId].data;
+  battle.phase = 'before'; battle.turnDeadlineAt = 125000;
+  const result = await f.service.command(battleId, { characterId: winnerId, version: 0,
+    action: { type: 'swap', from: { row: 1, col: 1 }, to: { row: 1, col: 2 } } });
+  assert.equal(result.phase, 'choose'); assert.equal(result.activeId, winnerId);
+  assert.equal(result.turnDeadlineAt, 125000);
+});
+
 test('duplicate concurrent winning commands award experience exactly once', async () => {
   const f = fixture(), results = await Promise.allSettled([f.service.command(battleId, f.command()), f.service.command(battleId, f.command())]);
   assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
   const c = f.state().characters[winnerId].data;
-  assert.equal(c.level, 2); assert.equal(c.experience, 0); assert.equal(c.skillPoints, 4); assert.equal(f.state().receipts.length, 1);
+  assert.equal(c.level, 2); assert.equal(c.experience, 0); assert.equal(c.skillPoints, 3); assert.equal(f.state().receipts.length, 1);
   assert.equal(f.state().characters[loserId].data.experience, 0); assert.equal(f.published.length, 1);
   assert.deepEqual(f.published[0].rewards, [{ characterId: winnerId, experience: 100, levelsGained: 1 }]);
 });
@@ -107,7 +142,7 @@ test('concurrent victories in different instances preserve both rewards', async 
   const f = fixture(), otherId = '00000000-0000-4000-8000-000000000004';
   f.state().battles[otherId] = structuredClone(f.state().battles[battleId]); f.state().battles[otherId].data.id = otherId;
   await Promise.all([f.service.command(battleId, f.command()), f.service.command(otherId, f.command())]);
-  const c = f.state().characters[winnerId].data; assert.equal(c.level, 2); assert.equal(c.experience, 100); assert.equal(c.skillPoints, 4); assert.equal(f.state().receipts.length, 2);
+  const c = f.state().characters[winnerId].data; assert.equal(c.level, 2); assert.equal(c.experience, 100); assert.equal(c.skillPoints, 3); assert.equal(f.state().receipts.length, 2);
 });
 test('concurrent learning cannot spend the same last skill point twice', async () => {
   const f = fixture(); f.state().characters[winnerId].data.skillPoints = 1;

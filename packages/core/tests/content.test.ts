@@ -13,7 +13,7 @@ test('each branch has six skills and two distinct playable templates', () => {
       const hero = createCharacter(template.id, template.name, seedContent, template.id);
       assert.equal(hero.templateId, template.id);
       assert.deepEqual(hero.learnedSkillIds, ['strike']);
-      assert.equal(hero.skillPoints, 4);
+      assert.equal(hero.skillPoints, 2);
       assert.equal(hero.level, 1);
       assert.equal(characterFighter(hero, 0, seedContent).skillIds.length, 1);
     }
@@ -24,7 +24,7 @@ test('template creation preserves defaults, rejects unknown types and isolates c
   const before = structuredClone(seedContent);
   const first = createCharacter('first', 'Первый', seedContent, 'druid');
   const second = createCharacter('second', 'Второй', seedContent);
-  assert.deepEqual(second.learnedSkillIds, ['strike']); assert.equal(second.skillPoints, 4);
+  assert.deepEqual(second.learnedSkillIds, ['strike']); assert.equal(second.skillPoints, 2);
   assert.equal(second.templateId, undefined);
   first.stats.attack++; first.inventory[0].quantity--; first.energy.earth++;
   assert.deepEqual(seedContent, before);
@@ -36,7 +36,7 @@ test('template creation preserves defaults, rejects unknown types and isolates c
 test('all branches can be learned through normal level and stat growth', () => {
   for (const element of elements) {
     const hero = createCharacter(element, element, seedContent);
-    gainExperience(hero, 700, seedContent.balance.progression);
+    gainExperience(hero, 1350, seedContent.balance.progression);
     const remaining = seedContent.skills.filter(s => s.element === element && !s.learning.starter);
     while (remaining.length) {
       const index = remaining.findIndex(s => s.learning.prerequisites.every(id => hero.learnedSkillIds.includes(id)));

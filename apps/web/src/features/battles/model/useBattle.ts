@@ -8,8 +8,10 @@ import { useBattlePlayback } from './useBattlePlayback';
 export function useBattle(roomId: string, onError: (message: string) => void) {
   const [snapshot, setSnapshot] = useState<Battle | null>(null);
   const [connected, setConnected] = useState(false);
+  const [clockOffset, setClockOffset] = useState(0);
   const updateBattle = useCallback((value: Battle) => {
     if (value.id !== roomId) return;
+    if (value.serverTime !== undefined) setClockOffset(value.serverTime - Date.now());
     setSnapshot(current => !current || current.id !== value.id || value.version >= current.version ? value : current);
   }, [roomId]);
 
@@ -66,5 +68,5 @@ export function useBattle(roomId: string, onError: (message: string) => void) {
   }, [roomId, onError, updateBattle]);
 
   const playback = useBattlePlayback(snapshot?.id === roomId ? snapshot : null);
-  return { ...playback, connected, updateBattle, refreshBattle };
+  return { ...playback, connected, clockOffset, updateBattle, refreshBattle };
 }

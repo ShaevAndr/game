@@ -5,7 +5,7 @@
     "templateId": "pyromancer",
     "level": 10,
     "experience": 0,
-    "skillPoints": 11,
+    "skillPoints": 0,
     "learnedSkillIds": [
       "strike",
       "ember",
@@ -117,7 +117,7 @@
     "templateId": "phoenix",
     "level": 10,
     "experience": 0,
-    "skillPoints": 11,
+    "skillPoints": 0,
     "learnedSkillIds": [
       "strike",
       "ember",
@@ -229,7 +229,7 @@
     "templateId": "tidekeeper",
     "level": 10,
     "experience": 0,
-    "skillPoints": 9,
+    "skillPoints": 0,
     "learnedSkillIds": [
       "strike",
       "spring",
@@ -237,7 +237,6 @@
       "renewal",
       "ice-shard",
       "ice-lance",
-      "glacier",
       "purify",
       "frost-lock",
       "healing-rain"
@@ -331,7 +330,6 @@
       "renewal": 1,
       "ice-shard": 1,
       "ice-lance": 1,
-      "glacier": 1,
       "purify": 1,
       "frost-lock": 1,
       "healing-rain": 1
@@ -343,12 +341,11 @@
     "templateId": "frostmage",
     "level": 10,
     "experience": 0,
-    "skillPoints": 9,
+    "skillPoints": 0,
     "learnedSkillIds": [
       "strike",
       "spring",
       "tide",
-      "renewal",
       "ice-shard",
       "ice-lance",
       "glacier",
@@ -442,7 +439,6 @@
       "strike": 1,
       "spring": 1,
       "tide": 1,
-      "renewal": 1,
       "ice-shard": 1,
       "ice-lance": 1,
       "glacier": 1,
@@ -457,7 +453,7 @@
     "templateId": "geomancer",
     "level": 10,
     "experience": 0,
-    "skillPoints": 11,
+    "skillPoints": 0,
     "learnedSkillIds": [
       "strike",
       "pebble",
@@ -569,7 +565,7 @@
     "templateId": "druid",
     "level": 10,
     "experience": 0,
-    "skillPoints": 11,
+    "skillPoints": 0,
     "learnedSkillIds": [
       "strike",
       "pebble",
@@ -681,7 +677,7 @@
     "templateId": "stormcaller",
     "level": 10,
     "experience": 0,
-    "skillPoints": 11,
+    "skillPoints": 0,
     "learnedSkillIds": [
       "strike",
       "breeze",
@@ -793,7 +789,7 @@
     "templateId": "windkeeper",
     "level": 10,
     "experience": 0,
-    "skillPoints": 11,
+    "skillPoints": 0,
     "learnedSkillIds": [
       "strike",
       "breeze",
@@ -905,7 +901,7 @@
     "templateId": "duelist",
     "level": 10,
     "experience": 0,
-    "skillPoints": 11,
+    "skillPoints": 0,
     "learnedSkillIds": [
       "strike",
       "cleave",
@@ -1019,7 +1015,7 @@
     "templateId": "veteran",
     "level": 10,
     "experience": 0,
-    "skillPoints": 11,
+    "skillPoints": 0,
     "learnedSkillIds": [
       "strike",
       "cleave",

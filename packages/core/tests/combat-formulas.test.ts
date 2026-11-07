@@ -16,7 +16,7 @@ function catalog(): Content {
 function fixture() {
   const content = catalog(), hero = createCharacter('hero', 'Герой', content), enemy = createCharacter('enemy', 'Цель', content);
   const battle = newBattle('formulas', 'Бой', 'duel', 'on-match', hero, content);
-  joinBattle(battle, enemy, 1); startBattle(battle); battle.attributeRngState = 0;
+  joinBattle(battle, enemy, 1); startBattle(battle, () => 0); battle.attributeRngState = 0;
   return { battle, actor: battle.fighters[0], target: battle.fighters[1] };
 }
 function seedFor(min: number, max: number) {

@@ -26,7 +26,7 @@ function fixture(skill: Skill, content = catalog()) {
   const hero = createCharacter('hero', 'Герой', content), enemy = createCharacter('enemy', 'Противник', content);
   hero.learnedSkillIds.push(skill.id); hero.skillLevels![skill.id] = 1;
   const battle = newBattle('modifiers-test', 'Бой', 'duel', 'on-match', hero, content);
-  joinBattle(battle, enemy, 1); startBattle(battle);
+  joinBattle(battle, enemy, 1); startBattle(battle, () => 0);
   ready(battle, skill);
   return battle;
 }

@@ -6,7 +6,7 @@ function duel(skills: string[] = []): Battle {
   const hero = createCharacter('hero', 'Герой', seedContent), enemy = createCharacter('enemy', 'Противник', seedContent);
   for (const id of skills) grantSkill(hero, id, seedContent);
   const battle = newBattle('battle', 'Новый бой', 'duel', 'on-match', hero, seedContent);
-  joinBattle(battle, enemy, 1); startBattle(battle);
+  joinBattle(battle, enemy, 1); startBattle(battle, () => 0);
   return battle;
 }
 function engine(direct: Partial<Record<TileType, number>>, generated: Partial<Record<TileType, number>> = {}): BattlefieldEngine {
@@ -54,10 +54,10 @@ test('an NPC can end its turn by rearranging a board with no matching moves', ()
   assert.equal(skillEnergy(battle.fighters[1]), 0); assert.equal(battle.boardMoves?.[0].total.count, 0);
 });
 
-test('all new templates start with only one physical skill, four unspent points and six field types', () => {
+test('all new templates start with only one physical skill, two unspent points and six field types', () => {
   for (const templateId of [undefined, ...seedContent.characterTemplates.map(template => template.id)]) {
     const character = createCharacter('hero', 'Герой', seedContent, templateId);
-    assert.deepEqual(character.learnedSkillIds, ['strike']); assert.equal(character.skillPoints, 4);
+    assert.deepEqual(character.learnedSkillIds, ['strike']); assert.equal(character.skillPoints, 2);
     assert.deepEqual(character.skillLevels, { strike: 1 });
   }
   assert.deepEqual(createBattlefield().config.elementTypes, tileTypes);
@@ -134,7 +134,7 @@ test('guard survives all intervening opposing team turns rather than being consu
   const hero = createCharacter('hero', 'Герой', seedContent);
   const battle = newBattle('team', 'Команды', 'team', 'on-match', hero, seedContent);
   for (const [id, team] of [['ally', 0], ['enemy', 1], ['enemy2', 1]] as const) joinBattle(battle, createCharacter(id, id, seedContent), team);
-  startBattle(battle); swap(battle, { defense: 3 });
+  startBattle(battle, () => 0); swap(battle, { defense: 3 });
   swap(battle, { physical: 3 }); cast(battle, 'strike', 'hero');
   assert.equal(battle.activeId, 'ally'); assert.equal(battle.fighters[0].guardDefense, 30);
   swap(battle, { water: 3 });
@@ -178,7 +178,7 @@ test('a potion before the board replaces the skill without replacing the mandato
 });
 
 test('NPC follows the same board-first rules and cannot attack from a secondary-only physical match', () => {
-  const battle = newBattle('bot', 'Бот', 'bot', 'on-match', createCharacter('hero', 'Герой', seedContent), seedContent); startBattle(battle);
+  const battle = newBattle('bot', 'Бот', 'bot', 'on-match', createCharacter('hero', 'Герой', seedContent), seedContent); startBattle(battle, () => 0);
   swap(battle, { water: 3 }); assert.equal(battle.activeId, 'bot-opponent');
   runNpcTurns(battle, engine({ water: 3 }, { physical: 5, defense: 2 }));
   assert.equal(battle.activeId, 'hero'); assert.equal(battle.fighters[0].hp, 120);
@@ -292,7 +292,7 @@ test('the visible board pauses after the direct refill and resumes its saved res
 
 test('NPC cannot spend energy from its pending cascades', () => {
   const hero = createCharacter('hero', 'Герой', seedContent); grantSkill(hero, 'fireball', seedContent);
-  const battle = newBattle('bot', 'Бот', 'bot', 'on-match', hero, seedContent); startBattle(battle);
+  const battle = newBattle('bot', 'Бот', 'bot', 'on-match', hero, seedContent); startBattle(battle, () => 0);
   swap(battle, { water: 3 });
   runNpcTurns(battle, engine({ fire: 3 }, { fire: 10 }));
   assert.equal(battle.fighters[0].hp, 120);

@@ -3,11 +3,11 @@ import { Action, Battle, Fighter, SkillChoice, elements } from '../types';
 import { BattlefieldEngine, defaultBattlefieldEngine, normalizeBattlefieldOptions } from '../battlefield';
 import { skillMagnitude, skillPower } from '../skills';
 import { consumableEffects, isBattleConsumable } from '../items';
-import { addLog, damage, nextTurn, target } from './common';
+import { addLog, damage, finishOrWave, nextTurn, target } from './common';
 import { combatRules, skillEnergy } from './rules';
 import { legalSkillTargets, resolveSkillTargets, skillTargeting } from '../targeting';
 import { applySkillEffects, applyItemEffects, effectSkillUtility, previewSkillEffects } from '../effects/skill-effects';
-import { isStunned } from '../effects/lifecycle';
+import { isStunned, removeDeadEffects } from '../effects/lifecycle';
 import { matchPowerBps, scaleMatchPower } from './match-power';
 
 function finishMatchedTurn(battle: Battle, actor: Fighter, onBeforeCascades?: (battle: Battle) => void) {
@@ -54,6 +54,18 @@ export function skillChoices(battle: Battle, actor: Fighter): SkillChoice[] {
 export function applyMatchedAction(battle: Battle, actorId: string, action: Action, random = Math.random, fieldEngine: BattlefieldEngine = defaultBattlefieldEngine, onBeforeCascades?: (battle: Battle) => void) {
   if (battle.status !== 'active') throw new Error('Бой не активен');
   const actor = battle.fighters.find(fighter => fighter.id === actorId);
+  if (action.type === 'surrender') {
+    if (!actor || actor.npc || actor.hp <= 0) throw new Error('Сдаться может только живой участник боя');
+    actor.surrendered = true; actor.hp = 0; actor.guardDefense = 0;
+    removeDeadEffects(battle);
+    addLog(battle, `${actor.name} заканчивает бой: сдача`);
+    if (battle.activeId === actor.id) finishMatchedTurn(battle, actor, onBeforeCascades);
+    else if (!finishOrWave(battle) && battle.phase === 'choose') {
+      const active = battle.fighters.find(fighter => fighter.id === battle.activeId)!;
+      battle.skillChoices = skillChoices(battle, active);
+    }
+    return;
+  }
   if (!actor || actor.hp <= 0 || battle.activeId !== actorId) throw new Error('Сейчас ход другого участника');
   if (isStunned(actor)) throw new Error('Участник оглушён и пропускает ход');
   if (action.type === 'swap') {
@@ -116,13 +128,18 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
   }
   if (action.type === 'item') {
     if (battle.phase !== 'before' || battle.usedSkill) throw new Error('Зелье применяется до перестановки вместо навыка');
-    const stack = actor.inventory.find(stack => stack.itemId === action.itemId && stack.quantity > 0);
+    const stack = actor.inventory.find(stack => stack.itemId === action.itemId && stack.quantity > 0 && (!action.instanceId || stack.instanceId === action.instanceId));
     const item = battle.content.items.find(item => item.id === action.itemId);
     if (!stack || !item || !isBattleConsumable(item, battle.content.itemGroups)) throw new Error('Предмет недоступен');
     const effects = structuredClone(stack.effects ?? consumableEffects(item));
     if (actor.hp === actor.stats.maxHp && effects.every(effect => effect.kind === 'heal')) throw new Error('Здоровье уже полное');
     const draft = structuredClone(battle), caster = draft.fighters.find(fighter => fighter.id === actor.id)!;
-    caster.inventory.find(value => value.itemId === stack.itemId && value.quantity > 0)!.quantity--;
+    caster.inventory[actor.inventory.indexOf(stack)].quantity--;
+    const backpackItem = caster.backpack?.find(item => item.id === stack.instanceId);
+    if (backpackItem) {
+      backpackItem.quantity--;
+      caster.backpack = caster.backpack!.filter(item => item.quantity > 0);
+    }
     draft.usedSkill = true;
     addLog(draft, `${actor.name}: ${item.name}. Теперь обязательна перестановка.`);
     applyItemEffects(draft, caster, { id: item.id, name: item.name, effects });
@@ -134,6 +151,15 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
   if (battle.phase !== 'choose') throw new Error('Сначала выполните перестановку');
   addLog(battle, `${actor.name} сохраняет энергию и завершает ход`);
   finishMatchedTurn(battle, actor, onBeforeCascades);
+}
+
+/** The application checks the persisted deadline; core performs an ordinary turn transition. */
+export function expireMatchedTurn(battle: Battle, onBeforeCascades?: (battle: Battle) => void) {
+  const actor = battle.fighters.find(fighter => fighter.id === battle.activeId);
+  if (battle.status !== 'active' || !actor || actor.npc) throw new Error('Нет хода игрока для завершения');
+  addLog(battle, `${actor.name}: время хода истекло`);
+  if (battle.phase === 'choose') finishMatchedTurn(battle, actor, onBeforeCascades);
+  else nextTurn(battle);
 }
 
 export function runMatchedNpcTurns(battle: Battle, fieldEngine: BattlefieldEngine = defaultBattlefieldEngine, onAction?: (battle: Battle) => void) {

@@ -6,7 +6,7 @@ import { fieldWithMatch, match } from './helpers/combat';
 const hero = (id: string) => createCharacter(id, id, seedContent);
 function duel() {
   const battle = newBattle('battle', 'Бой', 'duel', 'on-match', hero('a'), seedContent);
-  joinBattle(battle, hero('b'), 1); startBattle(battle); return battle;
+  joinBattle(battle, hero('b'), 1); startBattle(battle, () => 0); return battle;
 }
 test('v1 supports only matched-type rules and rejects retired modes', () => {
   const input = { name: 'Комната', characterId: '00000000-0000-4000-8000-000000000001', kind: 'duel' };
@@ -27,14 +27,14 @@ test('team capacity and dungeon team restrictions are enforced', () => {
 });
 test('team order interleaves teams and skips defeated fighters', () => {
   const battle = newBattle('team', 'Команды', 'team', 'on-match', hero('a'), seedContent);
-  joinBattle(battle, hero('c'), 0); joinBattle(battle, hero('b'), 1); joinBattle(battle, hero('d'), 1); startBattle(battle);
+  joinBattle(battle, hero('c'), 0); joinBattle(battle, hero('b'), 1); joinBattle(battle, hero('d'), 1); startBattle(battle, () => 0);
   assert.deepEqual(battle.fighters.map(fighter => fighter.id), ['a', 'b', 'c', 'd']);
   battle.fighters[1].hp = 0; match(battle); applyAction(battle, 'a', { type: 'end' });
   assert.equal(battle.activeId, 'c');
 });
 test('dungeon advances all waves, preserves health and rejects commands after victory', () => {
   const character = hero('a'); character.stats.attack = 1000; character.stats.maxHp = 100000;
-  const battle = newBattle('dungeon', 'Подземелье', 'dungeon', 'on-match', character, seedContent); startBattle(battle);
+  const battle = newBattle('dungeon', 'Подземелье', 'dungeon', 'on-match', character, seedContent); startBattle(battle, () => 0);
   battle.fighters[0].hp = 80000;
   for (let i = 0; i < 20 && battle.status === 'active'; i++) {
     if (battle.activeId !== 'a') { runNpcTurns(battle, fieldWithMatch()); continue; }

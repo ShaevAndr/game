@@ -6,7 +6,7 @@ import { Character, Content, defaultItemRanks, defaultProfessions, defaultRankPr
 import { CharactersService } from '../src/modules/characters/application/characters.service';
 import { CharactersRepository } from '../src/modules/characters/ports/characters.repository';
 import { ContentService } from '../src/modules/content/application/content.service';
-import { BattlesService } from '../src/modules/battles/application/battles.service';
+import { BattleParticipationService } from '../src/modules/battles/application/battle-participation.service';
 import { InventoryService } from '../src/modules/inventory/application/inventory.service';
 import { InventoryRepository } from '../src/modules/inventory/ports/inventory.repository';
 import { SkillsService } from '../src/modules/skills/application/skills.service';
@@ -60,7 +60,7 @@ function fixture(roll: (maxExclusive: number) => number = () => 0, catalog: Cont
       for (const value of states) draft(context).states[value.ownerId] = structuredClone(value);
     },
   } as unknown as InventoryRepository;
-  const inventory = new InventoryService(transactions, inventoryRepository, characters, content, {} as SkillsService, { isCharacterInActiveBattle: async () => false } as unknown as BattlesService);
+  const inventory = new InventoryService(transactions, inventoryRepository, characters, content, {} as SkillsService, { isCharacterInActiveBattle: async () => false } as unknown as BattleParticipationService);
   const operations = {
     async claimOperation(id: string, signature: string, context: TransactionContext) {
       const value = draft(context);

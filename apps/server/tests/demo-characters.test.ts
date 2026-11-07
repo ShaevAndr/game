@@ -18,6 +18,6 @@ test('migration contains ten unique level 10 heroes with valid learned skills an
     assert.equal(character.skillPoints, reconstructed.skillPoints);
     assert.equal(character.experience, 0);
     assert.deepEqual(new Set(character.learnedSkillIds), new Set(reconstructed.learnedSkillIds));
-    assert.ok(character.skillPoints > 0);
+    assert.ok(character.skillPoints >= 0);
   }
 });

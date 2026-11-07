@@ -15,7 +15,7 @@ function fixture(extra: Skill[] = []) {
   };
   const first = hero('first'), second = hero('second');
   const battle = newBattle('effects-battle', 'Эффекты', 'duel', 'on-match', first, catalog);
-  joinBattle(battle, second, 1); startBattle(battle);
+  joinBattle(battle, second, 1); startBattle(battle, () => 0);
   return { battle, first, second };
 }
 const skill = (id: string) => structuredClone(seedEffectSkills.find(skill => skill.id === id)!);
@@ -212,7 +212,7 @@ test('content rejects unknown references, incompatible units and invalid stackin
 
 test('NPCs use the same buff and turn lifecycle, without refreshing a healthy effect forever', () => {
   const { first } = fixture();
-  const battle = newBattle('npc-effects', 'Бот', 'bot', 'on-match', first, content); startBattle(battle);
+  const battle = newBattle('npc-effects', 'Бот', 'bot', 'on-match', first, content); startBattle(battle, () => 0);
   const bot = battle.fighters[1]; bot.skillIds = ['strike', 'battle-cry']; battle.activeId = bot.id;
   ready(battle, 'battle-cry'); runNpcTurns(battle);
   assert.equal(battle.activeId, first.id);
