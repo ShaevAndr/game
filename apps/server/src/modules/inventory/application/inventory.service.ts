@@ -23,6 +23,18 @@ export class InventoryService {
     @Inject(BattleParticipationService) private readonly battles: BattleParticipationService,
   ) {}
 
+  /** Ownership queries used by HTTP access checks without exposing a foreign inventory. */
+  async ownerOfItem(id: string) {
+    const item = await this.repository.instance(id);
+    if (!item) throw new NotFoundException('Предмет не найден');
+    return item.ownerId;
+  }
+  async ownerOfContainer(id: string) {
+    const ownerId = await this.repository.inventoryOwner(id);
+    if (!ownerId) throw new NotFoundException('Инвентарь не найден');
+    return ownerId;
+  }
+
   /** Creates the owner's backpack and starting items in the character creation transaction. */
   async initialize(ownerId: string, content: Content, context: TransactionContext) {
     const character = await this.characters.get(ownerId, content, context, true);
@@ -68,9 +80,10 @@ export class InventoryService {
     return backpackStacks(state).map(stack => ({ ...stack, item: state.definitions.find(item => item.id === stack.itemId) ?? null }));
   }
 
-  async instance(id: string) {
+  async instance(id: string, accountId?: string) {
     const instance = await this.repository.instance(id);
     if (!instance) throw new NotFoundException('Предмет не найден');
+    if (accountId) await this.characters.assertOwned(accountId, instance.ownerId);
     const view = await this.get(instance.ownerId);
     const current = view.items.find(item => item.id === id);
     if (!current) throw new ConflictException('Предмет перемещён. Повторите запрос.');
@@ -125,9 +138,9 @@ export class InventoryService {
     await this.commit([state], content, context);
   }
 
-  async execute(command: InventoryCommand, operationId: string) {
+  async execute(command: InventoryCommand, operationId: string, accountId?: string) {
     z.string().uuid().parse(operationId);
-    const signature = JSON.stringify(Object.fromEntries(Object.entries(command).sort(([left], [right]) => left.localeCompare(right))));
+    const signature = JSON.stringify({ ...Object.fromEntries(Object.entries(command).sort(([left], [right]) => left.localeCompare(right))), ...(accountId ? { actorAccountId: accountId } : {}) });
     const content = await this.content.get(true);
     return this.transactions.run(async context => {
       const receipt = await this.repository.claimOperation(operationId, signature, context);
@@ -138,6 +151,7 @@ export class InventoryService {
       // Every inventory mutation locks character owners first, in the same order as rewards.
       for (const ownerId of [...new Set(ownerIds)].sort()) {
         states.push(await this.state(ownerId, content, context));
+        if (accountId) await this.characters.assertOwned(accountId, ownerId, context);
       }
       if ('instanceId' in command && !states.some(state => state.items.some(item => item.id === command.instanceId))) throw new ConflictException('Предмет перемещён. Повторите действие.');
       if ('instanceId' in command) {

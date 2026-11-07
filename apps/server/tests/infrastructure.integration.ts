@@ -10,7 +10,7 @@ import { Pool } from 'pg';
 import { MongoClient } from 'mongodb';
 import Redis from 'ioredis';
 import { io, Socket } from 'socket.io-client';
-import { Battle, Character, Content, InventoryView, InventoryResult, findBattlefieldMove, findBattlefieldMatches, gainExperience, combatStatDefinitions, defaultModifierDefinitions, defaultCombatFormulaRules, seedContent, seedEffectSkills, skillChoices } from '@game/core';
+import { Account, AccountLogin, Battle, Character, Content, InventoryView, InventoryResult, findBattlefieldMove, findBattlefieldMatches, gainExperience, combatStatDefinitions, defaultModifierDefinitions, defaultCombatFormulaRules, seedContent, seedEffectSkills, skillChoices } from '@game/core';
 import { InventoryService } from '../src/modules/inventory/application/inventory.service';
 import { InventoryRepository } from '../src/modules/inventory/ports/inventory.repository';
 import { AppModule } from '../src/app.module';
@@ -72,8 +72,9 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     await app.listen(0, '127.0.0.1');
     const origin = await app.getUrl();
     assert.equal((await fetch(`${origin}/api/content`)).status, 404);
+    let authToken = '';
     const request = async <T>(path: string, body?: object, status = body ? 201 : 200, method = body ? 'POST' : 'GET'): Promise<T> => {
-      const response = await fetch(`${origin}/api/v1${path}`, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+      const response = await fetch(`${origin}/api/v1${path}`, { method, headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
       const result = await response.json();
       // Server clock is intentionally volatile; compare canonical snapshots below.
       if (result && !Array.isArray(result) && 'serverTime' in result) delete result.serverTime;
@@ -81,7 +82,12 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
       return result as T;
     };
 
-    assert.equal((await request<Character[]>('/characters')).length, 10);
+    const accounts = await request<Account[]>('/accounts');
+    const login = await request<AccountLogin>('/identity/session', { accountId: accounts[0].id });
+    authToken = login.token;
+    assert.equal(login.characterId, null);
+    assert.equal((await request<Character[]>('/characters')).length, 5);
+    await verifyIdentity(origin, request, accounts, authToken, app);
     const catalog = await request<Content>('/content');
     assert.equal(catalog.balance.formulas?.version, 1);
     assert.equal(catalog.statDefinitions!.find(stat => stat.id === 'strength')!.name, 'Своя сила');
@@ -166,7 +172,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     started.board = Array.from({ length: 6 }, (_, row) => Array.from({ length: 10 }, (_, col) => (row + col) % 2 ? 'water' : 'physical'));
     await database.sql.updateTable('battles').set({ data: JSON.stringify(started) }).where('id', '=', room.id).execute();
 
-    socket = io(origin, { autoConnect: false, reconnection: false });
+    socket = io(origin, { autoConnect: false, reconnection: false, auth: { token: authToken } });
     const watched = new Promise<void>((resolve, reject) => {
       socket!.on('connect_error', reject);
       socket!.on('connect', () => socket!.emit('watch', room.id, (ack: { ok: boolean }) => { if (ack.ok) resolve(); else reject(new Error('Watch failed')); }));
@@ -894,4 +900,77 @@ async function verifyBattleSession(request: TestRequest, app: INestApplication) 
   assert.equal(leaverInventory.items.find(item => item.itemId === 'iron-sword')!.actions.find(action => action.id === 'equip')!.enabled, true);
   const personal = await request<Battle>('/battles', { name: 'После сдачи', characterId: leaver.id, kind: 'bot' });
   await request(`/battles/${personal.id}/start`, { characterId: leaver.id, version: personal.version });
+}
+
+async function verifyIdentity(origin: string, request: TestRequest, accounts: Account[], primaryToken: string, app: INestApplication) {
+  const call = async (path: string, token?: string, body?: object, method = body ? 'POST' : 'GET') => {
+    const response = await fetch(`${origin}/api/v1${path}`, { method, headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    return { status: response.status, data: await response.json() };
+  };
+  assert.equal((await call('/characters')).status, 401);
+  assert.equal((await call('/characters', accounts[0].id)).status, 401);
+  const otherLogin = await call('/identity/session', undefined, { accountId: accounts[1].id });
+  assert.equal(otherLogin.status, 201);
+  const otherToken = otherLogin.data.token as string;
+  const first = await request<Character[]>('/characters');
+  const second = (await call('/characters', otherToken)).data as Character[];
+  assert.equal(first.length, 5); assert.equal(second.length, 5);
+  assert.ok(first.every(hero => hero.accountId === accounts[0].id));
+  assert.ok(second.every(hero => hero.accountId === accounts[1].id));
+  assert.ok(first.every(hero => !second.some(other => other.id === hero.id)));
+  const own = first[0], foreign = second[0];
+  for (const path of [`/characters/${foreign.id}`, `/characters/${foreign.id}/skills`, `/characters/${foreign.id}/inventories`, `/characters/${foreign.id}/inventory`, `/characters/${foreign.id}/crafting`]) {
+    assert.equal((await call(path, primaryToken)).status, 403, path);
+  }
+  assert.equal((await call(`/characters/${foreign.id}/skills`, primaryToken, { skillId: 'ember' })).status, 403);
+  assert.equal((await call(`/characters/${foreign.id}/attributes`, primaryToken, { allocations: { strength: 1 }, expectedRevision: 0 })).status, 403);
+  assert.equal((await call('/identity/session/character', primaryToken, { characterId: foreign.id })).status, 403);
+  assert.equal((await request<{ characterId: string | null }>('/identity/session')).characterId, null);
+  const selected = await request<{ characterId: string }>('/identity/session/character', { characterId: own.id });
+  assert.equal(selected.characterId, own.id);
+  assert.equal((await request<{ characterId: string }>('/identity/session')).characterId, own.id);
+  assert.equal((await call('/identity/session', otherToken)).data.characterId, null);
+  const another = await request<AccountLogin>('/identity/session', { accountId: accounts[0].id });
+  assert.equal(another.characterId, null); assert.notEqual(another.token, primaryToken);
+  assert.equal((await call('/identity/session', primaryToken)).data.characterId, own.id);
+  const foreignInventory = (await call(`/characters/${foreign.id}/inventories`, otherToken)).data as InventoryView;
+  const ownInventory = await request<InventoryView>(`/characters/${own.id}/inventories`);
+  const item = foreignInventory.items[0], ownItem = ownInventory.items[0];
+  assert.equal((await call(`/item-instances/${item.id}`, primaryToken)).status, 403);
+  assert.equal((await call(`/item-instances/${item.id}/actions`, primaryToken, { action: 'split', quantity: 1, operationId: randomUUID() })).status, 403);
+  assert.equal((await call('/inventory-transfers', primaryToken, { instanceId: ownItem.id, targetInventoryId: foreign.id, quantity: 1, operationId: randomUUID() })).status, 403);
+  assert.equal((await call(`/inventories/${foreign.id}/items`, primaryToken, { instanceId: ownItem.id, quantity: 1, operationId: randomUUID() })).status, 403);
+  assert.equal((await call(`/item-instances/${ownItem.id}/actions`, primaryToken, { action: 'merge', targetInstanceId: item.id, operationId: randomUUID() })).status, 403);
+  assert.deepEqual((await call(`/characters/${foreign.id}/inventories`, otherToken)).data, foreignInventory);
+  assert.equal((await call('/characters', primaryToken, { name: 'Подмена владельца', accountId: accounts[1].id })).status, 400);
+  assert.equal((await call('/battles', primaryToken, { name: 'Чужой герой', characterId: foreign.id, kind: 'bot' })).status, 403);
+  const foreignRoom = await call('/battles', otherToken, { name: 'Бой другого аккаунта', characterId: foreign.id, kind: 'bot' });
+  assert.equal(foreignRoom.status, 201);
+  for (const action of ['join', 'start', 'actions']) {
+    assert.equal((await call(`/battles/${foreignRoom.data.id}/${action}`, primaryToken, { characterId: foreign.id, version: foreignRoom.data.version, team: 0, action: { type: 'surrender' } })).status, 403);
+  }
+  assert.equal((await call('/identity/session', otherToken, undefined, 'DELETE')).status, 200);
+  assert.equal((await call('/characters', otherToken)).status, 401);
+  const again = (await call('/identity/session', undefined, { accountId: accounts[1].id })).data as AccountLogin;
+  assert.equal(again.characterId, null);
+  const db = app.get(Database);
+  const savedSessions = await db.sql.selectFrom('account_sessions').selectAll().execute();
+  assert.ok(savedSessions.every(session => /^[a-f0-9]{64}$/.test(session.token_hash) && session.token_hash !== primaryToken && session.token_hash !== again.token));
+  await db.sql.updateTable('account_sessions').set({ expires_at: new Date(Date.now() - 1) }).where('account_id', '=', accounts[1].id).execute();
+  assert.equal((await call('/identity/session', again.token)).status, 401);
+  assert.equal((await call('/accounts', undefined, { name: accounts[0].name.toLowerCase() })).status, 409);
+  const created = await call('/accounts', undefined, { name: 'Новый аккаунт' });
+  assert.equal(created.status, 201);
+  const newLogin = (await call('/identity/session', undefined, { accountId: created.data.id })).data as AccountLogin;
+  assert.deepEqual((await call('/characters', newLogin.token)).data, []);
+  const newHero = await call('/characters', newLogin.token, { name: 'Собственный герой' });
+  assert.equal(newHero.status, 201); assert.equal(newHero.data.accountId, created.data.id);
+  assert.equal((await call(`/characters/${newHero.data.id}`, primaryToken)).status, 403);
+  assert.equal((await call('/characters', newLogin.token)).data.length, 1);
+  const unauthenticated = io(origin, { autoConnect: false, reconnection: false });
+  try {
+    await new Promise<void>((resolve, reject) => { unauthenticated.on('connect', resolve); unauthenticated.on('connect_error', reject); unauthenticated.connect(); });
+    const result = await new Promise<{ error?: string }>(resolve => unauthenticated.emit('watch', foreignRoom.data.id, resolve));
+    assert.equal(result.error, 'Выберите аккаунт');
+  } finally { unauthenticated.disconnect(); }
 }

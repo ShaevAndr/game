@@ -13,10 +13,10 @@ export class CharacterCreationService {
     @Inject(ContentService) private readonly content: ContentService,
   ) {}
 
-  async create(input: unknown) {
+  async create(input: unknown, accountId: string) {
     const content = await this.content.get(true);
     return this.transactions.run(async context => {
-      const character = await this.characters.create(input, content, context);
+      const character = await this.characters.create(input, content, context, accountId);
       await this.inventory.initialize(character.id, content, context);
       return character;
     });

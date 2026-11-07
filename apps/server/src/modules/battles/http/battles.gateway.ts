@@ -1,18 +1,22 @@
-import { Logger } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
 import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Battle } from '@game/core';
 import { z } from 'zod';
 import { BattleEvents } from '../ports/battle-events';
 import { battleView } from './battle-view';
+import { IdentityService } from '../../identity/application/identity.service';
 
 @WebSocketGateway({ cors: { origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173' } })
 export class BattlesGateway extends BattleEvents {
+  constructor(@Inject(IdentityService) private readonly identity: IdentityService) { super(); }
   @WebSocketServer() server!: Server;
   private readonly logger = new Logger(BattlesGateway.name);
 
   @SubscribeMessage('watch')
   async watch(@ConnectedSocket() socket: Socket, @MessageBody() value: unknown) {
+    try { await this.identity.authenticate(socket.handshake.auth?.token); }
+    catch { return { error: 'Выберите аккаунт' }; }
     const id = z.string().uuid().safeParse(value);
     if (!id.success) return { error: 'Некорректный ID' };
     await this.unwatch(socket);

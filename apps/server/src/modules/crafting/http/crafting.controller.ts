@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
+import { OwnResources } from '../../../shared/http/account-access';
 import { z } from 'zod';
 import { CraftingService } from '../application/crafting.service';
 
 const id = z.string().uuid();
 const contentId = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 
+@OwnResources({ kind: 'character', from: 'params', key: 'id' })
 @Controller()
 export class CraftingController {
   constructor(@Inject(CraftingService) private readonly service: CraftingService) {}

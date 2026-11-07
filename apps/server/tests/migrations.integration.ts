@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { sql } from 'kysely';
-import { createCharacter, seedContent } from '@game/core';
+import { createCharacter, demoAccounts, seedContent } from '@game/core';
 import { Database } from '../src/infrastructure/database/database.service';
 
 test('the single v1 init creates the complete schema, seeds heroes and preserves progress on restart', async () => {
@@ -22,6 +22,9 @@ test('the single v1 init creates the complete schema, seeds heroes and preserves
     assert.deepEqual(migrations.rows.map(row => row.name), ['init']);
     const initial = await database.sql.selectFrom('characters').selectAll().execute();
     assert.equal(initial.length, 10);
+    assert.equal((await database.sql.selectFrom('accounts').selectAll().execute()).length, 2);
+    for (const account of demoAccounts) assert.equal(initial.filter(row => row.account_id === account.id).length, 5);
+    assert.ok(initial.every(row => row.data.accountId === row.account_id));
     assert.ok(initial.every(row => row.data.level === 10 && row.data.learnedSkillIds.length >= 6 && row.data.stats.maxEnergy === 30));
     for (const table of ['battles', 'battle_rewards', 'battle_archive_outbox', 'inventory_operations', 'crafting_operations'] as const) {
       assert.equal((await database.sql.selectFrom(table).selectAll().execute()).length, 0);
@@ -44,8 +47,8 @@ test('the single v1 init creates the complete schema, seeds heroes and preserves
     await assert.rejects(database.sql.insertInto('inventories').values({ id: randomUUID(), owner_id: initial[0].id, name: 'Повторный основной', capacity: 50, is_primary: true }).execute());
     const progressed = { ...initial[0].data, name: 'Сохранённый герой', experience: 77 };
     await database.sql.updateTable('characters').set({ data: JSON.stringify(progressed) }).where('id', '=', progressed.id).execute();
-    const custom = createCharacter(randomUUID(), 'Свой герой', seedContent);
-    await database.sql.insertInto('characters').values({ id: custom.id, data: JSON.stringify(custom) }).execute();
+    const custom = { ...createCharacter(randomUUID(), 'Свой герой', seedContent), accountId: demoAccounts[0].id };
+    await database.sql.insertInto('characters').values({ id: custom.id, account_id: custom.accountId, data: JSON.stringify(custom) }).execute();
     await database.onApplicationShutdown();
     database = new Database(); await database.onModuleInit();
     const after = await database.sql.selectFrom('characters').selectAll().execute();

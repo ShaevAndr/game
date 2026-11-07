@@ -1,13 +1,25 @@
 import { randomUUID } from 'node:crypto';
 import { Migration, sql } from 'kysely';
-import { seedContent, consumableEffects } from '@game/core';
+import { seedContent, consumableEffects, demoAccounts } from '@game/core';
 import characters from '../seeds/demo-characters.json';
 
 /** Pre-release v1 baseline. Schema changes belong here until a new release is explicitly started. */
 export const initialMigration: Migration = {
   async up(db) {
+    await db.schema.createTable('accounts').addColumn('id', 'uuid', c => c.primaryKey())
+      .addColumn('name', 'varchar(32)', c => c.notNull())
+      .addColumn('created_at', 'timestamptz', c => c.notNull()).execute();
+    await sql`CREATE UNIQUE INDEX accounts_name ON accounts (lower(name))`.execute(db);
+    for (const account of demoAccounts) await db.insertInto('accounts').values({ id: account.id, name: account.name, created_at: new Date(account.createdAt) }).execute();
     await db.schema.createTable('characters').addColumn('id', 'uuid', c => c.primaryKey())
+      .addColumn('account_id', 'uuid', c => c.notNull().references('accounts.id'))
       .addColumn('data', 'jsonb', c => c.notNull()).execute();
+    await db.schema.createIndex('characters_account').on('characters').column('account_id').execute();
+    await db.schema.createTable('account_sessions').addColumn('token_hash', 'varchar(64)', c => c.primaryKey())
+      .addColumn('account_id', 'uuid', c => c.notNull().references('accounts.id'))
+      .addColumn('character_id', 'uuid', c => c.references('characters.id').onDelete('set null'))
+      .addColumn('expires_at', 'timestamptz', c => c.notNull()).execute();
+    await db.schema.createIndex('account_sessions_expiry').on('account_sessions').column('expires_at').execute();
     await db.schema.createTable('battles').addColumn('id', 'uuid', c => c.primaryKey())
       .addColumn('data', 'jsonb', c => c.notNull())
       .addColumn('version', 'integer', c => c.notNull().defaultTo(0)).execute();
@@ -55,8 +67,9 @@ export const initialMigration: Migration = {
       await db.schema.createTable(table).addColumn('id', 'uuid', c => c.primaryKey())
         .addColumn('signature', 'text', c => c.notNull()).addColumn('result', 'jsonb').execute();
     }
-    for (const character of characters) {
-      await db.insertInto('characters').values({ id: character.id, data: JSON.stringify(character) }).execute();
+    for (const [index, character] of characters.entries()) {
+      const accountId = demoAccounts[Math.floor(index / 5)].id;
+      await db.insertInto('characters').values({ id: character.id, account_id: accountId, data: JSON.stringify({ ...character, accountId }) }).execute();
       await db.insertInto('inventories').values({ id: character.id, owner_id: character.id, name: 'Рюкзак', capacity: 50, is_primary: true }).execute();
       for (const stack of character.inventory) {
         const definition = seedContent.items.find(item => item.id === stack.itemId)!;

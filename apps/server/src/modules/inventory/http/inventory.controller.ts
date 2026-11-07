@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Inject, Param, Post } from '@nestjs/common';
 import { z } from 'zod';
-import { InventoryCommand } from '@game/core';
+import { CurrentAccount, OwnResources } from '../../../shared/http/account-access';
+import { Account, InventoryCommand } from '@game/core';
 import { InventoryService } from '../application/inventory.service';
 
 const id = z.string().uuid();
@@ -18,29 +19,32 @@ const itemActionSchema = z.discriminatedUnion('action', [
 @Controller()
 export class InventoryController {
   constructor(@Inject(InventoryService) private readonly service: InventoryService) {}
+  @OwnResources({ kind: 'character', from: 'params', key: 'id' })
   @Get('characters/:id/inventory') stacks(@Param('id') ownerId: string) { return this.service.stacks(id.parse(ownerId)); }
+  @OwnResources({ kind: 'character', from: 'params', key: 'id' })
   @Get('characters/:id/inventories') get(@Param('id') ownerId: string) { return this.service.get(id.parse(ownerId)); }
-  @Get('item-instances/:id') instance(@Param('id') instanceId: string) { return this.service.instance(id.parse(instanceId)); }
+  @OwnResources({ kind: 'item', from: 'params', key: 'id' })
+  @Get('item-instances/:id') instance(@CurrentAccount() account: Account, @Param('id') instanceId: string) { return this.service.instance(id.parse(instanceId), account.id); }
 
-  @Post('characters/:id/inventories') create(@Param('id') ownerId: string, @Body() body: unknown) {
+  @Post('characters/:id/inventories') create(@CurrentAccount() account: Account, @Param('id') ownerId: string, @Body() body: unknown) {
     const { operationId, name, capacity } = z.object({ ...operation, name: z.string().trim().min(2).max(48), capacity: z.number().int().min(1).max(200).default(50) }).strict().parse(body);
-    return this.service.execute({ type: 'create-inventory', ownerId: id.parse(ownerId), name, capacity }, operationId);
+    return this.service.execute({ type: 'create-inventory', ownerId: id.parse(ownerId), name, capacity }, operationId, account.id);
   }
-  @Post('inventory-transfers') transfer(@Body() body: unknown) {
+  @Post('inventory-transfers') transfer(@CurrentAccount() account: Account, @Body() body: unknown) {
     const { operationId, ...input } = z.object({ ...operation, instanceId: id, targetInventoryId: id, quantity }).strict().parse(body);
-    return this.service.execute({ type: 'transfer', ...input }, operationId);
+    return this.service.execute({ type: 'transfer', ...input }, operationId, account.id);
   }
-  @Post('inventories/:id/items') put(@Param('id') inventoryId: string, @Body() body: unknown) {
+  @Post('inventories/:id/items') put(@CurrentAccount() account: Account, @Param('id') inventoryId: string, @Body() body: unknown) {
     const { operationId, ...input } = z.object({ ...operation, instanceId: id, quantity }).strict().parse(body);
-    return this.service.execute({ type: 'put', targetInventoryId: id.parse(inventoryId), ...input }, operationId);
+    return this.service.execute({ type: 'put', targetInventoryId: id.parse(inventoryId), ...input }, operationId, account.id);
   }
-  @Delete('item-instances/:id') delete(@Param('id') instanceId: string, @Body() body: unknown) {
+  @Delete('item-instances/:id') delete(@CurrentAccount() account: Account, @Param('id') instanceId: string, @Body() body: unknown) {
     const { operationId, quantity: amount } = z.object({ ...operation, quantity }).strict().parse(body);
-    return this.service.execute({ type: 'delete', instanceId: id.parse(instanceId), quantity: amount }, operationId);
+    return this.service.execute({ type: 'delete', instanceId: id.parse(instanceId), quantity: amount }, operationId, account.id);
   }
-  @Post('item-instances/:id/actions') action(@Param('id') instanceId: string, @Body() body: unknown) {
+  @Post('item-instances/:id/actions') action(@CurrentAccount() account: Account, @Param('id') instanceId: string, @Body() body: unknown) {
     const { operationId, action, ...input } = itemActionSchema.parse(body);
     const command = { type: action, instanceId: id.parse(instanceId), ...input } as InventoryCommand;
-    return this.service.execute(command, operationId);
+    return this.service.execute(command, operationId, account.id);
   }
 }

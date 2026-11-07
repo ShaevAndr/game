@@ -1,8 +1,10 @@
 import { Body, Controller, Inject, Post } from '@nestjs/common';
+import { Account } from '@game/core';
+import { CurrentAccount } from '../../../shared/http/account-access';
 import { CharacterCreationService } from '../application/character-creation.service';
 
 @Controller('characters')
 export class CharacterCreationController {
   constructor(@Inject(CharacterCreationService) private readonly service: CharacterCreationService) {}
-  @Post() create(@Body() body: unknown) { return this.service.create(body); }
+  @Post() create(@CurrentAccount() account: Account, @Body() body: unknown) { return this.service.create(body, account.id); }
 }

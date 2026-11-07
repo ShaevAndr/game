@@ -1,4 +1,5 @@
 export * from './types';
+export * from './identity';
 export * from './board';
 export * from './content';
 export * from './battle';

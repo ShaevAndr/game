@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Character, ItemStack, seedContent } from '@game/core';
+import { Character, ItemStack, demoAccounts, seedContent } from '@game/core';
 import { CharacterCreationService } from '../src/modules/characters/application/character-creation.service';
 import { CharactersService } from '../src/modules/characters/application/characters.service';
 import { CharactersRepository } from '../src/modules/characters/ports/characters.repository';
@@ -58,11 +58,12 @@ function fixture() {
 
 test('character creation commits a personal starting inventory for each owner', async () => {
   const f = fixture();
-  const first = await f.service.create({ name: 'Первый' });
-  const second = await f.service.create({ name: 'Второй', templateId: seedContent.characterTemplates[0].id });
+  const first = await f.service.create({ name: 'Первый' }, demoAccounts[0].id);
+  const second = await f.service.create({ name: 'Второй', templateId: seedContent.characterTemplates[0].id }, demoAccounts[0].id);
   assert.notEqual(first.id, second.id);
   for (const character of [first, second]) {
     assert.deepEqual(f.state().characters[character.id], character);
+    assert.equal(character.accountId, demoAccounts[0].id);
     assert.deepEqual(f.state().backpacks[character.id], character.inventory);
     assert.ok(character.inventory.length > 0);
   }
@@ -70,19 +71,19 @@ test('character creation commits a personal starting inventory for each owner', 
 
 test('a starting inventory failure rolls back both owner and inventory; creation can be retried', async () => {
   const f = fixture();
-  await f.service.create({ name: 'Существующий' });
+  await f.service.create({ name: 'Существующий' }, demoAccounts[0].id);
   const before = structuredClone(f.state());
   f.failInventory(true);
-  await assert.rejects(f.service.create({ name: 'Новый' }), /inventory unavailable/);
+  await assert.rejects(f.service.create({ name: 'Новый' }, demoAccounts[0].id), /inventory unavailable/);
   assert.deepEqual(f.state(), before);
   f.failInventory(false);
-  const created = await f.service.create({ name: 'Новый' });
+  const created = await f.service.create({ name: 'Новый' }, demoAccounts[0].id);
   assert.equal(Object.keys(f.state().characters).length, 2);
   assert.deepEqual(f.state().backpacks[created.id], created.inventory);
 });
 
 test('invalid character creation does not leave an owner or starting inventory', async () => {
   const f = fixture();
-  await assert.rejects(f.service.create({ name: 'Герой', templateId: 'missing-template' }));
+  await assert.rejects(f.service.create({ name: 'Герой', templateId: 'missing-template' }, demoAccounts[0].id));
   assert.deepEqual(f.state(), { characters: {}, backpacks: {} });
 });

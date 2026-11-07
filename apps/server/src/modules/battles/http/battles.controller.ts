@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
+import { OwnResources } from '../../../shared/http/account-access';
 import { z } from 'zod';
 import { BattlesService } from '../application/battles.service';
 import { battleView } from './battle-view';
 
 const idSchema = z.string().uuid();
 
+@OwnResources({ kind: 'character', from: 'body', key: 'characterId' })
 @Controller('battles')
 export class BattlesController {
   constructor(@Inject(BattlesService) private readonly service: BattlesService) {}

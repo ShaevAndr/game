@@ -7,6 +7,7 @@ import { ItemsModule } from './modules/items/items.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { CraftingModule } from './modules/crafting/crafting.module';
 import { BattlesModule } from './modules/battles/battles.module';
+import { IdentityAccessModule } from './modules/identity/identity-access.module';
 
-@Module({ imports: [ContentModule, CharactersModule, CharacterCreationModule, SkillsModule, ItemsModule, InventoryModule, CraftingModule, BattlesModule] })
+@Module({ imports: [IdentityAccessModule, ContentModule, CharactersModule, CharacterCreationModule, SkillsModule, ItemsModule, InventoryModule, CraftingModule, BattlesModule] })
 export class AppModule {}

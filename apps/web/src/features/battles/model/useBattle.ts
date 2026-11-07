@@ -3,6 +3,7 @@ import { Battle } from '@game/core';
 import { io } from 'socket.io-client';
 import { battlesApi } from '../api/battles.api';
 import { useBattlePlayback } from './useBattlePlayback';
+import { getSessionToken } from '../../../shared/api/http';
 
 /** REST loads and recovers snapshots. The socket exists only while viewing a battle. */
 export function useBattle(roomId: string, onError: (message: string) => void) {
@@ -27,7 +28,7 @@ export function useBattle(roomId: string, onError: (message: string) => void) {
     let pending = false;
     let reloadRequested = false;
     const controller = new AbortController();
-    const socket = io({ autoConnect: false });
+    const socket = io({ autoConnect: false, auth: { token: getSessionToken() } });
     const load = async (afterSubscription = false) => {
       if (cancelled) return;
       if (pending) { reloadRequested ||= afterSubscription; return; }

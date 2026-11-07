@@ -27,6 +27,8 @@ export interface Stats { maxHp: number; attack: number; defense: number; maxEner
 export type Item = ItemDefinition;
 export interface ItemStack { itemId: string; quantity: number; effects?: SkillEffect[]; instanceId?: string }
 export interface Character { id: string; name: string; templateId?: string; level: number; experience: number; skillPoints: number; learnedSkillIds: string[]; skillLevels?: Record<string, number>; equipmentBonuses?: Partial<Stats>; stats: Stats; energy: Energy; inventory: ItemStack[]; createdAt: string;
+  /** Required for persisted server characters; pure game fixtures can omit ownership. */
+  accountId?: string;
   attributeVersion?: 1; baseAttributes?: Record<string, number>; attributePoints?: number; attributeRevision?: number; attributes?: AttributeCalculation;
   craftingProfessionXp?: Record<string, number>;
   equipmentModifiers?: StatModifier[]; equipmentScaling?: ScaledEquipmentBonus[];
