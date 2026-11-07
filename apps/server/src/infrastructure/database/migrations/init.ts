@@ -20,6 +20,16 @@ export const initialMigration: Migration = {
       .addColumn('character_id', 'uuid', c => c.references('characters.id').onDelete('set null'))
       .addColumn('expires_at', 'timestamptz', c => c.notNull()).execute();
     await db.schema.createIndex('account_sessions_expiry').on('account_sessions').column('expires_at').execute();
+    await db.schema.createTable('social_players').addColumn('player_id', 'uuid', c => c.primaryKey())
+      .addColumn('revision', 'integer', c => c.notNull().defaultTo(0))
+      .addColumn('visibility_revision', 'integer', c => c.notNull().defaultTo(0)).execute();
+    await db.schema.createTable('social_pairs').addColumn('low_id', 'uuid', c => c.notNull())
+      .addColumn('high_id', 'uuid', c => c.notNull()).addColumn('data', 'jsonb', c => c.notNull())
+      .addPrimaryKeyConstraint('social_pair_players', ['low_id', 'high_id']).execute();
+    await db.schema.createIndex('social_pairs_high').on('social_pairs').column('high_id').execute();
+    await db.schema.createTable('social_operations').addColumn('player_id', 'uuid', c => c.notNull())
+      .addColumn('operation_id', 'uuid', c => c.notNull()).addColumn('signature', 'text', c => c.notNull())
+      .addColumn('result', 'jsonb').addPrimaryKeyConstraint('social_operation_player', ['player_id', 'operation_id']).execute();
     await db.schema.createTable('chat_streams').addColumn('id', 'uuid', c => c.primaryKey())
       .addColumn('stream_key', 'varchar(160)', c => c.notNull().unique())
       .addColumn('last_sequence', 'integer', c => c.notNull().defaultTo(0)).execute();

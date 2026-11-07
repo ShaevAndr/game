@@ -1,3 +1,4 @@
+import { SocialModule } from '../social/social.module';
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../infrastructure/database/database.module';
 import { IdentityModule } from '../identity/identity.module';
@@ -11,7 +12,7 @@ import { SystemChatClock } from './repositories/system-chat-clock';
 import { ChatController } from './http/chat.controller';
 import { ChatGateway } from './http/chat.gateway';
 
-@Module({ imports: [DatabaseModule, IdentityModule, CharactersModule], controllers: [ChatController],
+@Module({ imports: [DatabaseModule, IdentityModule, CharactersModule, SocialModule], controllers: [ChatController],
   providers: [ChatService, ChatGateway, { provide: ChatRepository, useClass: PostgresChatRepository },
     { provide: ChatEvents, useExisting: ChatGateway }, { provide: ChatClock, useClass: SystemChatClock }], exports: [ChatService] })
 export class ChatModule {}

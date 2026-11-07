@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { AccountSession, ChatEntry, ChatMessage, ChatSend, directChatStream } from '@game/core';
+import { SocialService } from '../src/modules/social/application/social.service';
 import { ChatService } from '../src/modules/chat/application/chat.service';
 import { ChatRepository, ChatStream } from '../src/modules/chat/ports/chat.repository';
 import { IdentityService } from '../src/modules/identity/application/identity.service';
@@ -36,7 +37,7 @@ function fixture() {
   const identity = { getAccount: async (id: string) => { const account = sessions.find(session => session.account.id === id)?.account; if (!account) throw new Error('Игрок не найден'); return account; } } as IdentityService;
   const characters = { identity: async (id: string) => { const owner = sessions.find(session => session.characterId === id)!; return { id, name: `Герой ${owner.account.name}`, accountId: owner.account.id }; } } as CharactersService;
   const events = { async publish(message: ChatMessage) { assert.ok(state.entries.some(entry => entry.message.id === message.id), 'push follows commit'); published.push(message); } };
-  const service = new ChatService(tx, repository, identity, characters, events, { now: () => now });
+  const service = new ChatService(tx, repository, identity, characters, events, { now: () => now }, { assertCanInteract: async () => {}, readPolicy: async () => ({ revision: 0, hiddenAuthors: [] }) } as unknown as SocialService);
   const input = (session = sessions[0], recipientId?: string): ChatSend => ({ operationId: randomUUID(), authorCharacterId: session.characterId!, destination: recipientId ? { kind: 'direct', recipientPlayerId: recipientId } : { kind: 'world' }, segments: [{ kind: 'text', text: 'Привет' }] });
   return { service, sessions, input, published, state: () => state, fail: (value: boolean) => { failure = value; }, advance: (ms: number) => { now += ms; } };
 }

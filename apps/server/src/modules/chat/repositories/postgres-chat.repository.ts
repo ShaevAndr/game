@@ -41,12 +41,12 @@ export class PostgresChatRepository extends ChatRepository {
     await tx.updateTable('chat_operations').set({ result: JSON.stringify(message) })
       .where('sender_id', '=', message.senderPlayerId).where('operation_id', '=', message.operationId).execute();
   }
-  async heads(keys: string[]) {
-    const rows = await this.database.sql.selectFrom('chat_streams').select(['stream_key', 'last_sequence']).where('stream_key', 'in', keys).execute();
+  async heads(keys: string[], context?: TransactionContext) {
+    const rows = await this.database.session(context).selectFrom('chat_streams').select(['stream_key', 'last_sequence']).where('stream_key', 'in', keys).execute();
     return Object.fromEntries(keys.map(key => [key, rows.find(row => row.stream_key === key)?.last_sequence ?? 0]));
   }
-  async entries(key: string, from: number, to: number, direction: 'before' | 'after', limit: number): Promise<ChatEntry[]> {
-    const rows = await this.database.sql.selectFrom('chat_deliveries').innerJoin('chat_streams', 'chat_streams.id', 'chat_deliveries.stream_id')
+  async entries(key: string, from: number, to: number, direction: 'before' | 'after', limit: number, context?: TransactionContext): Promise<ChatEntry[]> {
+    const rows = await this.database.session(context).selectFrom('chat_deliveries').innerJoin('chat_streams', 'chat_streams.id', 'chat_deliveries.stream_id')
       .innerJoin('chat_messages', 'chat_messages.id', 'chat_deliveries.message_id').select(['chat_deliveries.sequence', 'chat_messages.data'])
       .where('chat_streams.stream_key', '=', key).where('sequence', '>', from).where('sequence', '<=', to)
       .orderBy('sequence', direction === 'before' ? 'desc' : 'asc').limit(limit).execute();

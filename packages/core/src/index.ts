@@ -28,3 +28,4 @@ export * from './item-progression';
 export * from './modifiers';
 
 export * from './combat/formulas';
+export * from './social';

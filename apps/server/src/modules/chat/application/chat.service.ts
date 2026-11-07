@@ -1,3 +1,4 @@
+import { SocialService } from '../../social/application/social.service';
 import { BadRequestException, ConflictException, ForbiddenException, GoneException, HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -11,7 +12,7 @@ import { ChatClock } from '../ports/chat-clock';
 
 const feedQuery = z.object({ view: z.enum(['all', 'world', 'direct']).default('all'), limit: z.coerce.number().int().min(1).max(100).default(50),
   before: z.string().max(4096).optional(), after: z.string().max(4096).optional() }).strict().refine(query => !(query.before && query.after));
-const cursorSchema = z.object({ playerId: z.string().uuid(), view: z.enum(['all', 'world', 'direct']), mode: z.enum(['before', 'after']), offsets: z.record(z.string(), z.number().int().nonnegative().max(2147483647)) }).strict();
+const cursorSchema = z.object({ playerId: z.string().uuid(), view: z.enum(['all', 'world', 'direct']), mode: z.enum(['before', 'after']), socialRevision: z.number().int().nonnegative(), offsets: z.record(z.string(), z.number().int().nonnegative().max(2147483647)) }).strict();
 type Cursor = z.infer<typeof cursorSchema>;
 const encode = (cursor: Cursor) => Buffer.from(JSON.stringify(cursor)).toString('base64url');
 
@@ -23,7 +24,8 @@ export class ChatService {
     @Inject(IdentityService) private readonly identity: IdentityService,
     @Inject(CharactersService) private readonly characters: CharactersService,
     @Inject(ChatEvents) private readonly events: ChatEvents,
-    @Inject(ChatClock) private readonly clock: ChatClock) {}
+    @Inject(ChatClock) private readonly clock: ChatClock,
+    @Inject(SocialService) private readonly social: SocialService) {}
 
   async send(session: AccountSession, body: unknown) {
     const input = chatSendSchema.parse(body), signature = JSON.stringify(input);
@@ -36,6 +38,7 @@ export class ChatService {
       if (author.accountId !== session.account.id) throw new ForbiddenException('Персонаж не принадлежит аккаунту');
       const recipient = input.destination.kind === 'direct' ? await this.identity.getAccount(input.destination.recipientPlayerId) : undefined;
       if (recipient?.id === session.account.id) throw new BadRequestException({ code: 'CHAT_INVALID_MESSAGE', message: 'Выберите другого адресата' });
+      if (recipient) await this.social.assertCanInteract(session.account.id, recipient.id, context);
       const own = directChatStream(session.account.id);
       const deliveryKeys = recipient ? [own, directChatStream(recipient.id)] : [CHAT_WORLD_STREAM];
       // Every send locks the sender's inbox, including world messages: one limit across channels.
@@ -59,28 +62,31 @@ export class ChatService {
   }
 
   async feed(playerId: string, rawQuery: unknown): Promise<ChatFeed> {
-    const query = feedQuery.parse(rawQuery), view: ChatView = query.view;
-    const keys = view === 'world' ? [CHAT_WORLD_STREAM] : view === 'direct' ? [directChatStream(playerId)] : [CHAT_WORLD_STREAM, directChatStream(playerId)];
-    const heads = await this.repository.heads(keys);
-    const mode = query.after ? 'after' : 'before';
-    let offsets = mode === 'after' ? Object.fromEntries(keys.map(key => [key, 0])) : { ...heads };
-    const rawCursor = query.after ?? query.before;
-    if (rawCursor) {
-      try {
-        const cursor = cursorSchema.parse(JSON.parse(Buffer.from(rawCursor, 'base64url').toString('utf8')));
-        if (cursor.playerId !== playerId || cursor.view !== view || cursor.mode !== mode
-          || Object.keys(cursor.offsets).length !== keys.length || keys.some(key => cursor.offsets[key] === undefined || cursor.offsets[key] > heads[key])) throw new Error('Invalid cursor');
-        offsets = cursor.offsets;
-      } catch { throw new GoneException({ code: 'CHAT_CURSOR_EXPIRED', message: 'Загрузите историю чата заново' }); }
-    }
-    const batches = await Promise.all(keys.map(key => this.repository.entries(key, mode === 'after' ? offsets[key] : 0,
-      mode === 'after' ? heads[key] : offsets[key], mode, query.limit + 1)));
-    const merged = mergeChatStreams(batches, query.limit, mode);
-    const next = { ...offsets };
-    for (const entry of merged.entries) next[entry.streamKey] = mode === 'after' ? entry.sequence : entry.sequence - 1;
-    const after = encode({ playerId, view, mode: 'after', offsets: mode === 'after' ? next : heads });
-    const before = encode({ playerId, view, mode: 'before', offsets: mode === 'before' ? next : heads });
-    const messages = merged.entries.map(entry => entry.message).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-    return { messages, after, before, hasMore: merged.hasMore };
+    const query = feedQuery.parse(rawQuery);
+    return this.transactions.run(async context => {
+      const policy = await this.social.readPolicy(playerId, context), view: ChatView = query.view;
+      const keys = view === 'world' ? [CHAT_WORLD_STREAM] : view === 'direct' ? [directChatStream(playerId)] : [CHAT_WORLD_STREAM, directChatStream(playerId)];
+      const heads = await this.repository.heads(keys, context);
+      const mode = query.after ? 'after' : 'before';
+      let offsets = mode === 'after' ? Object.fromEntries(keys.map(key => [key, 0])) : { ...heads };
+      const rawCursor = query.after ?? query.before;
+      if (rawCursor) {
+        try {
+          const cursor = cursorSchema.parse(JSON.parse(Buffer.from(rawCursor, 'base64url').toString('utf8')));
+          if (cursor.socialRevision !== policy.revision || cursor.playerId !== playerId || cursor.view !== view || cursor.mode !== mode
+            || Object.keys(cursor.offsets).length !== keys.length || keys.some(key => cursor.offsets[key] === undefined || cursor.offsets[key] > heads[key])) throw new Error('Invalid cursor');
+          offsets = cursor.offsets;
+        } catch { throw new GoneException({ code: 'CHAT_CURSOR_EXPIRED', message: 'Загрузите историю чата заново' }); }
+      }
+      const batches = await Promise.all(keys.map(key => this.repository.entries(key, mode === 'after' ? offsets[key] : 0,
+        mode === 'after' ? heads[key] : offsets[key], mode, query.limit + 1, context)));
+      const merged = mergeChatStreams(batches, query.limit, mode);
+      const next = { ...offsets };
+      for (const entry of merged.entries) next[entry.streamKey] = mode === 'after' ? entry.sequence : entry.sequence - 1;
+      const after = encode({ playerId, view, socialRevision: policy.revision, mode: 'after', offsets: mode === 'after' ? next : heads });
+      const before = encode({ playerId, view, socialRevision: policy.revision, mode: 'before', offsets: mode === 'before' ? next : heads });
+      const messages = merged.entries.map(entry => entry.message).filter(message => !policy.hiddenAuthors.includes(message.senderPlayerId)).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+      return { messages, after, before, hasMore: merged.hasMore };
+    });
   }
 }

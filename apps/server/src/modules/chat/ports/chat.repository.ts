@@ -7,6 +7,6 @@ export abstract class ChatRepository {
   abstract lockStreams(keys: string[], context: TransactionContext): Promise<ChatStream[]>;
   abstract recentCount(senderId: string, since: number, context: TransactionContext): Promise<number>;
   abstract save(message: ChatMessage, streams: ChatStream[], context: TransactionContext): Promise<void>;
-  abstract heads(keys: string[]): Promise<Record<string, number>>;
-  abstract entries(key: string, from: number, to: number, direction: 'before' | 'after', limit: number): Promise<ChatEntry[]>;
+  abstract heads(keys: string[], context?: TransactionContext): Promise<Record<string, number>>;
+  abstract entries(key: string, from: number, to: number, direction: 'before' | 'after', limit: number, context?: TransactionContext): Promise<ChatEntry[]>;
 }
