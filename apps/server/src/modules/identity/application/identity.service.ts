@@ -13,6 +13,11 @@ export class IdentityService {
   constructor(@Inject(IdentityRepository) private readonly repository: IdentityRepository,
     @Inject(CharactersService) private readonly characters: CharactersService) {}
   list() { return this.repository.list(); }
+  async getAccount(id: string) {
+    const account = await this.repository.findAccount(id);
+    if (!account) throw new NotFoundException('Игрок не найден');
+    return account;
+  }
   async create(body: unknown) {
     const { name } = z.object({ name: z.string().trim().min(2).max(32) }).strict().parse(body);
     const account: Account = { id: randomUUID(), name, createdAt: new Date().toISOString() };

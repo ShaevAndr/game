@@ -20,6 +20,25 @@ export const initialMigration: Migration = {
       .addColumn('character_id', 'uuid', c => c.references('characters.id').onDelete('set null'))
       .addColumn('expires_at', 'timestamptz', c => c.notNull()).execute();
     await db.schema.createIndex('account_sessions_expiry').on('account_sessions').column('expires_at').execute();
+    await db.schema.createTable('chat_streams').addColumn('id', 'uuid', c => c.primaryKey())
+      .addColumn('stream_key', 'varchar(160)', c => c.notNull().unique())
+      .addColumn('last_sequence', 'integer', c => c.notNull().defaultTo(0)).execute();
+    await db.schema.createTable('chat_messages').addColumn('id', 'uuid', c => c.primaryKey())
+      .addColumn('sender_id', 'uuid', c => c.notNull())
+      .addColumn('created_at', 'timestamptz', c => c.notNull())
+      .addColumn('data', 'jsonb', c => c.notNull()).execute();
+    await db.schema.createIndex('chat_sender_time').on('chat_messages').columns(['sender_id', 'created_at']).execute();
+    await db.schema.createTable('chat_deliveries')
+      .addColumn('stream_id', 'uuid', c => c.notNull().references('chat_streams.id'))
+      .addColumn('sequence', 'integer', c => c.notNull())
+      .addColumn('message_id', 'uuid', c => c.notNull().references('chat_messages.id'))
+      .addPrimaryKeyConstraint('chat_delivery_sequence', ['stream_id', 'sequence'])
+      .addUniqueConstraint('chat_delivery_message', ['stream_id', 'message_id']).execute();
+    await db.schema.createTable('chat_operations')
+      .addColumn('sender_id', 'uuid', c => c.notNull())
+      .addColumn('operation_id', 'uuid', c => c.notNull())
+      .addColumn('signature', 'text', c => c.notNull()).addColumn('result', 'jsonb')
+      .addPrimaryKeyConstraint('chat_operation_sender', ['sender_id', 'operation_id']).execute();
     await db.schema.createTable('battles').addColumn('id', 'uuid', c => c.primaryKey())
       .addColumn('data', 'jsonb', c => c.notNull())
       .addColumn('version', 'integer', c => c.notNull().defaultTo(0)).execute();

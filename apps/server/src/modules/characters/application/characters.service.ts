@@ -38,6 +38,13 @@ export class CharactersService {
     if (!character || character.accountId !== accountId) throw new ForbiddenException('Персонаж не принадлежит выбранному аккаунту');
   }
 
+  /** Public identity only; chat must not load game catalogs or a character's inventory. */
+  async identity(characterId: string) {
+    const character = await this.repository.find(characterId);
+    if (!character) throw new NotFoundException('Персонаж не найден');
+    return { id: character.id, name: character.name, accountId: character.accountId };
+  }
+
   /** Mutations participate in the caller's transaction, including rewards and skill purchases. */
   async update(id: string, content: Content, change: (character: Character) => void, context: TransactionContext) {
     const character = await this.get(id, content, context, true);

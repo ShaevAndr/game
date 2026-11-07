@@ -53,7 +53,7 @@ for (const file of [...files(join(root, 'apps/server/src')), ...files(join(root,
   } else {
     if (/\/components\//.test(name) && imports.some(specifier => /(?:\/api\/|socket\.io-client)/.test(specifier))) report(file, 'UI components receive data/actions through props; network access belongs in api/model');
     if (/\bfetch\s*\(/.test(source) && !name.endsWith('/shared/api/http.ts')) report(file, 'Use the shared HTTP client');
-    if (imports.includes('socket.io-client') && !name.startsWith('apps/web/src/features/battles/')) report(file, 'Realtime transport belongs to the battle feature');
+    if (imports.includes('socket.io-client') && !/^apps\/web\/src\/features\/(?:battles|chat)\//.test(name)) report(file, 'Realtime transport belongs to the battle or chat feature');
     if (/\/shared\//.test(name) && targets.some(target => /\/features\//.test(target))) report(file, 'Shared UI/API must not import features');
   }
 }

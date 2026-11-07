@@ -1,3 +1,4 @@
+import { verifyChat } from './helpers/chat-infrastructure';
 import { CraftingOperationsRepository } from '../src/modules/crafting/ports/crafting-operations.repository';
 import 'reflect-metadata';
 import { test } from 'node:test';
@@ -88,6 +89,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.equal(login.characterId, null);
     assert.equal((await request<Character[]>('/characters')).length, 5);
     await verifyIdentity(origin, request, accounts, authToken, app);
+    const chatCheckpoint = await verifyChat(app, origin, authToken, accounts);
     const catalog = await request<Content>('/content');
     assert.equal(catalog.balance.formulas?.version, 1);
     assert.equal(catalog.statDefinitions!.find(stat => stat.id === 'strength')!.name, 'Своя сила');
@@ -254,6 +256,13 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     socket.disconnect();
     assert.equal(snapshots.length, beforeUnwatch);
     // All connections and dispatchers must close cleanly, with no dangling workers.
+    await app.close();
+    app = await NestFactory.create(AppModule, { logger: false, abortOnError: false });
+    app.setGlobalPrefix('api/v1'); app.useGlobalFilters(new ValidationFilter());
+    await app.listen(0, '127.0.0.1');
+    const recovered = await fetch(`${await app.getUrl()}/api/v1/chat/feed?view=world`, { headers: { Authorization: `Bearer ${authToken}` } });
+    assert.equal(recovered.status, 200);
+    assert.ok((await recovered.json()).messages.some((message: { id: string }) => message.id === chatCheckpoint));
     await app.close();
     app = undefined;
   } finally {

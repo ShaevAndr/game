@@ -8,6 +8,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { CraftingModule } from './modules/crafting/crafting.module';
 import { BattlesModule } from './modules/battles/battles.module';
 import { IdentityAccessModule } from './modules/identity/identity-access.module';
+import { ChatModule } from './modules/chat/chat.module';
 
-@Module({ imports: [IdentityAccessModule, ContentModule, CharactersModule, CharacterCreationModule, SkillsModule, ItemsModule, InventoryModule, CraftingModule, BattlesModule] })
+@Module({ imports: [IdentityAccessModule, ContentModule, CharactersModule, CharacterCreationModule, SkillsModule, ItemsModule, InventoryModule, CraftingModule, BattlesModule, ChatModule] })
 export class AppModule {}

@@ -1,7 +1,11 @@
-import { Battle, Character, ItemQuality, SkillEffect, CraftingResult, InventoryResult } from '@game/core';
+import { Battle, Character, ChatMessage, ItemQuality, SkillEffect, CraftingResult, InventoryResult } from '@game/core';
 import { ColumnType } from 'kysely';
 
 export interface Tables {
+  chat_streams: { id: string; stream_key: string; last_sequence: number };
+  chat_messages: { id: string; sender_id: string; created_at: ColumnType<Date, Date, never>; data: ColumnType<ChatMessage, string, never> };
+  chat_deliveries: { stream_id: string; sequence: number; message_id: string };
+  chat_operations: { sender_id: string; operation_id: string; signature: string; result: ColumnType<ChatMessage | null, string | null, string> };
   accounts: { id: string; name: string; created_at: ColumnType<Date, Date, never> };
   account_sessions: { token_hash: string; account_id: string; character_id: string | null; expires_at: ColumnType<Date, Date, Date> };
   inventories: { id: string; owner_id: string; name: string; capacity: number; is_primary: boolean };

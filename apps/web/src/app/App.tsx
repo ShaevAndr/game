@@ -23,15 +23,19 @@ import '../features/identity/identity.css';
 import { useAccountSession } from '../features/identity/model/useAccountSession';
 import { AccountSelectionScreen } from '../features/identity/components/AccountSelectionScreen';
 import { CharacterSelectionPage } from '../features/characters/CharacterSelectionPage';
+import { ChatPanel } from '../features/chat/ChatPanel';
 
 export function App() {
   const identity = useAccountSession();
   if (!identity.session) return <AccountSelectionScreen accounts={identity.accounts} ready={identity.ready} busy={identity.busy} error={identity.error}
     onChoose={id => void identity.chooseAccount(id)} onCreate={identity.createAccount} onRefresh={() => void identity.refreshAccounts()}/>;
-  if (!identity.session.characterId) return <CharacterSelectionPage key={identity.session.account.id} account={identity.session.account} busy={identity.busy} error={identity.error}
-    onChoose={id => void identity.selectCharacter(id)} onAccount={() => void identity.logout()}/>;
-  return <GameApp key={`${identity.session.account.id}:${identity.session.characterId}`} session={identity.session} sessionBusy={identity.busy} sessionError={identity.error}
-    onCharacters={() => void identity.selectCharacter(null)} onAccount={() => void identity.logout()}/>;
+  return <>
+    {!identity.session.characterId ? <CharacterSelectionPage key={`characters:${identity.session.account.id}`} account={identity.session.account} busy={identity.busy} error={identity.error}
+      onChoose={id => void identity.selectCharacter(id)} onAccount={() => void identity.logout()}/>
+      : <GameApp key={`${identity.session.account.id}:${identity.session.characterId}`} session={identity.session} sessionBusy={identity.busy} sessionError={identity.error}
+        onCharacters={() => void identity.selectCharacter(null)} onAccount={() => void identity.logout()}/>}
+    <ChatPanel key={`chat:${identity.session.account.id}`} session={identity.session} enabled={!!identity.session.characterId}/>
+  </>;
 }
 
 function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount }: { session: AccountSession; sessionBusy: boolean; sessionError: string; onCharacters: () => void; onAccount: () => void }) {
