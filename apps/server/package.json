@@ -7,6 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "start": "tsx src/main.ts",
+    "seed:playground": "tsx scripts/seed-playground.ts",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:migrations": "node --import tsx --test tests/migrations.integration.ts",
     "test:infrastructure": "node --import tsx --test tests/infrastructure.integration.ts"
