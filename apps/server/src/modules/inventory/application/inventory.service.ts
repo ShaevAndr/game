@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { receiveInventoryItems } from '@game/core';
 import { Content, InventoryCommand, InventoryState, ItemInstance, ItemStack, applyInventoryCommand, availableItemActions, backpackStacks, equipmentBonuses, equipmentAttributeSources, equipmentRequirementBlockers, projectCharacterAttributes, isBattleConsumable } from '@game/core';
 import { z } from 'zod';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
@@ -120,6 +121,16 @@ export class InventoryService {
         }
       }, context);
     }
+  }
+
+  /** Trusted grants share the caller's transaction and the canonical inventory lock. */
+  async receiveInTransaction(ownerId: string, loot: { itemId: string; quantity: number }[], content: Content, context: TransactionContext) {
+    const state = await this.state(ownerId, content, context);
+    let updated: InventoryState;
+    try { updated = receiveInventoryItems(state, loot, content.items, randomUUID); }
+    catch (error) { throw new BadRequestException((error as Error).message); }
+    await this.commit([updated], content, context);
+    return updated;
   }
 
   /** A successful combat command consumes the original bottle in the same transaction. */

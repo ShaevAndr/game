@@ -1,7 +1,8 @@
 import type { SocialAction, SocialState } from '@game/core';
 interface Props { state: SocialState | null; players: { id: string; name: string }[]; busy: boolean;
-  onAction: (action: SocialAction, id: string) => void; onMessage: (id: string) => void }
-export function SocialPanel({ state, players, busy, onAction, onMessage }: Props) {
+  onAction: (action: SocialAction, id: string) => void; onMessage: (id: string) => void;
+  onInvite?: (playerId: string) => void; inviteDisabled?: boolean }
+export function SocialPanel({ state, players, busy, onAction, onMessage, onInvite, inviteDisabled }: Props) {
   if (!state) return <div className="chat-social"><p role="status">Загрузка игроков…</p></div>;
   const names = new Map(players.map(player => [player.id, player.name]));
   const sections = [
@@ -14,6 +15,7 @@ export function SocialPanel({ state, players, busy, onAction, onMessage }: Props
     {!section.rows.length && <p>Список пуст</p>}
     {section.rows.map(row => <div className="chat-social-row" key={row.playerId}><strong>{row.playerName || names.get(row.playerId) || 'Игрок'}</strong><div>
       {!row.blocked && <button className="ghost" onClick={() => onMessage(row.playerId)}>Написать</button>}
+      {!row.blocked && row.friendship === 'accepted' && onInvite && <button className="ghost" disabled={busy || inviteDisabled} onClick={() => onInvite(row.playerId)}>В группу</button>}
       {section.actions.map(([action, label]) => <button className="ghost" key={action} disabled={busy} onClick={() => onAction(action, row.playerId)}>{label}</button>)}
     </div></div>)}
   </section>)}</div>;

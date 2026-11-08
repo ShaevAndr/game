@@ -1,7 +1,15 @@
 import { Battle, Character, ChatMessage, SocialPair, SocialRelationship, ItemQuality, SkillEffect, CraftingResult, InventoryResult } from '@game/core';
 import { ColumnType } from 'kysely';
+import type { GatheringReceipt, GatheringState } from '@game/core';
+import type { Party, PartyCommandResult, PartyInvitation } from '@game/core';
 
 export interface Tables {
+  parties: { id: string; data: ColumnType<Party, string, string> };
+  party_members: { player_id: string; party_id: string; character_id: string };
+  party_invitations: { id: string; party_id: string; inviter_id: string; target_id: string; status: string; expires_at: number; resolved_at: number | null; data: ColumnType<PartyInvitation, string, string> };
+  party_operations: { player_id: string; operation_id: string; signature: string; result: ColumnType<PartyCommandResult | null, string | null, string> };
+  gathering_states: { character_id: string; data: ColumnType<GatheringState, string, string> };
+  gathering_operations: { character_id: string; operation_id: string; signature: string; result: ColumnType<GatheringReceipt | null, string | null, string> };
   social_players: { player_id: string; revision: number; visibility_revision: number };
   social_pairs: { low_id: string; high_id: string; data: ColumnType<SocialPair, string, string> };
   social_operations: { player_id: string; operation_id: string; signature: string; result: ColumnType<SocialRelationship | null, string | null, string> };

@@ -1,0 +1,35 @@
+.gathering-screen { min-width: 0; padding: 26px; }
+.gathering-layout { align-items: start; grid-template-columns: 220px minmax(0,1fr); }
+.gathering-layout .sidebar { display: block; }
+.gathering-heading,.gathering-expedition-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; flex-wrap: wrap; }
+.gathering-heading h2 { margin: 8px 0; }
+.gathering-heading p,.gathering-area p,.gathering-resource p,.gathering-atlas p { color: var(--muted,#a5b2be); line-height: 1.6; }
+.gathering-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.gathering-progress { display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 16px 0; margin-bottom: 18px; border-block: 1px solid #ffffff16; color: #b6c9ba; }
+.gathering-areas,.gathering-resources { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; margin: 20px 0; }
+.gathering-area,.gathering-resource { padding: 20px; border: 1px solid #ffffff18; border-radius: 14px; background: #111c25; }
+.gathering-area-forest { background: linear-gradient(145deg,#20392e,#111c25 80%); }
+.gathering-area-marsh { background: linear-gradient(145deg,#24343d,#111c25 80%); }
+.gathering-area-highlands { background: linear-gradient(145deg,#3b3029,#111c25 80%); }
+.gathering-area-icon { color: #b8cf9d; font-size: 42px; }
+.gathering-area h3,.gathering-resource h3 { margin: 12px 0; }
+.gathering-route { padding-top: 16px; margin-top: 18px; border-top: 1px solid #ffffff16; }
+.gathering-route h4 { margin: 0; }
+.gathering-route button,.gathering-method button { width: 100%; margin-top: 8px; }
+.gathering-cargo { display: flex; flex-direction: column; gap: 10px; padding: 18px; border: 1px solid #99ba7740; border-radius: 12px; background: #89b2670b; }
+.gathering-cargo small { color: #9aabac; }
+.gathering-resource-type { color: #aec6bb; font-size: 13px; }
+.gathering-resource-type span { font-size: 20px; }
+.gathering-method { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #ffffff18; padding-top: 16px; margin-top: 16px; }
+.gathering-method small { color: #a8b8c2; line-height: 1.5; }
+.gathering-method .gathering-reason { color: #d9b784; }
+.gathering-message { padding: 14px; color: #d0e2b7; background: #80a96518; border-radius: 10px; line-height: 1.6; }
+.gathering-pending { padding: 16px; border: 1px solid #d9b78466; border-radius: 10px; }
+.gathering-atlas { margin-top: 28px; border-top: 1px solid #ffffff18; padding-top: 20px; }
+.gathering-atlas summary { cursor: pointer; font-weight: 700; }
+.gathering-atlas-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 18px; }
+.gathering-atlas-grid article { border: 1px solid #ffffff16; border-radius: 10px; padding: 16px; }
+.gathering-atlas-grid small { display: block; margin-top: 8px; color: #a8b8c2; }
+@media(max-width:1100px) { .gathering-areas,.gathering-resources { grid-template-columns: 1fr; } }
+@media(max-width:600px) { .gathering-screen { padding: 16px; } .gathering-atlas-grid { grid-template-columns: 1fr; } }
+@media(max-width:720px) { .gathering-layout { grid-template-columns: 1fr; } }

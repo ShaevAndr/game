@@ -7,6 +7,7 @@ interface Props {
   open: boolean; view: ChatView; messages: ChatMessage[]; playerId: string; players: { id: string; name: string }[];
   draft: string; recipientId: string; connected: boolean; loading: boolean; hasOlder: boolean; loadingOlder: boolean; sending: boolean; error: string;
   social: SocialState | null; socialBusy: boolean; onSocial: (action: SocialAction, id: string) => void;
+  onInvite?: (playerId: string) => void; inviteDisabled?: boolean;
   onOpen: (value: boolean) => void; onView: (view: ChatView) => void; onDraft: (text: string) => void;
   onDestination: (id: string) => void; onRecipient: (id: string) => void; onSend: () => void; onOlder: () => void;
 }
@@ -33,7 +34,7 @@ export function ChatWindow(props: Props) {
   return <section className="chat-window" aria-label="Чат">
     <header className="chat-header"><strong>Чат</strong><span className={props.connected ? 'chat-online' : ''}>{props.connected ? 'Онлайн' : 'Обновление каждые 5 с'}</span><button className="ghost" aria-label="Свернуть чат" onClick={() => props.onOpen(false)}>—</button></header>
     <div className="chat-tabs" role="tablist" aria-label="Канал просмотра">{(['all', 'world', 'direct'] as const).map(view => <button key={view} role="tab" aria-selected={!showSocial && props.view === view} onClick={() => { setShowSocial(false); props.onView(view); }}>{labels[view]}</button>)}<button role="tab" aria-selected={showSocial} onClick={() => setShowSocial(true)}>Игроки{props.social?.relationships.some(row => row.friendship === 'incoming') ? ' •' : ''}</button></div>
-    {showSocial && <SocialPanel state={props.social} players={props.players} busy={props.socialBusy} onAction={props.onSocial} onMessage={recipient}/>}
+    {showSocial && <SocialPanel state={props.social} players={props.players} busy={props.socialBusy} onAction={props.onSocial} onMessage={recipient} onInvite={props.onInvite} inviteDisabled={props.inviteDisabled}/>}
     <div className="chat-messages" hidden={showSocial} ref={list} role="log" aria-label={`Сообщения: ${labels[props.view]}`} onScroll={() => { const element = list.current!; atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 35; if (atBottom.current) setNewMessages(false); }}>
       {props.hasOlder && <button className="ghost chat-older" disabled={props.loadingOlder} onClick={props.onOlder}>{props.loadingOlder ? 'Загрузка…' : 'Ранние сообщения'}</button>}
       {props.loading && <p className="chat-empty" role="status">Загрузка сообщений…</p>}
@@ -42,7 +43,7 @@ export function ChatWindow(props: Props) {
         <div className="chat-message-meta"><span className={`chat-channel ${message.channel}`}>{message.channel === 'world' ? 'Мир' : 'Лично'}</span>
           {message.senderPlayerId === props.playerId ? <strong>Ты{message.recipientName ? ` → ${message.recipientName}` : ''}</strong> : <AuthorMenu playerId={message.senderPlayerId} name={`${message.authorName}${message.channel === 'direct' ? ' → тебе' : ''}`} title={message.senderName}
             relationship={props.social?.relationships.find(row => row.playerId === message.senderPlayerId)} busy={props.socialBusy}
-            onAction={props.onSocial} onMessage={recipient}/>}
+            onAction={props.onSocial} onMessage={recipient} onInvite={props.onInvite} inviteDisabled={props.inviteDisabled}/>}
           <time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</time>
         </div>
         <p className="chat-text">{message.segments.map(segment => segment.text).join('')}</p>

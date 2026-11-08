@@ -1,0 +1,41 @@
+.party-roster { background: linear-gradient(145deg,#1e292a,#141c25); border-color: #60704c66; min-width: 0; }
+.gathering-layout .party-roster,.crafting-layout .party-roster,.inventory-layout .party-roster,.equipment-layout .party-roster { margin-top: 18px; }
+.party-roster-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.party-roster-heading h2 { margin-bottom: 8px; font-size: 16px; }
+.party-roster-heading .section-label { color: #c4bc8d; margin-bottom: 7px; }
+.party-roster-heading button { padding: 4px 8px; font-size: 20px; }
+.party-members { list-style: none; padding: 0; margin: 15px 0; display: grid; gap: 7px; }
+.party-members>li { display: flex; align-items: center; gap: 9px; padding: 9px; border: 1px solid #46564d66; border-radius: 8px; background: #101821; }
+.party-members>li.party-leader { border-color: #a88b4e88; background: linear-gradient(90deg,#6d573020,#101821); }
+.party-avatar { display: grid; place-items: center; width: 35px; height: 40px; flex: 0 0 35px; border: 1px solid #7e795066; border-radius: 7px; background: linear-gradient(145deg,#4d6043,#1b2d31); color: #f2e2a9; font-size: 20px; }
+.party-member-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.party-member-name strong { overflow-wrap: anywhere; font-size: 12px; }
+.party-member-name small { color: #9caeac; font-size: 10px; }
+.party-leader-label { color: #e2c283; font-size: 10px; }
+.party-member-menu { position: relative; }
+.party-member-menu summary { cursor: pointer; font-size: 22px; padding: 3px; list-style: none; }
+.party-member-menu>div { position: absolute; right: 0; top: 100%; z-index: 15; width: 190px; display: grid; padding: 6px; border: 1px solid #7e7950; border-radius: 8px; background: #1a232b; box-shadow: 0 12px 30px #0008; }
+.party-member-menu button { text-align: left; border: none; font-size: 11px; }
+.party-invite-form { display: grid; gap: 8px; margin: 14px 0; }
+.party-invite-form button,.party-controls button,.party-outgoing button,.party-pending button { font-size: 10px; padding: 8px; }
+.party-controls { display: grid; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #ffffff14; }
+.party-controls .party-danger { color: #db9e89; }
+.party-outgoing { margin-top: 14px; font-size: 11px; }
+.party-outgoing h3 { font-size: 11px; margin-bottom: 8px; color: #c8c8a5; }
+.party-outgoing>div { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 5px; }
+.party-outgoing span { overflow-wrap: anywhere; min-width: 0; }
+.party-error { color: #e4a38d!important; font-size: 11px; line-height: 1.6; margin-top: 10px; }
+.party-message { color: #bfd49e!important; font-size: 11px; line-height: 1.6; margin-top: 10px; }
+.party-pending,.party-confirm { margin-top: 14px; padding: 10px; border: 1px solid #a88b4e77; border-radius: 7px; }
+.party-pending p,.party-confirm p { font-size: 11px; margin-bottom: 8px; }
+.party-confirm>div { display: flex; gap: 6px; flex-wrap: wrap; }.party-confirm button { padding: 7px; font-size: 10px; }
+.party-invitation-dialog { width: min(450px,calc(100% - 32px)); max-height: 90dvh; overflow: auto; padding: 30px; border: 1px solid #b49b5e; border-radius: 14px; background: radial-gradient(ellipse at top,#344238,#151d27 70%); color: #e6e9ee; box-shadow: 0 24px 100px #000b; }
+.party-invitation-dialog::backdrop { background: #060b13c7; backdrop-filter: blur(4px); }
+.party-dialog-emblem { text-align: center; color: #dbc281; font-size: 42px; margin-bottom: 12px; }
+.party-invitation-dialog .eyebrow { text-align: center; color: #dbc281; font-size: 9px; }
+.party-invitation-dialog h2 { text-align: center; margin: 10px 0 18px; font-size: 21px; }
+.party-invitation-dialog p { line-height: 1.8; }.party-invitation-dialog strong { color: #f0d8a1; }
+.party-invitation-dialog .party-dialog-character { margin-top: 12px; font-size: 11px; color: #bfc8bb; }
+.party-invitation-dialog .party-dialog-time { margin-top: 16px; font-size: 10px; color: #a5aa98; }
+.party-dialog-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin-top: 24px; }
+@media(max-width:720px) { .sidebar>.party-roster { grid-column: 1 / -1; }.party-invitation-dialog { padding: 22px; } }

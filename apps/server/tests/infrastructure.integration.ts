@@ -1,4 +1,6 @@
 import { verifySocial } from './helpers/social-infrastructure';
+import { verifyGathering } from './helpers/gathering-infrastructure';
+import { verifyParties } from './helpers/parties-infrastructure';
 import { verifyChat } from './helpers/chat-infrastructure';
 import { CraftingOperationsRepository } from '../src/modules/crafting/ports/crafting-operations.repository';
 import 'reflect-metadata';
@@ -41,7 +43,7 @@ async function eventually(check: () => Promise<boolean>, timeout = 15000) {
   assert.fail('Expected background work did not finish in time');
 }
 
-test('real infrastructure: REST commands, WS push, cache, transactional rewards, retry and archive', { timeout: 45000 }, async () => {
+test('real infrastructure: REST commands, WS push, cache, transactional rewards, retry and archive', { timeout: 60000 }, async () => {
   const suffix = randomUUID().replaceAll('-', '');
   const namespace = `game-test-${suffix}`;
   const databaseName = `game_infrastructure_${suffix}`;
@@ -90,6 +92,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.equal(login.characterId, null);
     assert.equal((await request<Character[]>('/characters')).length, 5);
     await verifyIdentity(origin, request, accounts, authToken, app);
+    const partyCheckpoint = await verifyParties(app, origin);
     const chatCheckpoint = await verifyChat(app, origin, authToken, accounts);
     const blockedCheckpoint = await verifySocial(app, origin, authToken, accounts);
     const catalog = await request<Content>('/content');
@@ -110,6 +113,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     await verifyCharacterCreation(character, request, app);
     await verifyCharacterAttributes(request, app, catalog);
     await verifyRankedCrafting(request, app);
+    const gatheringCheckpoint = await verifyGathering(app, origin, authToken, request);
     await verifyBattleEffects(request, app);
     await verifyModifierModel(request, app);
     await verifyCombatFormulas(request, app);
@@ -268,6 +272,21 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     const restoredSocial = await fetch(`${await app.getUrl()}/api/v1/social`, { headers: { Authorization: `Bearer ${authToken}` } });
     assert.equal(restoredSocial.status, 200);
     assert.ok((await restoredSocial.json()).relationships.some((row: { playerId: string; blocked: boolean }) => row.playerId === blockedCheckpoint && row.blocked));
+    const gatheringPath = `${await app.getUrl()}/api/v1/characters/${gatheringCheckpoint.heroId}/gathering`;
+    const restoredGathering = await fetch(gatheringPath, { headers: { Authorization: `Bearer ${authToken}` } });
+    assert.equal(restoredGathering.status, 200);
+    assert.deepEqual(await restoredGathering.json(), gatheringCheckpoint.receipt.view);
+    const replayedGathering = await fetch(`${gatheringPath}/actions`, { method: 'POST', headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(gatheringCheckpoint.command) });
+    assert.equal(replayedGathering.status, 201);
+    assert.deepEqual(await replayedGathering.json(), gatheringCheckpoint.receipt);
+    const restoredParty = await fetch(`${await app.getUrl()}/api/v1/parties`, { headers: { Authorization: `Bearer ${partyCheckpoint.token}` } });
+    assert.equal(restoredParty.status, 200);
+    assert.deepEqual((await restoredParty.json()).party, partyCheckpoint.party);
+    const restoredInvitation = await fetch(`${await app.getUrl()}/api/v1/parties`, { headers: { Authorization: `Bearer ${partyCheckpoint.recipientToken}` } });
+    assert.equal(restoredInvitation.status, 200);
+    assert.ok((await restoredInvitation.json()).incoming.some((invitation: { id: string }) => invitation.id === partyCheckpoint.invitationId));
+    const replayedParty = await fetch(`${await app.getUrl()}/api/v1/parties/actions`, { method: 'POST', headers: { Authorization: `Bearer ${partyCheckpoint.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(partyCheckpoint.command) });
+    assert.equal(replayedParty.status, 200); assert.equal((await replayedParty.json()).invitationId, partyCheckpoint.invitationId);
     await app.close();
     app = undefined;
   } finally {
@@ -356,7 +375,9 @@ async function verifyOperations(character: Character, request: TestRequest, app:
   const view = () => request<InventoryView>(`/characters/${owner}/inventories`);
   const action = (instanceId: string, data: object, operationId = randomUUID(), status = 201) => request<InventoryResult>(`/item-instances/${instanceId}/actions`, { ...data, operationId }, status);
   const transfer = (instanceId: string, targetInventoryId: string, quantity: number, operationId = randomUUID(), status = 201) => request<InventoryResult>('/inventory-transfers', { instanceId, targetInventoryId, quantity, operationId }, status);
-  assert.equal((await request<object[]>('/items/groups')).length, 5);
+  const groups = await request<{ id: string }[]>('/items/groups');
+  assert.equal(groups.length, 6);
+  assert.ok(groups.some(group => group.id === 'tools'));
   const initial = await view();
   const ore = initial.items.find(item => item.itemId === 'iron-ore')!;
   const sword = initial.items.find(item => item.itemId === 'iron-sword')!;
@@ -933,10 +954,11 @@ async function verifyIdentity(origin: string, request: TestRequest, accounts: Ac
   assert.ok(second.every(hero => hero.accountId === accounts[1].id));
   assert.ok(first.every(hero => !second.some(other => other.id === hero.id)));
   const own = first[0], foreign = second[0];
-  for (const path of [`/characters/${foreign.id}`, `/characters/${foreign.id}/skills`, `/characters/${foreign.id}/inventories`, `/characters/${foreign.id}/inventory`, `/characters/${foreign.id}/crafting`]) {
+  for (const path of [`/characters/${foreign.id}`, `/characters/${foreign.id}/skills`, `/characters/${foreign.id}/inventories`, `/characters/${foreign.id}/inventory`, `/characters/${foreign.id}/crafting`, `/characters/${foreign.id}/gathering`]) {
     assert.equal((await call(path, primaryToken)).status, 403, path);
   }
   assert.equal((await call(`/characters/${foreign.id}/skills`, primaryToken, { skillId: 'ember' })).status, 403);
+  assert.equal((await call(`/characters/${foreign.id}/gathering/actions`, primaryToken, { operationId: randomUUID(), expectedRevision: 0, action: { type: 'return' } })).status, 403);
   assert.equal((await call(`/characters/${foreign.id}/attributes`, primaryToken, { allocations: { strength: 1 }, expectedRevision: 0 })).status, 403);
   assert.equal((await call('/identity/session/character', primaryToken, { characterId: foreign.id })).status, 403);
   assert.equal((await request<{ characterId: string | null }>('/identity/session')).characterId, null);

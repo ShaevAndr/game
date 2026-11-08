@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import type { SocialAction, SocialRelationship } from '@game/core';
 
 interface Props { playerId: string; name: string; title: string; relationship?: SocialRelationship; busy: boolean;
-  onAction: (action: SocialAction, playerId: string) => void; onMessage: (playerId: string) => void }
-export function AuthorMenu({ playerId, name, title, relationship, busy, onAction, onMessage }: Props) {
+  onAction: (action: SocialAction, playerId: string) => void; onMessage: (playerId: string) => void;
+  onInvite?: (playerId: string) => void; inviteDisabled?: boolean }
+export function AuthorMenu({ playerId, name, title, relationship, busy, onAction, onMessage, onInvite, inviteDisabled }: Props) {
   const [open, setOpen] = useState(false), [position, setPosition] = useState({ left: 0, top: 0 });
   const trigger = useRef<HTMLButtonElement>(null), menu = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -34,6 +35,7 @@ export function AuthorMenu({ playerId, name, title, relationship, busy, onAction
       }
     }}>
       <span>{title}</span>
+      {onInvite && <button role="menuitem" disabled={busy || inviteDisabled || relationship?.blocked} onClick={() => { setOpen(false); trigger.current?.focus(); onInvite(playerId); }}>Пригласить в группу</button>}
       {relationship?.blocked ? <button role="menuitem" disabled={busy} onClick={() => act('unblock')}>Убрать из чёрного списка</button> : <>
         {friendship === 'none' && <button role="menuitem" disabled={busy} onClick={() => act('friend-request')}>Добавить в друзья</button>}
         {friendship === 'outgoing' && <button role="menuitem" disabled={busy} onClick={() => act('friend-cancel')}>Отменить заявку в друзья</button>}

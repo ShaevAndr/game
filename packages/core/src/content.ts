@@ -1,5 +1,6 @@
 import { Content, SkillLearning } from './types';
 import { defaultItemGroups } from './items';
+import { gatheringItems, gatheringRecipes } from './gathering/materials';
 import type { SkillEffect } from './effects/types';
 import { defaultCombatRules } from './combat/rules';
 const learning = (level: number, prerequisites: string[] = [], stats: SkillLearning['stats'] = {}, pointCost = 1): SkillLearning => ({ level, prerequisites, stats, pointCost, starter: false });
@@ -52,6 +53,7 @@ export const seedContent: Content = {
     { id: 'blade-dance', name: 'Танец клинков', description: 'Серия ударов по одной выбранной цели.', element: 'physical', cost: 6, power: 30, effect: 'damage', cooldown: 2, learning: learning(3, ['lunge'], { attack: 12 }) },
   ],
   items: [
+    ...gatheringItems,
     { id: 'potion', name: 'Зелье здоровья', description: 'Восстанавливает 35 HP в бою вместо навыка.', groupId: 'potions', stackLimit: 99, effects: potionEffects(35) },
     { id: 'greater-potion', name: 'Большое зелье здоровья', description: 'Восстанавливает 60 HP вместо навыка, затем обязательна перестановка.', groupId: 'potions', stackLimit: 99, effects: potionEffects(60) },
     { id: 'cleansing-potion', name: 'Очищающее зелье', description: 'Снимает до двух снимаемых дебафов и восстанавливает 15 HP вместо навыка.', groupId: 'potions', stackLimit: 99,
@@ -64,6 +66,7 @@ export const seedContent: Content = {
     { id: 'ember-scroll', name: 'Свиток Искры', description: 'Дарует навык «Искра» первого уровня без расхода очков. Одноразовый.', groupId: 'scrolls', stackLimit: 20, grantedSkillId: 'ember' },
   ],
   recipes: [
+    ...gatheringRecipes,
     { id: 'craft-iron-sword', name: 'Ковка железного меча', description: 'Классическое оружие основной руки: +3 атаки.', kind: 'craft', knownByDefault: true,
       inputs: [{ itemId: 'iron-ore', quantity: 6 }], outputs: [{ itemId: 'iron-sword', quantity: 1 }] },
     { id: 'craft-leather-armor', name: 'Пошив кожаной брони', description: 'Лёгкая броня: +2 защиты и +10 максимального здоровья.', kind: 'craft', knownByDefault: true,

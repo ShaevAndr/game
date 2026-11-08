@@ -19,6 +19,37 @@ export function canMergeInstances(source: ItemInstance, target: ItemInstance, st
 export interface InventoryView extends InventoryState { items: (ItemInstance & { actions: AvailableItemAction[] })[]; definitions: Item[]; groups: ItemGroup[]; statDefinitions?: StatDefinition[] }
 export interface InventoryResult { createdItems?: ItemInstance[]; itemIds: string[]; deletedItemIds: string[]; inventoryId?: string }
 export interface InventoryEffect { ownerId: string; skillId: string }
+
+/** Grants a batch atomically, filling compatible backpack stacks before allocating slots. */
+export function receiveInventoryItems(input: InventoryState, loot: { itemId: string; quantity: number }[], definitions: Item[], newId: () => string): InventoryState {
+  const state = structuredClone(input);
+  const primary = state.inventories.find(inventory => inventory.primary);
+  if (!primary) throw new Error('Рюкзак не найден');
+  for (const entry of loot) {
+    positive(entry.quantity);
+    if (entry.quantity > 99999) throw new Error('Слишком большое количество предметов');
+    const definition = definitions.find(item => item.id === entry.itemId);
+    if (!definition) throw new Error('Описание предмета не найдено');
+    const effects = consumableEffects(definition);
+    const prototype: ItemInstance = { id: '', ownerId: state.ownerId, inventoryId: primary.id, itemId: definition.id,
+      itemLevel: definition.itemLevel ?? 1, definitionVersion: definition.version ?? 1, quantity: 1, equippedSlot: null,
+      ...(effects.length ? { effects } : {}) };
+    let remaining = entry.quantity;
+    for (const item of state.items) {
+      if (remaining === 0) break;
+      // canMergeInstances also checks payload, owner, level, quality and container.
+      const room = definition.stackLimit - item.quantity;
+      if (room <= 0 || !canMergeInstances({ ...prototype, quantity: Math.min(remaining, room) }, item, definition.stackLimit)) continue;
+      const taken = Math.min(remaining, room); item.quantity += taken; remaining -= taken;
+    }
+    while (remaining > 0) {
+      const quantity = Math.min(remaining, definition.stackLimit);
+      state.items.push({ ...prototype, id: newId(), quantity }); remaining -= quantity;
+    }
+  }
+  if (state.items.filter(item => item.inventoryId === primary.id && !item.equippedSlot).length > primary.capacity) throw new Error('Рюкзак заполнен; освободите место и повторите возвращение');
+  return state;
+}
 export type InventoryCommand =
   | { type: 'receive'; ownerId: string; itemId: string; quantity: number; inventoryId?: string | null }
   | { type: 'create-inventory'; ownerId: string; name: string; capacity: number }

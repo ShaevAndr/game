@@ -31,7 +31,18 @@ export class SocialService {
   /** Lock participants in one order before any delivery locks; use within the send transaction. */
   async assertCanInteract(one: string, two: string, context: TransactionContext) {
     await this.repository.lockPlayers([one, two], context);
-    if ((await this.repository.pair(one, two, context))?.blockedBy.length) throw unavailable();
+    const pair = await this.repository.pair(one, two, context);
+    if (pair?.blockedBy.length) throw unavailable();
+    return { revision: pair?.interactionRevision ?? 0 };
+  }
+  /** Batch locking preserves the same social → consumer lock order for invitation reads. */
+  async interactionPolicies(playerId: string, otherIds: string[], context: TransactionContext) {
+    const ids = [...new Set(otherIds.filter(id => id !== playerId))];
+    await this.repository.lockPlayers([playerId, ...ids], context);
+    return Promise.all(ids.map(async id => {
+      const pair = await this.repository.pair(playerId, id, context);
+      return { playerId: id, allowed: !pair?.blockedBy.length, revision: pair?.interactionRevision ?? 0 };
+    }));
   }
   async canSeeAuthor(viewerId: string, authorId: string) {
     if (viewerId === authorId) return true;
@@ -72,9 +83,11 @@ export class SocialService {
           break;
         case 'friend-remove': pair.friendship = 'none'; pair.requesterId = null; break;
         case 'block':
-          if (!pair.blockedBy.includes(playerId)) pair.blockedBy.push(playerId);
+          if (!pair.blockedBy.includes(playerId)) { pair.blockedBy.push(playerId); pair.interactionRevision = (pair.interactionRevision ?? 0) + 1; }
           pair.friendship = 'none'; pair.requesterId = null; break;
-        case 'unblock': pair.blockedBy = pair.blockedBy.filter(id => id !== playerId); break;
+        case 'unblock':
+          if (pair.blockedBy.includes(playerId)) { pair.blockedBy = pair.blockedBy.filter(id => id !== playerId); pair.interactionRevision = (pair.interactionRevision ?? 0) + 1; }
+          break;
       }
       if (JSON.stringify(pair) !== previous) {
         pair.revision++;

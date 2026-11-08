@@ -18,6 +18,7 @@ export interface ItemDefinition {
 }
 
 export const defaultItemGroups: ItemGroup[] = [
+  { id: 'tools', name: 'Инструменты', description: 'Многоразовые инструменты для добычи; работают из основного рюкзака.', actions: [] },
   { id: 'weapons', name: 'Оружие', description: 'Предметы для боевых слотов.', actions: ['equip', 'unequip'] },
   { id: 'equipment', name: 'Экипировка', description: 'Броня и аксессуары.', actions: ['equip', 'unequip'] },
   { id: 'potions', name: 'Зелья', description: 'Расходуемые предметы для боя.', actions: ['use-in-battle', 'split', 'merge'] },

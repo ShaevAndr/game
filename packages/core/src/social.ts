@@ -6,6 +6,8 @@ export const socialCommandSchema = z.object({ operationId: z.string().uuid(), ta
   expectedRevision: z.number().int().nonnegative(), action: socialActionSchema }).strict();
 export type SocialCommand = z.infer<typeof socialCommandSchema>;
 export interface SocialPair {
+  /** Admission epoch: blocking/unblocking permanently invalidates older invitations. */
+  interactionRevision?: number;
   lowId: string; highId: string; revision: number;
   friendship: 'none' | 'pending' | 'accepted'; requesterId: string | null; blockedBy: string[];
 }

@@ -96,6 +96,28 @@ export const initialMigration: Migration = {
       await db.schema.createTable(table).addColumn('id', 'uuid', c => c.primaryKey())
         .addColumn('signature', 'text', c => c.notNull()).addColumn('result', 'jsonb').execute();
     }
+    await db.schema.createTable('parties').addColumn('id', 'uuid', c => c.primaryKey()).addColumn('data', 'jsonb', c => c.notNull()).execute();
+    await db.schema.createTable('party_members').addColumn('player_id', 'uuid', c => c.primaryKey())
+      .addColumn('party_id', 'uuid', c => c.notNull().references('parties.id'))
+      .addColumn('character_id', 'uuid', c => c.notNull().references('characters.id')).execute();
+    await db.schema.createIndex('party_members_party').on('party_members').column('party_id').execute();
+    await db.schema.createTable('party_invitations').addColumn('id', 'uuid', c => c.primaryKey())
+      .addColumn('party_id', 'uuid', c => c.notNull()).addColumn('inviter_id', 'uuid', c => c.notNull()).addColumn('target_id', 'uuid', c => c.notNull())
+      .addColumn('status', 'varchar(16)', c => c.notNull()).addColumn('expires_at', 'bigint', c => c.notNull()).addColumn('resolved_at', 'bigint')
+      .addColumn('data', 'jsonb', c => c.notNull()).addCheckConstraint('party_invitation_status', sql`status in ('pending', 'accepted', 'declined', 'cancelled')`).execute();
+    await db.schema.createIndex('party_invitation_target').on('party_invitations').columns(['target_id', 'status', 'expires_at']).execute();
+    await db.schema.createIndex('party_invitation_party').on('party_invitations').columns(['party_id', 'status']).execute();
+    await db.schema.createIndex('party_invitation_inviter').on('party_invitations').columns(['inviter_id', 'target_id', 'status', 'resolved_at']).execute();
+    await db.schema.createTable('party_operations').addColumn('player_id', 'uuid', c => c.notNull())
+      .addColumn('operation_id', 'uuid', c => c.notNull()).addColumn('signature', 'text', c => c.notNull()).addColumn('result', 'jsonb')
+      .addPrimaryKeyConstraint('party_operation_player', ['player_id', 'operation_id']).execute();
+    await db.schema.createTable('gathering_states')
+      .addColumn('character_id', 'uuid', c => c.primaryKey().references('characters.id'))
+      .addColumn('data', 'jsonb', c => c.notNull()).execute();
+    await db.schema.createTable('gathering_operations')
+      .addColumn('character_id', 'uuid', c => c.notNull().references('characters.id'))
+      .addColumn('operation_id', 'uuid', c => c.notNull()).addColumn('signature', 'text', c => c.notNull())
+      .addColumn('result', 'jsonb').addPrimaryKeyConstraint('gathering_operation_character', ['character_id', 'operation_id']).execute();
     for (const [index, character] of characters.entries()) {
       const accountId = demoAccounts[Math.floor(index / 5)].id;
       await db.insertInto('characters').values({ id: character.id, account_id: accountId, data: JSON.stringify({ ...character, accountId }) }).execute();

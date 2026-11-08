@@ -9,6 +9,8 @@ import { CraftingModule } from './modules/crafting/crafting.module';
 import { BattlesModule } from './modules/battles/battles.module';
 import { IdentityAccessModule } from './modules/identity/identity-access.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { GatheringModule } from './modules/gathering/gathering.module';
+import { PartiesModule } from './modules/parties/parties.module';
 
-@Module({ imports: [IdentityAccessModule, ContentModule, CharactersModule, CharacterCreationModule, SkillsModule, ItemsModule, InventoryModule, CraftingModule, BattlesModule, ChatModule] })
+@Module({ imports: [IdentityAccessModule, ContentModule, CharactersModule, CharacterCreationModule, SkillsModule, ItemsModule, InventoryModule, CraftingModule, GatheringModule, PartiesModule, BattlesModule, ChatModule] })
 export class AppModule {}

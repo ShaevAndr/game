@@ -42,7 +42,7 @@ export class CharactersService {
   async identity(characterId: string) {
     const character = await this.repository.find(characterId);
     if (!character) throw new NotFoundException('Персонаж не найден');
-    return { id: character.id, name: character.name, accountId: character.accountId };
+    return { id: character.id, name: character.name, accountId: character.accountId, level: character.level };
   }
 
   /** Mutations participate in the caller's transaction, including rewards and skill purchases. */
