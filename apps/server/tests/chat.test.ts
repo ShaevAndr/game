@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { AccountSession, ChatEntry, ChatMessage, ChatSend, directChatStream } from '@game/core';
 import { SocialService } from '../src/modules/social/application/social.service';
 import { ChatService } from '../src/modules/chat/application/chat.service';
+import { PartiesService } from '../src/modules/parties/application/parties.service';
 import { ChatRepository, ChatStream } from '../src/modules/chat/ports/chat.repository';
 import { IdentityService } from '../src/modules/identity/application/identity.service';
 import { CharactersService } from '../src/modules/characters/application/characters.service';
@@ -37,7 +38,7 @@ function fixture() {
   const identity = { getAccount: async (id: string) => { const account = sessions.find(session => session.account.id === id)?.account; if (!account) throw new Error('Игрок не найден'); return account; } } as IdentityService;
   const characters = { identity: async (id: string) => { const owner = sessions.find(session => session.characterId === id)!; return { id, name: `Герой ${owner.account.name}`, accountId: owner.account.id }; } } as CharactersService;
   const events = { async publish(message: ChatMessage) { assert.ok(state.entries.some(entry => entry.message.id === message.id), 'push follows commit'); published.push(message); } };
-  const service = new ChatService(tx, repository, identity, characters, events, { now: () => now }, { assertCanInteract: async () => {}, readPolicy: async () => ({ revision: 0, hiddenAuthors: [] }) } as unknown as SocialService);
+  const service = new ChatService(tx, repository, identity, characters, events, { now: () => now }, { assertCanInteract: async () => {}, readPolicy: async () => ({ revision: 0, hiddenAuthors: [] }) } as unknown as SocialService, { chatAccess: async () => null } as unknown as PartiesService);
   const input = (session = sessions[0], recipientId?: string): ChatSend => ({ operationId: randomUUID(), authorCharacterId: session.characterId!, destination: recipientId ? { kind: 'direct', recipientPlayerId: recipientId } : { kind: 'world' }, segments: [{ kind: 'text', text: 'Привет' }] });
   return { service, sessions, input, published, state: () => state, fail: (value: boolean) => { failure = value; }, advance: (ms: number) => { now += ms; } };
 }
@@ -90,4 +91,12 @@ test('forged or unselected characters cannot send and self-addressed private mes
   await assert.rejects(f.service.send(f.sessions[0], f.input(f.sessions[1])), /Выберите персонажа/);
   await assert.rejects(f.service.send(f.sessions[0], f.input(f.sessions[0], f.sessions[0].account.id)), /другого адресата/);
   assert.equal(f.published.length, 0);
+});
+
+test('a party ID without current membership cannot create any message, delivery or receipt', async () => {
+  const f = fixture();
+  await assert.rejects(f.service.send(f.sessions[0], { ...f.input(), destination: { kind: 'party', partyId: randomUUID() } }), /больше не состоите/);
+  assert.deepEqual(f.state(), { receipts: {}, streams: {}, entries: [] });
+  const empty = await f.service.feed(f.sessions[0].account.id, { view: 'party' });
+  assert.deepEqual(empty.messages, []); assert.equal(empty.partyAccess, null);
 });

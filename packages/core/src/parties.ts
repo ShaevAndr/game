@@ -4,7 +4,8 @@ export const PARTY_CAPACITY = 6;
 export const PARTY_INVITATION_TTL = 120_000;
 export const PARTY_INVITATION_LIMIT = 12;
 export const PARTY_DECLINE_COOLDOWN = 30_000;
-export interface PartyMember { playerId: string; characterId: string; characterName: string; level: number; joinedAt: number }
+export interface PartyMember { playerId: string; membershipId: string; characterId: string; characterName: string; level: number; joinedAt: number }
+export interface PartyChatAccess { partyId: string; membershipId: string; recipients: { playerId: string; membershipId: string }[] }
 export interface Party { id: string; revision: number; leaderPlayerId: string; members: PartyMember[] }
 export interface PartyInvitation {
   id: string; partyId: string; inviterPlayerId: string; inviterCharacterName: string; targetPlayerId: string;

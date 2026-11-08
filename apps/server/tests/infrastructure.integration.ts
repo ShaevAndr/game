@@ -1,6 +1,7 @@
 import { verifySocial } from './helpers/social-infrastructure';
 import { verifyGathering } from './helpers/gathering-infrastructure';
 import { verifyParties } from './helpers/parties-infrastructure';
+import { verifyPartyChat } from './helpers/party-chat-infrastructure';
 import { verifyChat } from './helpers/chat-infrastructure';
 import { CraftingOperationsRepository } from '../src/modules/crafting/ports/crafting-operations.repository';
 import 'reflect-metadata';
@@ -95,6 +96,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     const partyCheckpoint = await verifyParties(app, origin);
     const chatCheckpoint = await verifyChat(app, origin, authToken, accounts);
     const blockedCheckpoint = await verifySocial(app, origin, authToken, accounts);
+    const partyChatCheckpoint = await verifyPartyChat(app, origin);
     const catalog = await request<Content>('/content');
     assert.equal(catalog.balance.formulas?.version, 1);
     assert.equal(catalog.statDefinitions!.find(stat => stat.id === 'strength')!.name, 'Своя сила');
@@ -287,6 +289,12 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.ok((await restoredInvitation.json()).incoming.some((invitation: { id: string }) => invitation.id === partyCheckpoint.invitationId));
     const replayedParty = await fetch(`${await app.getUrl()}/api/v1/parties/actions`, { method: 'POST', headers: { Authorization: `Bearer ${partyCheckpoint.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(partyCheckpoint.command) });
     assert.equal(replayedParty.status, 200); assert.equal((await replayedParty.json()).invitationId, partyCheckpoint.invitationId);
+    const restoredPartyChat = await fetch(`${await app.getUrl()}/api/v1/chat/feed?view=party`, { headers: { Authorization: `Bearer ${partyChatCheckpoint.token}` } });
+    assert.equal(restoredPartyChat.status, 200);
+    assert.ok((await restoredPartyChat.json()).messages.some((message: { id: string }) => message.id === partyChatCheckpoint.messageId));
+    const outsiderPartyChat = await fetch(`${await app.getUrl()}/api/v1/chat/feed?view=all`, { headers: { Authorization: `Bearer ${partyChatCheckpoint.outsiderToken}` } });
+    assert.equal(outsiderPartyChat.status, 200);
+    assert.ok(!(await outsiderPartyChat.json()).messages.some((message: { id: string }) => message.id === partyChatCheckpoint.messageId));
     await app.close();
     app = undefined;
   } finally {

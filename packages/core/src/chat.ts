@@ -2,9 +2,12 @@ import { z } from 'zod';
 
 export const CHAT_WORLD_STREAM = 'world';
 export const directChatStream = (playerId: string) => `direct:${playerId}`;
+/** A recipient's party stream contains deliveries only from their membership periods. */
+export const partyChatStream = (partyId: string, playerId: string) => `party:${partyId}:${playerId}`;
 export const chatDestinationSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('world') }).strict(),
   z.object({ kind: z.literal('direct'), recipientPlayerId: z.string().uuid() }).strict(),
+  z.object({ kind: z.literal('party'), partyId: z.string().uuid() }).strict(),
 ]);
 const text = z.string().trim().min(1).max(2000).refine(value => Array.from(value).length <= 1000, 'Не больше 1000 символов');
 export const chatSendSchema = z.object({
@@ -13,14 +16,14 @@ export const chatSendSchema = z.object({
   segments: z.array(z.object({ kind: z.literal('text'), text }).strict()).length(1),
 }).strict();
 export type ChatSend = z.infer<typeof chatSendSchema>;
-export type ChatView = 'all' | 'world' | 'direct';
+export type ChatView = 'all' | 'world' | 'direct' | 'party';
 export interface ChatMessage {
   id: string; operationId: string; senderPlayerId: string; authorCharacterId: string;
-  authorName: string; senderName: string; channel: 'world' | 'direct';
+  authorName: string; senderName: string; channel: 'world' | 'direct' | 'party'; partyId?: string;
   recipientPlayerId: string | null; recipientName: string | null; createdAt: string;
   segments: { kind: 'text'; text: string }[];
 }
-export interface ChatFeed { messages: ChatMessage[]; after: string; before: string; hasMore: boolean }
+export interface ChatFeed { messages: ChatMessage[]; after: string; before: string; hasMore: boolean; partyAccess: string | null }
 export interface ChatEntry { streamKey: string; sequence: number; message: ChatMessage }
 
 /** Consume a prefix of each stream, so a timestamp tie cannot skip a lower sequence. */

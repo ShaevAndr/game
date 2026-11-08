@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addPartyMember, applyPartyManagement, invitationView, PARTY_CAPACITY, type Party, type PartyMember } from '../src';
 
-const member = (id: string): PartyMember => ({ playerId: id, characterId: `hero-${id}`, characterName: id, level: 10, joinedAt: 100 });
+const member = (id: string): PartyMember => ({ playerId: id, membershipId: `membership-${id}`, characterId: `hero-${id}`, characterName: id, level: 10, joinedAt: 100 });
 const party = (): Party => ({ id: 'party', revision: 1, leaderPlayerId: 'one', members: [member('one'), member('two'), member('three')] });
 
 test('party capacity includes the leader and prohibits duplicates and a seventh player without mutation', () => {
@@ -39,6 +39,7 @@ test('switching the displayed character preserves membership, join order and lea
   const changed = applyPartyManagement(group, 'two', { type: 'change-character' }, { ...member('two'), characterId: 'different', joinedAt: 999 })!;
   assert.equal(changed.members[1].characterId, 'different'); assert.equal(changed.members[1].joinedAt, 100);
   assert.equal(changed.leaderPlayerId, 'one');
+  assert.equal(changed.members[1].membershipId, group.members[1].membershipId);
   assert.throws(() => applyPartyManagement(group, 'two', { type: 'change-character' }, member('three')), /своего/);
 });
 

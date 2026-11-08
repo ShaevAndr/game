@@ -40,7 +40,7 @@ export function App() {
       onChoose={id => void identity.selectCharacter(id)} onAccount={() => void identity.logout()}/>
       : <GameApp key={`${identity.session.account.id}:${identity.session.characterId}`} session={identity.session} sessionBusy={identity.busy} sessionError={identity.error}
         onCharacters={() => void identity.selectCharacter(null)} onAccount={() => void identity.logout()} party={party}/>}
-    <ChatPanel key={`chat:${identity.session.account.id}`} session={identity.session} enabled={!!identity.session.characterId} onInvite={party.invite}
+    <ChatPanel key={`chat:${identity.session.account.id}`} session={identity.session} enabled={!!identity.session.characterId} party={party.state?.party ?? null} onInvite={party.invite}
       inviteDisabled={!party.state || party.busy || party.pending || !!party.state.party && (party.state.party.leaderPlayerId !== identity.session.account.id || party.state.party.members.length >= party.state.capacity)}/>
     {identity.session.characterId && party.incoming[0] && <PartyInvitationDialog key={party.incoming[0].id} invitation={party.incoming[0]} serverNow={party.serverNow}
       busy={party.busy} pending={party.pending} error={party.error} onRetry={party.retry}

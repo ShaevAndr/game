@@ -1,8 +1,9 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { addPartyMember, applyPartyManagement, invitationView, partyCommandSchema, PARTY_CAPACITY, PARTY_DECLINE_COOLDOWN, PARTY_INVITATION_LIMIT, PARTY_INVITATION_TTL,
-  type AccountSession, type Party, type PartyCommandResult, type PartyInvitation, type PartyMember, type PartyState } from '@game/core';
+  type AccountSession, type Party, type PartyChatAccess, type PartyCommandResult, type PartyInvitation, type PartyMember, type PartyState } from '@game/core';
 import { UnitOfWork } from '../../../shared/application/unit-of-work';
+import type { TransactionContext } from '../../../shared/application/unit-of-work';
 import { CharactersService } from '../../characters/application/characters.service';
 import { IdentityService } from '../../identity/application/identity.service';
 import { SocialService } from '../../social/application/social.service';
@@ -20,6 +21,15 @@ export class PartiesService {
     @Inject(IdentityService) private readonly identity: IdentityService,
     @Inject(SocialService) private readonly social: SocialService,
     @Inject(PartyClock) private readonly clock: PartyClock) {}
+
+  /** Caller acquires social locks first; this lock stays held through feed read/send/push. */
+  async chatAccess(playerId: string, context: TransactionContext): Promise<PartyChatAccess | null> {
+    await this.repository.lock(context);
+    const party = await this.repository.partyOf(playerId, context);
+    const member = party?.members.find(member => member.playerId === playerId);
+    return party && member ? { partyId: party.id, membershipId: member.membershipId,
+      recipients: party.members.map(({ playerId, membershipId }) => ({ playerId, membershipId })) } : null;
+  }
 
   async state(session: AccountSession): Promise<PartyState> {
     const playerId = session.account.id;
@@ -73,7 +83,7 @@ export class PartiesService {
       const now = this.clock.now();
       let party = await this.repository.partyOf(playerId, context);
       if ((party?.id ?? null) !== command.expectedPartyId || (party?.revision ?? 0) !== command.expectedRevision) throw changed();
-      const member: PartyMember = { playerId, characterId: character.id, characterName: character.name, level: character.level, joinedAt: now };
+      const member: PartyMember = { playerId, membershipId: randomUUID(), characterId: character.id, characterName: character.name, level: character.level, joinedAt: now };
       let invitationId: string | undefined;
       if (action.type === 'invite') {
         if (party && party.leaderPlayerId !== playerId) throw new ForbiddenException('Приглашать может только лидер группы');

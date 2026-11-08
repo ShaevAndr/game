@@ -2,17 +2,19 @@ import { SocialService } from '../../social/application/social.service';
 import { BadRequestException, ConflictException, ForbiddenException, GoneException, HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { AccountSession, CHAT_WORLD_STREAM, ChatFeed, ChatMessage, ChatView, chatSendSchema, directChatStream, mergeChatStreams } from '@game/core';
+import { AccountSession, CHAT_WORLD_STREAM, ChatFeed, ChatMessage, ChatView, chatSendSchema, directChatStream, partyChatStream, mergeChatStreams } from '@game/core';
 import { UnitOfWork } from '../../../shared/application/unit-of-work';
 import { IdentityService } from '../../identity/application/identity.service';
 import { CharactersService } from '../../characters/application/characters.service';
 import { ChatRepository } from '../ports/chat.repository';
 import { ChatEvents } from '../ports/chat-events';
 import { ChatClock } from '../ports/chat-clock';
+import { PartiesService } from '../../parties/application/parties.service';
 
-const feedQuery = z.object({ view: z.enum(['all', 'world', 'direct']).default('all'), limit: z.coerce.number().int().min(1).max(100).default(50),
+const feedQuery = z.object({ view: z.enum(['all', 'world', 'direct', 'party']).default('all'), limit: z.coerce.number().int().min(1).max(100).default(50),
   before: z.string().max(4096).optional(), after: z.string().max(4096).optional() }).strict().refine(query => !(query.before && query.after));
-const cursorSchema = z.object({ playerId: z.string().uuid(), view: z.enum(['all', 'world', 'direct']), mode: z.enum(['before', 'after']), socialRevision: z.number().int().nonnegative(), offsets: z.record(z.string(), z.number().int().nonnegative().max(2147483647)) }).strict();
+const cursorSchema = z.object({ playerId: z.string().uuid(), view: z.enum(['all', 'world', 'direct', 'party']), mode: z.enum(['before', 'after']), socialRevision: z.number().int().nonnegative(),
+  partyAccess: z.string().max(100).nullable(), offsets: z.record(z.string(), z.number().int().nonnegative().max(2147483647)) }).strict();
 type Cursor = z.infer<typeof cursorSchema>;
 const encode = (cursor: Cursor) => Buffer.from(JSON.stringify(cursor)).toString('base64url');
 
@@ -25,7 +27,8 @@ export class ChatService {
     @Inject(CharactersService) private readonly characters: CharactersService,
     @Inject(ChatEvents) private readonly events: ChatEvents,
     @Inject(ChatClock) private readonly clock: ChatClock,
-    @Inject(SocialService) private readonly social: SocialService) {}
+    @Inject(SocialService) private readonly social: SocialService,
+    @Inject(PartiesService) private readonly parties: PartiesService) {}
 
   async send(session: AccountSession, body: unknown) {
     const input = chatSendSchema.parse(body), signature = JSON.stringify(input);
@@ -39,8 +42,14 @@ export class ChatService {
       const recipient = input.destination.kind === 'direct' ? await this.identity.getAccount(input.destination.recipientPlayerId) : undefined;
       if (recipient?.id === session.account.id) throw new BadRequestException({ code: 'CHAT_INVALID_MESSAGE', message: 'Выберите другого адресата' });
       if (recipient) await this.social.assertCanInteract(session.account.id, recipient.id, context);
+      // Group messages share the world-channel block policy: membership permits
+      // sending; each viewer's blacklist filters authors. Lock social before party.
+      if (input.destination.kind === 'party') await this.social.readPolicy(session.account.id, context);
+      const party = input.destination.kind === 'party' ? await this.parties.chatAccess(session.account.id, context) : null;
+      if (input.destination.kind === 'party' && party?.partyId !== input.destination.partyId) throw new ConflictException({ code: 'PARTY_CHANGED', message: 'Вы больше не состоите в этой группе. Выберите адресата заново.' });
       const own = directChatStream(session.account.id);
-      const deliveryKeys = recipient ? [own, directChatStream(recipient.id)] : [CHAT_WORLD_STREAM];
+      const deliveryKeys = party ? party.recipients.map(member => partyChatStream(party.partyId, member.playerId))
+        : recipient ? [own, directChatStream(recipient.id)] : [CHAT_WORLD_STREAM];
       // Every send locks the sender's inbox, including world messages: one limit across channels.
       const streams = await this.repository.lockStreams([...deliveryKeys, own], context);
       const now = this.clock.now();
@@ -49,13 +58,13 @@ export class ChatService {
       }
       const message: ChatMessage = { id: randomUUID(), operationId: input.operationId, senderPlayerId: session.account.id,
         authorCharacterId: author.id, authorName: author.name, senderName: session.account.name,
-        channel: input.destination.kind, recipientPlayerId: recipient?.id ?? null, recipientName: recipient?.name ?? null,
+        channel: input.destination.kind, ...(party ? { partyId: party.partyId } : {}), recipientPlayerId: recipient?.id ?? null, recipientName: recipient?.name ?? null,
         createdAt: new Date(now).toISOString(), segments: input.segments };
       await this.repository.save(message, streams.filter(stream => deliveryKeys.includes(stream.key)), context);
-      return { message, replayed: false };
+      return { message, replayed: false, ...(party ? { partyRecipients: party.recipients } : {}) };
     });
     if (!result.replayed) {
-      try { await this.events.publish(result.message); }
+      try { await this.events.publish(result.message, result.partyRecipients); }
       catch { this.logger.warn('Chat push failed; committed message remains available through REST'); }
     }
     return result;
@@ -65,15 +74,18 @@ export class ChatService {
     const query = feedQuery.parse(rawQuery);
     return this.transactions.run(async context => {
       const policy = await this.social.readPolicy(playerId, context), view: ChatView = query.view;
-      const keys = view === 'world' ? [CHAT_WORLD_STREAM] : view === 'direct' ? [directChatStream(playerId)] : [CHAT_WORLD_STREAM, directChatStream(playerId)];
-      const heads = await this.repository.heads(keys, context);
+      const party = view === 'all' || view === 'party' ? await this.parties.chatAccess(playerId, context) : null;
+      const partyAccess = party ? `${party.partyId}:${party.membershipId}` : null;
+      const groupKeys = party ? [partyChatStream(party.partyId, playerId)] : [];
+      const keys = view === 'world' ? [CHAT_WORLD_STREAM] : view === 'direct' ? [directChatStream(playerId)] : view === 'party' ? groupKeys : [CHAT_WORLD_STREAM, directChatStream(playerId), ...groupKeys];
+      const heads = keys.length ? await this.repository.heads(keys, context) : {};
       const mode = query.after ? 'after' : 'before';
       let offsets = mode === 'after' ? Object.fromEntries(keys.map(key => [key, 0])) : { ...heads };
       const rawCursor = query.after ?? query.before;
       if (rawCursor) {
         try {
           const cursor = cursorSchema.parse(JSON.parse(Buffer.from(rawCursor, 'base64url').toString('utf8')));
-          if (cursor.socialRevision !== policy.revision || cursor.playerId !== playerId || cursor.view !== view || cursor.mode !== mode
+          if (cursor.socialRevision !== policy.revision || cursor.partyAccess !== partyAccess || cursor.playerId !== playerId || cursor.view !== view || cursor.mode !== mode
             || Object.keys(cursor.offsets).length !== keys.length || keys.some(key => cursor.offsets[key] === undefined || cursor.offsets[key] > heads[key])) throw new Error('Invalid cursor');
           offsets = cursor.offsets;
         } catch { throw new GoneException({ code: 'CHAT_CURSOR_EXPIRED', message: 'Загрузите историю чата заново' }); }
@@ -83,10 +95,10 @@ export class ChatService {
       const merged = mergeChatStreams(batches, query.limit, mode);
       const next = { ...offsets };
       for (const entry of merged.entries) next[entry.streamKey] = mode === 'after' ? entry.sequence : entry.sequence - 1;
-      const after = encode({ playerId, view, socialRevision: policy.revision, mode: 'after', offsets: mode === 'after' ? next : heads });
-      const before = encode({ playerId, view, socialRevision: policy.revision, mode: 'before', offsets: mode === 'before' ? next : heads });
+      const after = encode({ playerId, view, socialRevision: policy.revision, partyAccess, mode: 'after', offsets: mode === 'after' ? next : heads });
+      const before = encode({ playerId, view, socialRevision: policy.revision, partyAccess, mode: 'before', offsets: mode === 'before' ? next : heads });
       const messages = merged.entries.map(entry => entry.message).filter(message => !policy.hiddenAuthors.includes(message.senderPlayerId)).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-      return { messages, after, before, hasMore: merged.hasMore };
+      return { messages, after, before, hasMore: merged.hasMore, partyAccess };
     });
   }
 }

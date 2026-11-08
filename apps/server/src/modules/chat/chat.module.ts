@@ -11,8 +11,9 @@ import { PostgresChatRepository } from './repositories/postgres-chat.repository'
 import { SystemChatClock } from './repositories/system-chat-clock';
 import { ChatController } from './http/chat.controller';
 import { ChatGateway } from './http/chat.gateway';
+import { PartiesModule } from '../parties/parties.module';
 
-@Module({ imports: [DatabaseModule, IdentityModule, CharactersModule, SocialModule], controllers: [ChatController],
+@Module({ imports: [DatabaseModule, IdentityModule, CharactersModule, SocialModule, PartiesModule], controllers: [ChatController],
   providers: [ChatService, ChatGateway, { provide: ChatRepository, useClass: PostgresChatRepository },
     { provide: ChatEvents, useExisting: ChatGateway }, { provide: ChatClock, useClass: SystemChatClock }], exports: [ChatService] })
 export class ChatModule {}

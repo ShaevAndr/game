@@ -1,2 +1,3 @@
 import type { ChatMessage } from '@game/core';
-export abstract class ChatEvents { abstract publish(message: ChatMessage): Promise<void> }
+export interface ChatPartyRecipient { playerId: string; membershipId: string }
+export abstract class ChatEvents { abstract publish(message: ChatMessage, partyRecipients?: ChatPartyRecipient[]): Promise<void> }
