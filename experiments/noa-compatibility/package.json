@@ -1,0 +1,21 @@
+{
+  "name": "noa-compatibility-probe",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 8090 --strictPort",
+    "build": "vite build",
+    "test": "node --test --experimental-test-isolation=none probe.test.mjs",
+    "test:browser": "node browser.test.mjs",
+    "test:persistence": "node --test --experimental-test-isolation=none persistence.test.mjs"
+  },
+  "dependencies": {
+    "@babylonjs/core": "6.49.0",
+    "mongodb": "6.21.0",
+    "noa-engine": "0.33.0"
+  },
+  "devDependencies": {
+    "playwright": "1.65.0",
+    "vite": "6.4.5"
+  }
+}

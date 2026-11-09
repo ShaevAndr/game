@@ -1,0 +1,29 @@
+{
+  "items": [
+    {"id":"mining-pick","name":"Рудничная кирка","kind":"tool","icon":"⛏","stackLimit":1,"toolClassId":"pickaxe","powerMultiplier":1,"description":"Грунт, камень и каменная кладка."},
+    {"id":"woodcutting-axe","name":"Топор лесоруба","kind":"tool","icon":"🪓","stackLimit":1,"toolClassId":"axe","powerMultiplier":1,"description":"Древесина и листва."},
+    {"id":"iron-sword","name":"Железный меч","kind":"weapon","icon":"⚔","stackLimit":1,"description":"Можно взять в руку. Боевые цели в этом стенде ещё не добавлены."},
+    {"id":"stone-piece","name":"Камень","kind":"resource","icon":"◈","stackLimit":999},
+    {"id":"soil-material","name":"Земля","kind":"resource","icon":"▧","stackLimit":999},
+    {"id":"oak-wood","name":"Дубовая древесина","kind":"resource","icon":"▥","stackLimit":999},
+    {"id":"tree-resin","name":"Смола","kind":"resource","icon":"◉","stackLimit":999},
+    {"id":"gold-ore","name":"Золотая руда","kind":"resource","icon":"✦","stackLimit":999},
+    {"id":"moon-stone","name":"Лунный камень","kind":"resource","icon":"◆","stackLimit":999},
+    {"id":"buried-chest","name":"Найденный сундук","kind":"treasure","icon":"▣","stackLimit":1,"description":"Редкая находка из земли. Открытие сундуков — следующий этап."},
+    {"id":"ember-scroll","name":"Свиток Искры","kind":"scroll","icon":"▤","stackLimit":20,"description":"Редкая находка. Изучение навыков в стенде не подключено."},
+    {"id":"stone","name":"Каменная порода","kind":"world-object","icon":"◼","stackLimit":1,"worldObject":{"color":"#81858a","maxHp":100,"allowedToolClassIds":["pickaxe"],"drops":[{"itemId":"stone-piece","min":1,"max":3,"chanceBps":10000},{"itemId":"gold-ore","min":1,"max":1,"chanceBps":100},{"itemId":"moon-stone","min":1,"max":1,"chanceBps":50}]}},
+    {"id":"soil","name":"Грунт","kind":"world-object","icon":"◼","stackLimit":1,"worldObject":{"color":"#79533a","maxHp":100,"allowedToolClassIds":["pickaxe","shovel"],"drops":[{"itemId":"soil-material","min":1,"max":2,"chanceBps":10000},{"itemId":"buried-chest","min":1,"max":1,"chanceBps":30},{"itemId":"ember-scroll","min":1,"max":1,"chanceBps":70}]}},
+    {"id":"grass","name":"Дёрн","kind":"world-object","icon":"◼","stackLimit":1,"worldObject":{"color":"#598345","maxHp":100,"allowedToolClassIds":["pickaxe","shovel"],"drops":[{"itemId":"soil-material","min":1,"max":2,"chanceBps":10000},{"itemId":"buried-chest","min":1,"max":1,"chanceBps":30},{"itemId":"ember-scroll","min":1,"max":1,"chanceBps":70}]}},
+    {"id":"oak-trunk","name":"Дубовый ствол","kind":"world-object","icon":"◼","stackLimit":1,"worldObject":{"color":"#775036","maxHp":100,"allowedToolClassIds":["axe"],"drops":[{"itemId":"oak-wood","min":2,"max":4,"chanceBps":10000},{"itemId":"tree-resin","min":1,"max":2,"chanceBps":2500}]}},
+    {"id":"masonry","name":"Каменная кладка","kind":"world-object","icon":"▦","stackLimit":1,"worldObject":{"color":"#9babb8","maxHp":150,"allowedToolClassIds":["pickaxe"],"drops":[{"itemId":"stone-piece","min":10,"max":15,"chanceBps":10000}]}},
+    {"id":"timber-wall","name":"Деревянный блок","kind":"world-object","icon":"▥","stackLimit":1,"worldObject":{"color":"#b48451","maxHp":80,"allowedToolClassIds":["axe"],"drops":[{"itemId":"oak-wood","min":2,"max":3,"chanceBps":10000}]}}
+  ],
+  "recipes": [
+    {"id":"place-masonry","name":"Каменная кладка","blockId":"masonry","ingredients":[{"itemId":"stone-piece","quantity":40},{"itemId":"tree-resin","quantity":1}]},
+    {"id":"place-timber","name":"Деревянный блок","blockId":"timber-wall","ingredients":[{"itemId":"oak-wood","quantity":8},{"itemId":"tree-resin","quantity":1}]}
+  ],
+  "startingItems": [
+    {"itemId":"mining-pick","quantity":1},{"itemId":"woodcutting-axe","quantity":1},{"itemId":"iron-sword","quantity":1},
+    {"itemId":"stone-piece","quantity":80},{"itemId":"tree-resin","quantity":10},{"itemId":"oak-wood","quantity":16}
+  ]
+}

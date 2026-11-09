@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="data:,"><title>Исследование · noa</title><link rel="stylesheet" href="/style.css"></head><body>
+<div id="game"></div><div id="crosshair">+</div>
+<header class="panel"><h1>Исследование</h1><label>Персонаж <select id="actor"><option value="weak">Сила 10</option><option value="strong">Сила 25</option></select></label>
+<p id="help">Клик по миру — захват мыши · WASD — ходьба<br>Мышь — камера · Пробел — прыжок<br>ЛКМ — добыча · ПКМ — постройка · E — подобрать<br><b>I — инвентарь</b> · Esc — освободить мышь</p>
+<div class="header-actions"><button id="open-inventory">Открыть инвентарь · I</button><button id="retry" hidden>Повторить действие</button></div>
+<details><summary>Тестовый стенд</summary><p class="muted">Отдельный мир и тестовые персонажи. В рюкзаке есть запас материалов для проверки строительства.</p><button id="reset" class="ghost">Начать заново</button></details></header>
+<aside id="status" class="panel"><b id="target">Наведи прицел на объект</b><p id="hp">—</p><progress id="progress" value="100" max="100"></progress><p id="held">В руке: —</p><p id="cargo">Рюкзак: —</p><p id="notice" role="status">Загрузка…</p><p id="nearby" class="muted"></p></aside>
+<nav id="hotbar" class="panel"><button data-slot="pickaxe" aria-pressed="true">1 · Кирка</button><button data-slot="axe" aria-pressed="false">2 · Топор</button><button data-slot="build" aria-pressed="false">3 · Строить</button><span id="blueprint"></span></nav>
+<dialog id="inventory-dialog" aria-labelledby="inventory-title"><div class="inventory-heading"><div><div class="eyebrow">СНАРЯЖЕНИЕ И ЗАПАСЫ</div><h2 id="inventory-title">Рюкзак <small id="inventory-count"></small></h2></div><button id="close-inventory" aria-label="Закрыть инвентарь">Закрыть · Esc</button></div><p id="inventory-message" role="status"></p>
+<div class="inventory-layout"><section><h3>Предметы</h3><p class="muted">Возьми оружие или инструмент в руку. Чтобы выбросить часть стека, укажи количество.</p><div id="inventory-items"></div></section><section><h3>Строительство</h3><p class="muted">Выбери чертёж, закрой рюкзак и укажи грань блока для установки через ПКМ.</p><div id="building-recipes"></div></section></div></dialog>
+<script type="module" src="/main.mjs"></script></body></html>
