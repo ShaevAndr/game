@@ -21,11 +21,13 @@ export const gatheringItems: Item[] = [
   material('fire-crystal', 'Кристалл огня', 'Цельный образец для огненных свитков.'),
   material('earth-crystal', 'Кристалл земли', 'Цельный образец для укрепления брони.'),
   ...[
-    ['woodcutting-axe', 'Топор лесоруба', 'Многоразовый инструмент для заготовки стволов.'],
-    ['herbal-sickle', 'Серп травника', 'Многоразовый инструмент для аккуратного сбора растений и коры.'],
-    ['mining-pick', 'Рудничная кирка', 'Многоразовый инструмент для рудных жил и дробления жеод.'],
-    ['crystal-chisel', 'Кристаллическое зубило', 'Многоразовый инструмент для извлечения цельных кристаллов.'],
-  ].map(([id, name, description]): Item => ({ id, name, description, groupId: 'tools', stackLimit: 1 })),
+    ['woodcutting-axe', 'Топор лесоруба', 'Многоразовый инструмент для заготовки стволов.', 'axe'],
+    ['herbal-sickle', 'Серп травника', 'Многоразовый инструмент для аккуратного сбора растений и коры.', 'sickle'],
+    ['mining-pick', 'Рудничная кирка', 'Многоразовый инструмент для рудных жил и дробления жеод.', 'pickaxe'],
+    ['crystal-chisel', 'Кристаллическое зубило', 'Многоразовый инструмент для извлечения цельных кристаллов.', 'chisel'],
+    ['digging-shovel', 'Землекопная лопата', 'Многоразовый инструмент для грунта в воксельном мире.', 'shovel'],
+    ['copper-axe', 'Медный топор', 'Другой топор того же класса для заготовки стволов.', 'axe'],
+  ].map(([id, name, description, toolClassId]): Item => ({ id, name, description, toolClassId, groupId: 'tools', stackLimit: 1 })),
 ];
 
 const recipe = (id: string, name: string, inputs: [string, number][], output: string, quantity = 1, professionId?: string): CraftingRecipe => ({
@@ -37,6 +39,8 @@ export const gatheringRecipes: CraftingRecipe[] = [
   recipe('craft-herbal-sickle', 'Серп травника', [['oak-wood', 2], ['flint', 2]], 'herbal-sickle', 1, 'blacksmith'),
   recipe('craft-mining-pick', 'Рудничная кирка', [['oak-wood', 3], ['flint', 3]], 'mining-pick', 1, 'blacksmith'),
   recipe('craft-crystal-chisel', 'Кристаллическое зубило', [['copper-ore', 3], ['quartz', 2], ['tree-resin', 1]], 'crystal-chisel', 1, 'blacksmith'),
+  recipe('craft-digging-shovel', 'Землекопная лопата', [['oak-wood', 2], ['flint', 3]], 'digging-shovel', 1, 'blacksmith'),
+  recipe('craft-copper-axe', 'Медный топор', [['oak-wood', 3], ['copper-ore', 3], ['tree-resin', 1]], 'copper-axe', 1, 'blacksmith'),
   recipe('weave-forest-armor', 'Плетёная лесная броня', [['wild-flax', 4], ['reed', 3], ['tree-resin', 2]], 'leather-armor'),
   recipe('forge-woodland-sword', 'Меч с сосновой рукоятью', [['iron-ore', 4], ['pine-wood', 2], ['copper-ore', 1]], 'iron-sword'),
   recipe('brew-silverleaf-potion', 'Настой серебролиста', [['silverleaf', 2], ['healing-herb', 2]], 'greater-potion'),

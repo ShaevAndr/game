@@ -31,6 +31,20 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+  rabbitmq:
+    profiles: [world]
+    image: rabbitmq:4-management
+    hostname: game-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: game
+      RABBITMQ_DEFAULT_PASS: game
+    ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672"]
+    volumes: ["rabbitmq_data:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
   server:
     build: { context: ., target: server }
     environment:
@@ -41,16 +55,45 @@ services:
       REDIS_URL: redis://redis:6379
       REDIS_NAMESPACE: ${REDIS_NAMESPACE:-game}
       WEB_ORIGIN: http://localhost:${GAME_WEB_PORT:-8088}
+      WORLD_URL: http://world:3002
+      WORLD_SERVICE_TOKEN: ${WORLD_SERVICE_TOKEN:-}
+      RABBITMQ_URL: ${RABBITMQ_DOCKER_URL:-amqp://game:game@rabbitmq:5672}
+      RABBITMQ_NAMESPACE: ${RABBITMQ_NAMESPACE:-game}
     ports: ["127.0.0.1:3001:3001"]
     depends_on:
       postgres: { condition: service_healthy }
       mongo: { condition: service_healthy }
       redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/v1/accounts').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
   web:
     build: { context: ., target: web }
     ports: ["${GAME_WEB_PORT:-8088}:80"]
     depends_on: [server]
+  world:
+    profiles: [world]
+    build: { context: ., target: world }
+    environment:
+      WORLD_PORT: 3002
+      WORLD_HOST: 0.0.0.0
+      WORLD_POSTGRES_URL: ${WORLD_DOCKER_POSTGRES_URL:-postgres://game:game@postgres:5432/game}
+      WORLD_SERVICE_TOKEN: ${WORLD_SERVICE_TOKEN:-}
+      RABBITMQ_URL: ${RABBITMQ_DOCKER_URL:-amqp://game:game@rabbitmq:5672}
+      RABBITMQ_NAMESPACE: ${RABBITMQ_NAMESPACE:-game}
+    # Internal API only: no host port and no browser proxy.
+    depends_on:
+      server: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/api/v1/world/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 volumes:
   postgres_data:
   mongo_data:
   redis_data:
+  rabbitmq_data:

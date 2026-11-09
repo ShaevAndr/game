@@ -2,8 +2,21 @@ import { Battle, Character, ChatMessage, SocialPair, SocialRelationship, ItemQua
 import { ColumnType } from 'kysely';
 import type { GatheringReceipt, GatheringState } from '@game/core';
 import type { Party, PartyCommandResult, PartyInvitation } from '@game/core';
+import type { WorldDelivery, WorldDeliveryResult } from '@game/core';
+import type { CargoOffer, CargoImportProof, CargoImportResult } from '@game/core';
 
 export interface Tables {
+  world_cargo_imports: { manifest_id: string; world_id: string; player_id: string; character_id: string;
+    data: ColumnType<CargoOffer, string, never>; result: ColumnType<CargoImportResult | null, string | null, string> };
+  world_cargo_operations: { player_id: string; operation_id: string; signature: string; result: ColumnType<CargoImportProof | null, string | null, string> };
+  world_cargo_ack_outbox: { manifest_id: string; data: ColumnType<CargoImportProof, string, never>;
+    delivered_at: ColumnType<Date | null, Date | null | undefined, Date>; failed: ColumnType<boolean, boolean | undefined, boolean>;
+    retry_at: ColumnType<Date, Date | undefined, Date>; last_error: ColumnType<string | null, string | null | undefined, string | null> };
+  inventory_world_reservations: { instance_id: string; owner_id: string; operation_id: string; world_id: string };
+  world_journal_worlds: { world_id: string; party_id: string; state: 'active' | 'closing' | 'closed'; sequence: ColumnType<string | number, number, number> };
+  world_journal_entries: { id: string; world_id: string; sequence: ColumnType<string | number, number, never>; player_id: string | null; operation_id: string | null;
+    signature: string; data: ColumnType<WorldDelivery, string, never>; result: ColumnType<WorldDeliveryResult | null, string | null, string>;
+    last_error: ColumnType<string | null, string | null | undefined, string | null> };
   parties: { id: string; data: ColumnType<Party, string, string> };
   party_members: { player_id: string; party_id: string; character_id: string };
   party_invitations: { id: string; party_id: string; inviter_id: string; target_id: string; status: string; expires_at: number; resolved_at: number | null; data: ColumnType<PartyInvitation, string, string> };

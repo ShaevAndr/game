@@ -92,6 +92,9 @@ export const initialMigration: Migration = {
       .addCheckConstraint('item_definition_version_positive', sql`definition_version > 0`).execute();
     await db.schema.createIndex('item_instances_owner').on('item_instances').column('owner_id').execute();
     await sql`CREATE UNIQUE INDEX equipped_slot_owner ON item_instances(owner_id, equipped_slot) WHERE equipped_slot IS NOT NULL`.execute(db);
+    await db.schema.createTable('inventory_world_reservations').addColumn('instance_id', 'uuid', c => c.primaryKey().references('item_instances.id'))
+      .addColumn('owner_id', 'uuid', c => c.notNull().references('characters.id')).addColumn('operation_id', 'uuid', c => c.notNull().unique())
+      .addColumn('world_id', 'uuid', c => c.notNull()).execute();
     for (const table of ['inventory_operations', 'crafting_operations']) {
       await db.schema.createTable(table).addColumn('id', 'uuid', c => c.primaryKey())
         .addColumn('signature', 'text', c => c.notNull()).addColumn('result', 'jsonb').execute();
@@ -118,6 +121,83 @@ export const initialMigration: Migration = {
       .addColumn('character_id', 'uuid', c => c.notNull().references('characters.id'))
       .addColumn('operation_id', 'uuid', c => c.notNull()).addColumn('signature', 'text', c => c.notNull())
       .addColumn('result', 'jsonb').addPrimaryKeyConstraint('gathering_operation_character', ['character_id', 'operation_id']).execute();
+    await db.schema.createTable('world_journal_worlds').addColumn('world_id', 'uuid', c => c.primaryKey())
+      .addColumn('party_id', 'uuid', c => c.notNull()).addColumn('state', 'varchar(16)', c => c.notNull())
+      .addColumn('sequence', 'bigint', c => c.notNull()).addCheckConstraint('world_journal_state', sql`state in ('active', 'closing', 'closed')`)
+      .addCheckConstraint('world_journal_sequence', sql`sequence between 0 and 9007199254740991`).execute();
+    await sql`CREATE UNIQUE INDEX world_journal_active_party ON world_journal_worlds(party_id) WHERE state != 'closed'`.execute(db);
+    await db.schema.createTable('world_journal_entries').addColumn('id', 'uuid', c => c.primaryKey())
+      .addColumn('world_id', 'uuid', c => c.notNull().references('world_journal_worlds.world_id')).addColumn('sequence', 'bigint', c => c.notNull())
+      .addColumn('player_id', 'uuid').addColumn('operation_id', 'uuid').addColumn('signature', 'text', c => c.notNull())
+      .addColumn('data', 'jsonb', c => c.notNull()).addColumn('result', 'jsonb').addColumn('last_error', 'text')
+      .addUniqueConstraint('world_journal_order', ['world_id', 'sequence'])
+      .addUniqueConstraint('world_journal_operation', ['world_id', 'player_id', 'operation_id']).execute();
+    await sql`CREATE INDEX world_journal_pending ON world_journal_entries(world_id, sequence) WHERE result IS NULL`.execute(db);
+    await db.schema.createTable('world_cargo_imports').addColumn('manifest_id', 'varchar(112)', c => c.primaryKey())
+      .addColumn('world_id', 'uuid', c => c.notNull()).addColumn('player_id', 'uuid', c => c.notNull()).addColumn('character_id', 'uuid', c => c.notNull())
+      .addColumn('data', 'jsonb', c => c.notNull()).addColumn('result', 'jsonb').execute();
+    await db.schema.createIndex('world_cargo_owner').on('world_cargo_imports').columns(['player_id', 'character_id']).execute();
+    await db.schema.createTable('world_cargo_operations').addColumn('player_id', 'uuid', c => c.notNull()).addColumn('operation_id', 'uuid', c => c.notNull())
+      .addColumn('signature', 'varchar(64)', c => c.notNull()).addColumn('result', 'jsonb').addPrimaryKeyConstraint('world_cargo_operation', ['player_id', 'operation_id']).execute();
+    await db.schema.createTable('world_cargo_ack_outbox').addColumn('manifest_id', 'varchar(112)', c => c.primaryKey().references('world_cargo_imports.manifest_id'))
+      .addColumn('data', 'jsonb', c => c.notNull()).addColumn('delivered_at', 'timestamptz').addColumn('failed', 'boolean', c => c.notNull().defaultTo(false))
+      .addColumn('retry_at', 'timestamptz', c => c.notNull().defaultTo(sql`now()`)).addColumn('last_error', 'text').execute();
+    await sql`CREATE INDEX world_cargo_ack_pending ON world_cargo_ack_outbox(retry_at) WHERE delivered_at IS NULL AND NOT failed`.execute(db);
+    // The world process owns only this schema. No cross-domain table/FK access is required.
+    await db.schema.createSchema('world').execute();
+    const world = db.withSchema('world');
+    await world.schema.createTable('instances').addColumn('id', 'uuid', c => c.primaryKey())
+      .addColumn('party_id', 'uuid', c => c.notNull()).addColumn('owner_player_id', 'uuid', c => c.notNull())
+      .addColumn('owner_character_id', 'uuid', c => c.notNull()).addColumn('revision', 'bigint', c => c.notNull())
+      .addColumn('party_revision', 'bigint', c => c.notNull().defaultTo(0)).addColumn('owner_fence', 'bigint', c => c.notNull().defaultTo(0))
+      .addColumn('status', 'varchar(16)', c => c.notNull()).addColumn('data', 'jsonb', c => c.notNull())
+      .addCheckConstraint('world_revision_bounds', sql`revision between 0 and 9007199254740991`)
+      .addCheckConstraint('world_party_revision_bounds', sql`party_revision between 0 and 9007199254740991`)
+      .addCheckConstraint('world_owner_fence_bounds', sql`owner_fence between 0 and 9007199254740991`)
+      .addCheckConstraint('world_status', sql`status in ('active', 'closed')`)
+      .addCheckConstraint('world_definition_object', sql`jsonb_typeof(data) = 'object'`).execute();
+    await sql`CREATE UNIQUE INDEX world_active_party ON world.instances(party_id) WHERE status = 'active'`.execute(db);
+    await world.schema.createTable('geometry').addColumn('world_id', 'uuid', c => c.primaryKey().references('world.instances.id'))
+      .addColumn('data', 'jsonb', c => c.notNull()).addCheckConstraint('world_geometry_object', sql`jsonb_typeof(data) = 'object'`).execute();
+    await world.schema.createTable('regions').addColumn('world_id', 'uuid', c => c.notNull().references('world.instances.id'))
+      .addColumn('cell_id', 'varchar(8)', c => c.notNull()).addColumn('revision', 'bigint', c => c.notNull())
+      .addColumn('data', 'jsonb', c => c.notNull()).addPrimaryKeyConstraint('world_region_cell', ['world_id', 'cell_id'])
+      .addCheckConstraint('world_region_revision', sql`revision between 0 and 9007199254740991`)
+      .addCheckConstraint('world_region_object', sql`jsonb_typeof(data) = 'object'`).execute();
+    await world.schema.createTable('progress').addColumn('character_id', 'uuid', c => c.primaryKey())
+      .addColumn('player_id', 'uuid', c => c.notNull()).addColumn('xp', 'bigint', c => c.notNull())
+      .addUniqueConstraint('world_progress_owner', ['character_id', 'player_id'])
+      .addCheckConstraint('world_xp_bounds', sql`xp between 0 and 9007199254740991`).execute();
+    await world.schema.createTable('members').addColumn('world_id', 'uuid', c => c.notNull().references('world.instances.id'))
+      .addColumn('character_id', 'uuid', c => c.notNull()).addColumn('player_id', 'uuid', c => c.notNull())
+      .addColumn('membership_id', 'uuid', c => c.notNull()).addColumn('cargo', 'jsonb', c => c.notNull())
+      .addColumn('active', 'boolean', c => c.notNull().defaultTo(true))
+      .addPrimaryKeyConstraint('world_member_character', ['world_id', 'character_id'])
+      .addForeignKeyConstraint('world_member_progress', ['character_id', 'player_id'], 'world.progress', ['character_id', 'player_id'])
+      .addCheckConstraint('world_cargo_array', sql`jsonb_typeof(cargo) = 'array'`).execute();
+    await sql`CREATE UNIQUE INDEX world_member_active_player ON world.members(world_id, player_id) WHERE active`.execute(db);
+    await sql`CREATE UNIQUE INDEX world_member_active_membership ON world.members(world_id, membership_id) WHERE active`.execute(db);
+    await world.schema.createTable('operations').addColumn('world_id', 'uuid', c => c.notNull().references('world.instances.id'))
+      .addColumn('player_id', 'uuid', c => c.notNull()).addColumn('operation_id', 'uuid', c => c.notNull())
+      .addColumn('signature', 'varchar(64)', c => c.notNull()).addColumn('result', 'jsonb', c => c.notNull())
+      .addColumn('rolls', 'jsonb', c => c.notNull()).addPrimaryKeyConstraint('world_operation_player', ['world_id', 'player_id', 'operation_id'])
+      .addCheckConstraint('world_result_object', sql`jsonb_typeof(result) = 'object'`)
+      .addCheckConstraint('world_rolls_array', sql`jsonb_typeof(rolls) = 'array'`).execute();
+    await world.schema.createTable('manifests').addColumn('id', 'varchar(112)', c => c.primaryKey())
+      .addColumn('world_id', 'uuid', c => c.notNull().references('world.instances.id')).addColumn('player_id', 'uuid', c => c.notNull())
+      .addColumn('character_id', 'uuid', c => c.notNull()).addColumn('hash', 'varchar(64)', c => c.notNull())
+      .addColumn('data', 'jsonb', c => c.notNull())
+      .addCheckConstraint('world_manifest_object', sql`jsonb_typeof(data) = 'object'`).execute();
+    await world.schema.createTable('cargo_outbox').addColumn('manifest_id', 'varchar(112)', c => c.primaryKey().references('world.manifests.id'))
+      .addColumn('data', 'jsonb', c => c.notNull()).addColumn('result', 'jsonb').addColumn('delivered_at', 'timestamptz')
+      .addColumn('failed', 'boolean', c => c.notNull().defaultTo(false)).addColumn('retry_at', 'timestamptz', c => c.notNull().defaultTo(sql`now()`))
+      .addColumn('last_error', 'text').execute();
+    await sql`CREATE INDEX world_cargo_pending ON world.cargo_outbox(retry_at) WHERE delivered_at IS NULL AND NOT failed`.execute(db);
+    await world.schema.createTable('deliveries').addColumn('id', 'uuid', c => c.primaryKey())
+      .addColumn('world_id', 'uuid', c => c.notNull()).addColumn('sequence', 'bigint', c => c.notNull())
+      .addColumn('signature', 'varchar(64)', c => c.notNull()).addColumn('result', 'jsonb', c => c.notNull())
+      .addUniqueConstraint('world_delivery_order', ['world_id', 'sequence'])
+      .addCheckConstraint('world_delivery_sequence', sql`sequence between 1 and 9007199254740991`).execute();
     for (const [index, character] of characters.entries()) {
       const accountId = demoAccounts[Math.floor(index / 5)].id;
       await db.insertInto('characters').values({ id: character.id, account_id: accountId, data: JSON.stringify({ ...character, accountId }) }).execute();

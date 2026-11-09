@@ -1,3 +1,4 @@
+import { emptyInventoryReservations } from './helpers/empty-inventory-reservations';
 import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -51,7 +52,7 @@ function fixture() {
     },
   } as unknown as InventoryRepository;
   const characters = new CharactersService(repository, content);
-  const inventory = new InventoryService(transactions, inventories, characters, content, {} as SkillsService, { isCharacterInActiveBattle: async () => false } as unknown as BattleParticipationService);
+  const inventory = new InventoryService(transactions, inventories, characters, content, {} as SkillsService, { isCharacterInActiveBattle: async () => false } as unknown as BattleParticipationService, emptyInventoryReservations);
   const service = new CharacterCreationService(transactions, characters, inventory, content);
   return { service, state: () => state, failInventory: (value: boolean) => { failInventory = value; } };
 }

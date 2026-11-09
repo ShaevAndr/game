@@ -19,18 +19,23 @@ function sourceTarget(file, specifier) {
     .find(candidate => existsSync(candidate) && statSync(candidate).isFile());
 }
 
-for (const file of [...files(join(root, 'apps/server/src')), ...files(join(root, 'apps/web/src'))]) {
+for (const file of [...files(join(root, 'apps/server/src')), ...files(join(root, 'apps/world/src')), ...files(join(root, 'apps/web/src'))]) {
   const name = relative(root, file).replaceAll('\\', '/');
   const source = readFileSync(file, 'utf8');
   const imports = [...source.matchAll(/(?:import|export)\s+(?:type\s+)?(?:[^;'"()]+?\s+from\s*)?['"]([^'"]+)['"]/g)].map(match => match[1]);
   const targets = imports.map(specifier => sourceTarget(file, specifier)).filter(Boolean);
   graph.set(file, targets);
-  if (name.startsWith('apps/server/src/')) {
+  if (/^apps\/(?:server|world)\/src\//.test(name)) {
     const layer = name.match(/\/modules\/([^/]+)\/(application|http|ports|repositories)\//);
     for (const specifier of imports) {
-      const driver = /^(?:kysely|pg|mongodb|ioredis|bullmq|socket\.io)(?:\/|$)/.test(specifier);
+      const driver = /^(?:kysely|pg|mongodb|ioredis|bullmq|socket\.io|amqplib)(?:\/|$)/.test(specifier)
+        || specifier === '@game/messaging';
       const target = sourceTarget(file, specifier);
       const targetName = target ? relative(root, target).replaceAll('\\', '/') : specifier;
+      const sourceApp = name.split('/')[1];
+      if (/^apps\/(?:server|world)\/src\//.test(targetName) && targetName.split('/')[1] !== sourceApp) {
+        report(file, `Services must communicate through contracts, not import each other's source: ${specifier}`);
+      }
       if (layer && ['application', 'http', 'ports'].includes(layer[2])) {
         if ((driver && !(layer[2] === 'http' && /\.gateway\.ts$/.test(file) && specifier === 'socket.io')) || /\/infrastructure\//.test(targetName)) {
           report(file, `${layer[2]} must use ports, not storage/queue drivers: ${specifier}`);

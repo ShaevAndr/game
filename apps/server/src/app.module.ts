@@ -11,6 +11,8 @@ import { IdentityAccessModule } from './modules/identity/identity-access.module'
 import { ChatModule } from './modules/chat/chat.module';
 import { GatheringModule } from './modules/gathering/gathering.module';
 import { PartiesModule } from './modules/parties/parties.module';
+import { WorldGatewayModule } from './modules/world-gateway/world-gateway.module';
+import { WorldCargoModule } from './modules/world-cargo/world-cargo.module';
 
-@Module({ imports: [IdentityAccessModule, ContentModule, CharactersModule, CharacterCreationModule, SkillsModule, ItemsModule, InventoryModule, CraftingModule, GatheringModule, PartiesModule, BattlesModule, ChatModule] })
+@Module({ imports: [IdentityAccessModule, ContentModule, CharactersModule, CharacterCreationModule, SkillsModule, ItemsModule, InventoryModule, CraftingModule, GatheringModule, PartiesModule, BattlesModule, ChatModule, WorldGatewayModule, WorldCargoModule] })
 export class AppModule {}

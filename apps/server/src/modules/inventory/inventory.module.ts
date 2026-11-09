@@ -8,8 +8,11 @@ import { InventoryService } from './application/inventory.service';
 import { InventoryController } from './http/inventory.controller';
 import { InventoryRepository } from './ports/inventory.repository';
 import { PostgresInventoryRepository } from './repositories/postgres-inventory.repository';
+import { InventoryReservationsRepository } from './ports/inventory-reservations.repository';
+import { PostgresInventoryReservationsRepository } from './repositories/postgres-inventory-reservations.repository';
 
 @Module({ imports: [DatabaseModule, CharactersModule, ContentModule, SkillsModule, BattleParticipationModule],
-  controllers: [InventoryController], providers: [InventoryService, { provide: InventoryRepository, useClass: PostgresInventoryRepository }],
+  controllers: [InventoryController], providers: [InventoryService, { provide: InventoryRepository, useClass: PostgresInventoryRepository },
+    { provide: InventoryReservationsRepository, useClass: PostgresInventoryReservationsRepository }],
   exports: [InventoryService] })
 export class InventoryModule {}

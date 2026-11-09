@@ -3,7 +3,7 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @game/server --filter @game/web dev",
     "start": "docker compose up --build",
-    "infra": "docker compose up -d postgres mongo redis",
+    "infra": "docker compose --profile world up -d postgres mongo redis rabbitmq",
     "build": "pnpm -r build", "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "check:architecture": "node scripts/check-architecture.mjs",

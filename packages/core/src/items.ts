@@ -11,6 +11,7 @@ export interface ItemGroup { id: string; name: string; description: string; acti
 export interface ItemDefinition {
   itemLevel?: number; version?: number;
   id: string; name: string; description: string; groupId: string; stackLimit: number;
+  toolClassId?: string;
   effects?: SkillEffect[]; heal?: number; equipSlot?: string; bonuses?: Partial<Stats>; grantedSkillId?: string;
   statModifiers?: Omit<StatModifier, 'id' | 'sourceId' | 'appliedSequence'>[];
   scaledBonuses?: Omit<ScaledEquipmentBonus, 'id' | 'sourceId'>[];
@@ -34,6 +35,7 @@ export const itemDefinitionSchema = z.object({
   itemLevel: z.number().int().min(1).max(1000).optional(), version: z.number().int().min(1).optional(),
   id: idSchema, name: z.string().min(1).max(80), description: z.string().max(500),
   groupId: idSchema.default('potions'), stackLimit: z.number().int().min(1).max(9999).default(99),
+  toolClassId: idSchema.optional(),
   effects: z.array(skillEffectSchema).min(1).max(8).optional(),
   heal: z.number().int().positive().max(10000).optional(), equipSlot: idSchema.optional(),
   bonuses: z.object({ maxHp: z.number().int().min(0).max(10000), attack: z.number().int().min(0).max(10000), defense: z.number().int().min(0).max(10000), maxEnergy: z.number().int().min(0).max(10000) }).partial().optional(),

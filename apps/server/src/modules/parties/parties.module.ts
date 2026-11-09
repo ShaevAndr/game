@@ -9,7 +9,8 @@ import { PartiesRepository } from './ports/parties.repository';
 import { PartyClock } from './ports/party-clock';
 import { PostgresPartiesRepository } from './repositories/postgres-parties.repository';
 import { SystemPartyClock } from './repositories/system-party-clock';
+import { WorldJournalModule } from '../world-journal/world-journal.module';
 
-@Module({ imports: [DatabaseModule, CharactersModule, IdentityModule, SocialModule], controllers: [PartiesController],
+@Module({ imports: [DatabaseModule, CharactersModule, IdentityModule, SocialModule, WorldJournalModule], controllers: [PartiesController],
   providers: [PartiesService, { provide: PartiesRepository, useClass: PostgresPartiesRepository }, { provide: PartyClock, useClass: SystemPartyClock }], exports: [PartiesService] })
 export class PartiesModule {}

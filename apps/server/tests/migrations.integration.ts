@@ -20,13 +20,30 @@ test('the single v1 init creates the complete schema, seeds heroes and preserves
     database = new Database(); await database.onModuleInit();
     const migrations = await sql<{ name: string }>`select name from kysely_migration`.execute(database.sql);
     assert.deepEqual(migrations.rows.map(row => row.name), ['init']);
+    for (const table of ['instances', 'geometry', 'regions', 'members', 'progress', 'operations', 'manifests', 'deliveries', 'cargo_outbox']) {
+      const result = await sql<{ count: string }>`SELECT count(*) FROM ${sql.table('world.' + table)}`.execute(database.sql);
+      assert.equal(result.rows[0].count, '0');
+    }
+    const worldForeignKeys = await sql<{ target_schema: string }>`
+      SELECT foreign_namespace.nspname AS target_schema FROM pg_constraint constraint_row
+      JOIN pg_class source_table ON source_table.oid = constraint_row.conrelid
+      JOIN pg_namespace source_namespace ON source_namespace.oid = source_table.relnamespace
+      JOIN pg_class foreign_table ON foreign_table.oid = constraint_row.confrelid
+      JOIN pg_namespace foreign_namespace ON foreign_namespace.oid = foreign_table.relnamespace
+      WHERE constraint_row.contype = 'f' AND source_namespace.nspname = 'world'
+    `.execute(database.sql);
+    assert.ok(worldForeignKeys.rows.length > 0);
+    assert.ok(worldForeignKeys.rows.every(row => row.target_schema === 'world'));
     const initial = await database.sql.selectFrom('characters').selectAll().execute();
+    for (const table of ['world_cargo_imports', 'world_cargo_operations', 'world_cargo_ack_outbox'] as const) {
+      assert.equal((await database.sql.selectFrom(table).selectAll().execute()).length, 0);
+    }
     assert.equal(initial.length, 10);
     assert.equal((await database.sql.selectFrom('accounts').selectAll().execute()).length, 2);
     for (const account of demoAccounts) assert.equal(initial.filter(row => row.account_id === account.id).length, 5);
     assert.ok(initial.every(row => row.data.accountId === row.account_id));
     assert.ok(initial.every(row => row.data.level === 10 && row.data.learnedSkillIds.length >= 6 && row.data.stats.maxEnergy === 30));
-    for (const table of ['battles', 'battle_rewards', 'battle_archive_outbox', 'inventory_operations', 'crafting_operations', 'gathering_states', 'gathering_operations', 'parties', 'party_members', 'party_invitations', 'party_operations', 'social_players', 'social_pairs', 'social_operations', 'chat_streams', 'chat_messages', 'chat_deliveries', 'chat_operations'] as const) {
+    for (const table of ['battles', 'battle_rewards', 'battle_archive_outbox', 'inventory_operations', 'inventory_world_reservations', 'world_journal_worlds', 'world_journal_entries', 'crafting_operations', 'gathering_states', 'gathering_operations', 'parties', 'party_members', 'party_invitations', 'party_operations', 'social_players', 'social_pairs', 'social_operations', 'chat_streams', 'chat_messages', 'chat_deliveries', 'chat_operations'] as const) {
       assert.equal((await database.sql.selectFrom(table).selectAll().execute()).length, 0);
     }
     const inventories = await database.sql.selectFrom('inventories').selectAll().execute();

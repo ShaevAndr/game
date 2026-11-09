@@ -1,3 +1,4 @@
+import { emptyInventoryReservations } from './helpers/empty-inventory-reservations';
 import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -67,7 +68,7 @@ function fixture() {
     async finishOperation(id, result, context) { draft(context).receipts[id].result = structuredClone(result); },
   }, characters, content, skills, {
     isCharacterInActiveBattle: async (ownerId: string, context: TransactionContext) => draft(context).activeCharacters.includes(ownerId),
-  } as unknown as BattleParticipationService);
+  } as unknown as BattleParticipationService, emptyInventoryReservations);
   const seed = (name: string) => {
     const hero = createCharacter(randomUUID(), name, seedContent);
     state.characters[hero.id] = hero;

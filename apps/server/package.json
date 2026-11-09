@@ -10,10 +10,13 @@
     "seed:playground": "tsx scripts/seed-playground.ts",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:migrations": "node --import tsx --test tests/migrations.integration.ts",
-    "test:infrastructure": "node --import tsx --test tests/infrastructure.integration.ts"
+    "test:infrastructure": "node --import tsx --test tests/infrastructure.integration.ts",
+    "test:world": "tsx --tsconfig tsconfig.world-test.json --test --experimental-test-isolation=none tests/world-access.integration.ts",
+    "test:cargo": "tsx --tsconfig tsconfig.world-test.json --test --experimental-test-isolation=none tests/world-cargo.integration.ts"
   },
   "dependencies": {
     "@game/core": "workspace:*",
+    "@game/messaging": "workspace:*",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",

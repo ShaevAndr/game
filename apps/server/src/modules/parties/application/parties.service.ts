@@ -9,6 +9,7 @@ import { IdentityService } from '../../identity/application/identity.service';
 import { SocialService } from '../../social/application/social.service';
 import { PartiesRepository } from '../ports/parties.repository';
 import { PartyClock } from '../ports/party-clock';
+import { WorldJournalService } from '../../world-journal/application/world-journal.service';
 
 const changed = (message = 'Группа изменилась. Обновите состав и повторите действие.') => new ConflictException({ code: 'PARTY_CHANGED', message });
 const notAllowed = () => new ForbiddenException({ code: 'SOCIAL_NOT_ALLOWED', message: 'Действие недоступно для этого игрока' });
@@ -20,7 +21,36 @@ export class PartiesService {
     @Inject(CharactersService) private readonly characters: CharactersService,
     @Inject(IdentityService) private readonly identity: IdentityService,
     @Inject(SocialService) private readonly social: SocialService,
-    @Inject(PartyClock) private readonly clock: PartyClock) {}
+    @Inject(PartyClock) private readonly clock: PartyClock,
+    @Inject(WorldJournalService) private readonly worlds: WorldJournalService) {}
+
+  /** Keeps the party lock through admission; session selection never silently changes the party hero. */
+  async worldAccess(session: AccountSession, context: TransactionContext, createSolo = false): Promise<Party> {
+    if (!session.characterId) throw new BadRequestException('Выберите персонажа');
+    let party = await this.worldParty(session, context);
+    if (!party && createSolo) {
+      const hero = await this.characters.identity(session.characterId);
+      if (hero.accountId !== session.account.id) throw new ForbiddenException('Персонаж не принадлежит аккаунту');
+      party = { id: randomUUID(), revision: 1, leaderPlayerId: session.account.id, members: [{ playerId: session.account.id,
+        characterId: hero.id, membershipId: randomUUID(), characterName: hero.name, level: hero.level, joinedAt: this.clock.now() }] };
+      await this.repository.save(party, context);
+    }
+    if (!party) throw new ForbiddenException('Вы не состоите в группе экспедиции');
+    return party;
+  }
+
+  /** Discovers a group's expedition without creating a solo party as a read side effect. */
+  async worldParty(session: AccountSession, context: TransactionContext): Promise<Party | null> {
+    if (!session.characterId) throw new BadRequestException('Выберите персонажа');
+    await this.repository.lock(context);
+    const party = await this.repository.partyOf(session.account.id, context);
+    if (!party) return null;
+    const member = party.members.find(member => member.playerId === session.account.id);
+    if (!member) throw new ForbiddenException('Вы не состоите в группе экспедиции');
+    if (member.characterId !== session.characterId) throw new ConflictException('Выбран другой герой. Сначала смените персонажа в группе');
+    await this.characters.assertOwned(session.account.id, member.characterId, context);
+    return party;
+  }
 
   /** Caller acquires social locks first; this lock stays held through feed read/send/push. */
   async chatAccess(playerId: string, context: TransactionContext): Promise<PartyChatAccess | null> {
@@ -82,6 +112,7 @@ export class PartiesService {
       await this.repository.lock(context);
       const now = this.clock.now();
       let party = await this.repository.partyOf(playerId, context);
+      let changedPartyId = party?.id;
       if ((party?.id ?? null) !== command.expectedPartyId || (party?.revision ?? 0) !== command.expectedRevision) throw changed();
       const member: PartyMember = { playerId, membershipId: randomUUID(), characterId: character.id, characterName: character.name, level: character.level, joinedAt: now };
       let invitationId: string | undefined;
@@ -100,6 +131,7 @@ export class PartiesService {
           const invitation: PartyInvitation = { id: randomUUID(), partyId: party.id, inviterPlayerId: playerId, inviterCharacterName: character.name,
             targetPlayerId: target!.id, createdAt: now, expiresAt: now + PARTY_INVITATION_TTL, resolvedAt: null, status: 'pending', interactionRevision };
           await this.repository.save(party, context);
+          changedPartyId = party.id;
           if (created) await this.repository.cancelInvitations({ targetPlayerId: playerId }, now, context);
           await this.repository.saveInvitation(invitation, context);
           invitationId = invitation.id;
@@ -117,6 +149,7 @@ export class PartiesService {
           if (invitation.interactionRevision !== interactionRevision) throw notAllowed();
           if (invitedParty.members.length >= PARTY_CAPACITY) throw changed('В группе уже 6 игроков');
           party = addPartyMember(invitedParty, member);
+          changedPartyId = party.id;
           await this.repository.save(party, context);
           await this.repository.cancelInvitations({ targetPlayerId: playerId }, now, context, invitation.id);
           if (party.members.length === PARTY_CAPACITY) await this.repository.cancelInvitations({ partyId: party.id }, now, context, invitation.id);
@@ -134,6 +167,8 @@ export class PartiesService {
         if (party) await this.repository.save(party, context); else await this.repository.remove(previous.id, context);
         if (action.type === 'leave') party = null;
       }
+      // A departing player's response hides the party, but the journal needs the remaining roster.
+      if (changedPartyId) await this.worlds.partyChanged(changedPartyId, await this.repository.party(changedPartyId, context), context);
       const result: PartyCommandResult = { party, ...(invitationId ? { invitationId } : {}), replayed: false };
       await this.repository.complete(playerId, command.operationId, result, context);
       return result;

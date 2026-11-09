@@ -1,6 +1,29 @@
 {
-  "name": "@game/web", "version": "0.1.0", "private": true, "type": "module",
-  "scripts": { "dev": "vite --host 0.0.0.0", "build": "tsc --noEmit && vite build", "typecheck": "tsc --noEmit" },
-  "dependencies": { "@game/core": "workspace:*", "react": "^19.0.0", "react-dom": "^19.0.0", "socket.io-client": "^4.8.1" },
-  "devDependencies": { "vite": "^6.1.0", "@vitejs/plugin-react": "^4.3.4", "@types/react": "^19.0.0", "@types/react-dom": "^19.0.0" }
+  "name": "@game/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "node --require tsx/cjs tests/world.test.cts",
+    "test:browser": "pnpm build && node --require tsx/cjs tests/world.browser.cts"
+  },
+  "dependencies": {
+    "@game/core": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "socket.io-client": "^4.8.1",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.187.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "playwright": "^1.65.0",
+    "tsx": "^4.19.2",
+    "vite": "^6.1.0"
+  }
 }

@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { receiveInventoryItems } from '@game/core';
+import { canonicalJson, receiveInventoryItems, resolveWorldTool } from '@game/core';
 import { Content, InventoryCommand, InventoryState, ItemInstance, ItemStack, applyInventoryCommand, availableItemActions, backpackStacks, equipmentBonuses, equipmentAttributeSources, equipmentRequirementBlockers, projectCharacterAttributes, isBattleConsumable } from '@game/core';
 import { z } from 'zod';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
@@ -9,6 +9,7 @@ import { ContentService } from '../../content/application/content.service';
 import { SkillsService } from '../../skills/application/skills.service';
 import { BattleParticipationService } from '../../battles/application/battle-participation.service';
 import { InventoryRepository } from '../ports/inventory.repository';
+import { InventoryReservationsRepository } from '../ports/inventory-reservations.repository';
 
 const equipmentLockedReason = 'Нельзя менять экипировку во время активного боя';
 const consumableLockedReason = 'Нельзя перемещать или удалять зелья во время активного боя';
@@ -22,6 +23,7 @@ export class InventoryService {
     @Inject(ContentService) private readonly content: ContentService,
     @Inject(SkillsService) private readonly skills: SkillsService,
     @Inject(BattleParticipationService) private readonly battles: BattleParticipationService,
+    @Inject(InventoryReservationsRepository) private readonly reservations: InventoryReservationsRepository,
   ) {}
 
   /** Ownership queries used by HTTP access checks without exposing a foreign inventory. */
@@ -50,11 +52,15 @@ export class InventoryService {
       const state = await this.repository.load(ownerId, context);
       const groups = content.itemGroups ?? [];
       const equipmentLocked = await this.battles.isCharacterInActiveBattle(ownerId, context);
+      const reserved = await this.reservations.forOwner(ownerId, context);
       return {
         ...state, definitions: content.items, groups, statDefinitions: content.statDefinitions,
         items: state.items.map(instance => {
           const definition = content.items.find(item => item.id === instance.itemId);
           const actions = definition ? availableItemActions(instance, state, definition, groups) : [];
+          if (reserved.some(entry => entry.instanceId === instance.id)) for (const action of actions) {
+            action.enabled = false; action.reason = 'Инструмент используется командой мира';
+          }
           if (definition && content.statDefinitions) {
             const blockers = equipmentRequirementBlockers(definition, character.baseAttributes ?? {}, content.statDefinitions);
             const equip = actions.find(action => action.id === 'equip');
@@ -109,6 +115,15 @@ export class InventoryService {
 
   /** Persists states and refreshes the owner character projections in the caller's transaction. */
   async commit(states: InventoryState[], content: Content, context: TransactionContext) {
+    for (const state of states) {
+      const reserved = await this.reservations.forOwner(state.ownerId, context);
+      if (!reserved.length) continue;
+      const before = await this.repository.load(state.ownerId, context);
+      for (const entry of reserved) {
+        const previous = before.items.find(item => item.id === entry.instanceId), next = state.items.find(item => item.id === entry.instanceId);
+        if (!previous || !next || canonicalJson(previous) !== canonicalJson(next)) throw new ConflictException('Инструмент используется командой мира');
+      }
+    }
     await this.repository.save(states, context);
     for (const state of states) {
       await this.characters.update(state.ownerId, content, character => {
@@ -131,6 +146,17 @@ export class InventoryService {
     catch (error) { throw new BadRequestException((error as Error).message); }
     await this.commit([updated], content, context);
     return updated;
+  }
+
+  /** A blocked cargo remains claimable. Only pure planning failures are recoverable;
+   * persistence failures must escape and roll back the caller's entire transaction. */
+  async tryReceiveCargo(ownerId: string, loot: { itemId: string; quantity: number }[], content: Content, context: TransactionContext) {
+    const state = await this.state(ownerId, content, context);
+    let updated: InventoryState;
+    try { updated = receiveInventoryItems(state, loot, content.items, randomUUID); }
+    catch (error) { return { received: false as const, reason: (error as Error).message }; }
+    await this.commit([updated], content, context);
+    return { received: true as const };
   }
 
   /** A successful combat command consumes the original bottle in the same transaction. */
@@ -195,6 +221,19 @@ export class InventoryService {
       await this.repository.finishOperation(operationId, changed.result, context);
       return changed.result;
     });
+  }
+
+  async reserveWorldTool(ownerId: string, instanceId: string, operationId: string, worldId: string, content: Content, context: TransactionContext) {
+    const state = await this.state(ownerId, content, context);
+    let tool: ReturnType<typeof resolveWorldTool>;
+    try { tool = resolveWorldTool(state, instanceId, content.items); }
+    catch (error) { throw new BadRequestException((error as Error).message); }
+    if (!await this.reservations.reserve({ instanceId, ownerId, operationId, worldId }, context)) throw new ConflictException('Инструмент уже используется командой мира');
+    return tool;
+  }
+  async releaseWorldTool(operationId: string, ownerId: string, context: TransactionContext) {
+    await this.characters.get(ownerId, undefined, context, true);
+    await this.reservations.release(operationId, ownerId, context);
   }
 
   private limits(content: Content) {
