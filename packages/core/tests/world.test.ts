@@ -166,6 +166,21 @@ test('two distinct axes harvest two distinct trees by class, and only the acting
   }
 });
 
+test('starter axes clear trees and pickaxes excavate terrain without crossing tool classes', () => {
+  for (const [tool, blockIds, wrongTool] of [
+    [pickaxe, ['soil', 'grass', 'stone', 'copper-vein'], axe],
+    [axe, ['oak-trunk', 'pine-trunk', 'leaves'], pickaxe],
+  ] as const) for (const blockId of blockIds) {
+    const world = enter(), position = floor(world);
+    writeWorldBlock(currentRegion(world), position, blockId);
+    assert.throws(() => harvest(world, position, wrongTool), /инструмент/);
+    const result = harvest(world, position, tool);
+    assert.equal(result.outcome.success, true);
+    assert.equal(worldBlockAt(currentRegion(result.state), position), null);
+    assert.equal(result.outcome.xpGained, 1);
+  }
+});
+
 test('tool ownership, instance, class, distance, resource level and minigame are server inputs', () => {
   const world = enter(); const position = floor(world); const before = structuredClone(world);
   for (const tool of [axe, { ...shovel, ownerCharacterId: 'stranger' }, { ...shovel, instanceId: operationId }, undefined]) {

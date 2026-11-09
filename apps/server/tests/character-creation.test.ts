@@ -67,6 +67,8 @@ test('character creation commits a personal starting inventory for each owner', 
     assert.equal(character.accountId, demoAccounts[0].id);
     assert.deepEqual(f.state().backpacks[character.id], character.inventory);
     assert.ok(character.inventory.length > 0);
+    for (const itemId of ['woodcutting-axe', 'mining-pick'])
+      assert.equal(f.state().backpacks[character.id].filter(item => item.itemId === itemId).reduce((sum, item) => sum + item.quantity, 0), 1);
   }
 });
 

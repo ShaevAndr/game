@@ -50,6 +50,8 @@ test('the single v1 init creates the complete schema, seeds heroes and preserves
     assert.equal(inventories.length, 10); assert.ok(inventories.every(value => value.is_primary && value.capacity === 50));
     const items = await database.sql.selectFrom('item_instances').selectAll().execute();
     assert.ok(items.every(item => item.quality === null && item.item_level === 1 && item.definition_version === 1));
+    for (const character of initial) for (const itemId of ['woodcutting-axe', 'mining-pick'])
+      assert.equal(items.filter(item => item.owner_id === character.id && item.item_id === itemId).reduce((sum, item) => sum + item.quantity, 0), 1);
     for (const character of initial) for (const stack of character.data.inventory) {
       const instances = items.filter(item => item.owner_id === character.id && item.item_id === stack.itemId);
       assert.equal(instances.reduce((sum, item) => sum + item.quantity, 0), stack.quantity);

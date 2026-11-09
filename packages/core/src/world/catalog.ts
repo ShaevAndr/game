@@ -14,11 +14,11 @@ export const initialWorldCatalog: WorldCatalog = {
   blocks: [
     { id: 'bedrock', name: 'Неразрушимое основание', color: '#30343b' },
     { id: 'soil', name: 'Грунт', color: '#79533a', harvest: {
-      resourceId: 'forest-soil', resourceType: 'mineral', level: 1, allowedToolClassIds: ['shovel'],
+      resourceId: 'forest-soil', resourceType: 'mineral', level: 1, allowedToolClassIds: ['pickaxe', 'shovel'],
       drops: [{ itemId: 'peat', quantity: 1, chanceBps: 10000 }],
     } },
     { id: 'grass', name: 'Дёрн', color: '#598345', harvest: {
-      resourceId: 'forest-turf', resourceType: 'mineral', level: 1, allowedToolClassIds: ['shovel'],
+      resourceId: 'forest-turf', resourceType: 'mineral', level: 1, allowedToolClassIds: ['pickaxe', 'shovel'],
       drops: [{ itemId: 'peat', quantity: 1, chanceBps: 10000 }, { itemId: 'healing-herb', quantity: 1, chanceBps: 1000 }],
     } },
     { id: 'stone', name: 'Каменная порода', color: '#81858a', harvest: {
@@ -38,7 +38,7 @@ export const initialWorldCatalog: WorldCatalog = {
       drops: [{ itemId: 'pine-wood', quantity: 2, chanceBps: 10000 }, { itemId: 'tree-resin', quantity: 1, chanceBps: 2500 }],
     } },
     { id: 'leaves', name: 'Листва', color: '#3e6b3d', harvest: {
-      resourceId: 'world-leaves', resourceType: 'plant', level: 1, allowedToolClassIds: ['sickle'],
+      resourceId: 'world-leaves', resourceType: 'plant', level: 1, allowedToolClassIds: ['axe', 'sickle'],
       drops: [{ itemId: 'healing-herb', quantity: 1, chanceBps: 2500 }],
     } },
   ],
