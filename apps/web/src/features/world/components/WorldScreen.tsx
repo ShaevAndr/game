@@ -1,42 +1,59 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import type { Content, Party, VoxelPosition } from '@game/core';
+import { worldBuildingRecipes, type Content, type Party, type VoxelPosition, type WorldInputFrame } from '@game/core';
+import { Modal } from '../../../shared/ui/Modal';
 import type { useWorld } from '../model/useWorld';
-import { reachableBlock, sameVoxel, stepTarget, voxelKey, worldTools } from '../model/interaction';
+import { reachableBlock, sameVoxel, directionFrames, voxelKey, worldTools } from '../model/interaction';
 const Viewport = lazy(() => import('./WorldViewport').then(module => ({ default: module.WorldViewport })));
 interface Props {
-  world: ReturnType<typeof useWorld>; playerId: string; characterId: string; party: Party | null; partyReady: boolean; partyBusy: boolean;
+  world: ReturnType<typeof useWorld>; playerId: string; characterId: string; party: Party | null; partyReady: boolean; partyBusy: boolean; inventoryOpen: boolean;
   content: Content | null; onInventory: () => void; onCrafting: () => void; onGathering: () => void;
 }
 const directions = [{ name: 'На север', icon: '↑', dx: 0, dz: -1, key: 'ArrowUp' }, { name: 'На запад', icon: '←', dx: -1, dz: 0, key: 'ArrowLeft' },
   { name: 'На юг', icon: '↓', dx: 0, dz: 1, key: 'ArrowDown' }, { name: 'На восток', icon: '→', dx: 1, dz: 0, key: 'ArrowRight' }];
-export function WorldScreen({ world, playerId, party, partyReady, partyBusy, content, onInventory, onCrafting, onGathering }: Props) {
+export function WorldScreen({ world, playerId, party, partyReady, partyBusy, inventoryOpen, content, onInventory, onCrafting, onGathering }: Props) {
   const { view } = world, position = view?.location?.position ?? null;
-  const [selected, setSelected] = useState<VoxelPosition | null>(null), [toolId, setToolId] = useState(''), [confirmClose, setConfirmClose] = useState(false);
-  const tools = worldTools(world.inventory), tool = tools.find(entry => entry.id === toolId) ?? tools.find(entry => !entry.reserved) ?? null;
+  const [selected, setSelected] = useState<VoxelPosition | null>(null), [toolId, setToolId] = useState<string | null>(null), [confirmClose, setConfirmClose] = useState(false);
+  const [menu, setMenu] = useState<'tools' | 'buildings' | null>(null), [recipeId, setRecipeId] = useState(worldBuildingRecipes[0].id);
   const isLeader = (!party || party.leaderPlayerId === playerId) && (!view || view.leaderPlayerId === playerId);
   const controlsLocked = world.busy || world.pending || partyBusy || world.stale || !partyReady || !world.ready;
   const leader = party?.members.find(member => member.playerId === party.leaderPlayerId);
   const itemName = (id: string) => content?.items.find(item => item.id === id)?.name ?? world.inventory?.definitions.find(item => item.id === id)?.name ?? id;
   const selectedBlock = view?.region?.blocks.find(block => sameVoxel(block.position, selected));
   const blockType = view?.region?.palette.find(entry => entry.id === selectedBlock?.blockId);
-  const reason = !selectedBlock ? 'Выберите блок в сцене или в списке рядом.' : !position || !reachableBlock(position, selectedBlock.position) ? 'Подойдите ближе к выбранному блоку.'
+  const allTools = worldTools(world.inventory), tools = worldTools(world.inventory, blockType?.allowedToolClassIds);
+  const tool = allTools.find(entry => entry.id === toolId) ?? null;
+  useEffect(() => { if (toolId === null && allTools.length) setToolId(allTools.find(entry => !entry.reserved)?.id ?? allTools[0].id); }, [world.inventory, toolId]);
+  const recipe = worldBuildingRecipes.find(entry => entry.id === recipeId)!;
+  const primary = world.inventory?.inventories.find(bag => bag.primary);
+  const amount = (itemId: string) => world.inventory?.items.filter(item => item.itemId === itemId && item.inventoryId === primary?.id && !item.equippedSlot && !item.actions.some(action => action.reason === 'Инструмент используется командой мира')).reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const canBuild = recipe.ingredients.every(cost => amount(cost.itemId) >= cost.quantity);
+  const paused = inventoryOpen || menu !== null;
+  const hit = (p: VoxelPosition) => {
+    if (controlsLocked || paused || !position || !reachableBlock(position, p, view?.region?.blockSizeMeters)) return;
+    const block = view?.region?.blocks.find(entry => sameVoxel(entry.position, p));
+    const allowed = view?.region?.palette.find(entry => entry.id === block?.blockId)?.allowedToolClassIds ?? [];
+    if (tool && !tool.reserved && allowed.includes(tool.toolClassId)) world.act({ type: 'harvest', position: p, toolInstanceId: tool.id });
+  };
+  const move = (dx: number, dz: number, jump = false) => { if (view && isLeader && !controlsLocked && !paused) return world.act({ type: 'move', frames: directionFrames(view, dx, dz, jump) }); return false; };
+  const reason = !selectedBlock ? 'Выберите блок в сцене или в списке рядом.' : !position || !reachableBlock(position, selectedBlock.position, view?.region?.blockSizeMeters) ? 'Подойдите ближе к выбранному блоку.'
     : !blockType?.allowedToolClassIds.length ? 'Этот блок нельзя добывать.' : !tool ? 'В основном рюкзаке нужен подходящий инструмент.'
       : tool.reserved ? 'Инструмент занят предыдущим действием.' : !blockType.allowedToolClassIds.includes(tool.toolClassId) ? 'Выберите подходящий инструмент.' : '';
-  const near = view?.region?.blocks.filter(block => position && reachableBlock(position, block.position)) ?? [];
+  const near = view?.region?.blocks.filter(block => position && reachableBlock(position, block.position, view?.region?.blockSizeMeters)) ?? [];
   const cargoSize = view?.cargo.reduce((sum, entry) => sum + entry.quantity, 0) ?? 0;
   useEffect(() => { setSelected(null); setConfirmClose(false); }, [view?.id, view?.region?.cellId]);
   useEffect(() => { if (selected && !selectedBlock) setSelected(null); }, [selected, selectedBlock]);
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
-      if (event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey || target.closest('input,select,textarea,button,[contenteditable="true"],[role="dialog"]')) return;
+      if (event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey || target.closest('input,select,textarea,button,[contenteditable="true"],[role="dialog"],dialog')) return;
+      if (event.code === 'KeyI' && !paused) { event.preventDefault(); onInventory(); return; }
+      if (paused) return;
       const direction = directions.find(entry => entry.key === event.key);
       if (!direction || !view?.region || !isLeader || controlsLocked) return;
-      const targetPosition = stepTarget(view, direction.dx, direction.dz);
-      event.preventDefault(); if (targetPosition) world.act({ type: 'move', position: targetPosition });
+      event.preventDefault(); move(direction.dx, direction.dz);
     };
     window.addEventListener('keydown', keydown); return () => window.removeEventListener('keydown', keydown);
-  }, [view, isLeader, controlsLocked, world.act]);
+  }, [view, isLeader, controlsLocked, paused, onInventory, world.act]);
 
   return <section className="world-screen main-column" aria-label="Мир экспедиции">
     <header className="world-heading"><div><div className="eyebrow">ЗА ГРАНИЦЕЙ ТРОП</div><h2>Общий мир. Твои находки.</h2><p>Отряд идёт за лидером. Каждый собирает собственную добычу.</p></div>
@@ -53,23 +70,33 @@ export function WorldScreen({ world, playerId, party, partyReady, partyBusy, con
       <div className="world-expedition-bar"><span className="world-live"><i className={world.stale ? 'stale' : ''}/>{world.stale ? 'Ожидаем обновления' : 'Отряд в экспедиции'}</span><span>{party?.members.length ?? view.members.length} в отряде · {isLeader ? 'Ты ведёшь группу' : `Ведёт ${leader?.characterName ?? 'лидер'}`}</span>
         <button className="ghost" disabled={world.busy} onClick={world.refresh}>Обновить</button></div>
       {view.region && position ? <>
-        <Suspense fallback={<div className="world-viewport world-scene-loading" role="status">Готовим 3D-участок…</div>}><Viewport key={`${view.id}:${view.region.cellId}`} region={view.region} position={position} selected={selected} onSelect={setSelected}/></Suspense>
+        <Suspense fallback={<div className="world-viewport world-scene-loading" role="status">Готовим 3D-участок…</div>}><Viewport key={`${view.id}:${view.region.cellId}`} region={view.region} position={position} revision={view.revision} locked={controlsLocked} paused={paused} motion={view.location?.motion ?? null} motionReset={world.motionReset} movementEnabled={isLeader && !partyBusy && partyReady && world.ready && !world.stale && !world.pending && (!world.busy || world.moving)}
+          targetInfo={`${blockType?.name ?? 'Наведи прицел на объект'} · В руке: ${tool?.name ?? 'ничего'} · ${reason || 'ЛКМ — бить'}`} feedback={world.error || world.message} error={!!world.error} targetHp={selectedBlock?.hp ?? null} targetMaxHp={selectedBlock?.maxHp ?? null}
+          cargoInfo={`Передача в рюкзак: ${cargoSize} / ${view.cargoCapacity}${view.cargo.length ? ` · ${view.cargo.map(entry => `${itemName(entry.itemId)} ×${entry.quantity}`).join(' · ')}` : ''}. Добытые материалы поступают в общий инвентарь сразу.`} onSelect={setSelected}
+          onHit={hit} onBuild={p => { if (!controlsLocked && !paused && canBuild) world.act({ type: 'build', position: p, recipeId }); }} onMove={(frames: WorldInputFrame[]) => isLeader && !controlsLocked && !paused ? world.act({ type: 'move', frames }) : false} onInventory={onInventory}/></Suspense>
+        <div className="world-hotbar" aria-label="Действия мыши">
+          <div><strong><span>ЛКМ</span> Бить</strong><button className="ghost" onClick={() => setMenu('tools')} aria-label="Выбрать инструмент">{tool?.name ?? 'Выбрать инструмент'} <span>⌄</span></button></div>
+          <div><strong><span>ПКМ</span> Строить</strong><button className="ghost" onClick={() => setMenu('buildings')} aria-label="Выбрать строение">{recipe.name} <span>⌄</span></button></div>
+          <button className="ghost" onClick={onInventory}>Инвентарь · I</button>
+        </div>
+        {menu === 'tools' && <Modal title="Выбор инструмента" onClose={() => setMenu(null)}><p className="hint">{blockType ? `Для объекта «${blockType.name}»` : 'Инструменты из основного рюкзака. Наведи прицел на объект, чтобы отфильтровать подходящие.'}</p>
+          <div className="world-tool-list">{tools.length ? tools.map(entry => <button key={entry.id} disabled={entry.reserved} aria-pressed={tool?.id === entry.id} onClick={() => { setToolId(entry.id); setMenu(null); }}>{entry.name}{entry.reserved ? ' · занят' : tool?.id === entry.id ? ' ✓' : ''}</button>) : <p>В рюкзаке нет допустимого инструмента для этого объекта.</p>}</div></Modal>}
+        {menu === 'buildings' && <Modal title="Выбор строения" onClose={() => setMenu(null)}><p className="hint">Материалы из основного рюкзака спишутся после установки через ПКМ.</p><div className="world-building-list">{worldBuildingRecipes.map(entry => <article className="panel" key={entry.id}><h3>{entry.name}</h3>{entry.ingredients.map(cost => <p key={cost.itemId} className={amount(cost.itemId) < cost.quantity ? 'missing' : ''}>{itemName(cost.itemId)}: {amount(cost.itemId)} / {cost.quantity}</p>)}<button aria-pressed={recipeId === entry.id} onClick={() => { setRecipeId(entry.id); setMenu(null); }}>{recipeId === entry.id ? 'Выбрано ✓' : 'Выбрать'}</button></article>)}</div></Modal>}
+        {!canBuild && <p className="hint">Для «{recipe.name}» нужны материалы. Открой выбор строения, чтобы увидеть стоимость.</p>}
         <div className="world-interaction">
-          <article className="panel world-target"><div className="section-label">ДОБЫЧА</div><h3>{blockType?.name ?? 'Выбери свою находку'}</h3>
+          <article className="panel world-target"><div className="section-label">ДОБЫЧА</div><h3>{blockType?.name ?? 'Выбери свою находку'}</h3>{selectedBlock?.maxHp && <p>HP {selectedBlock.hp} / {selectedBlock.maxHp}</p>}
             <p>{selectedBlock ? `Блок ${selectedBlock.position.x}, ${selectedBlock.position.y}, ${selectedBlock.position.z}` : 'Нажми на блок в 3D-сцене. Добывать можно рядом с отрядом.'}</p>
-            <label>Инструмент<select aria-label="Инструмент для добычи" value={tool?.id ?? ''} disabled={world.busy || world.pending} onChange={event => setToolId(event.target.value)}>
-              {!tools.length && <option value="">Нет инструментов в рюкзаке</option>}{tools.map((entry, index) => <option value={entry.id} key={entry.id}>{entry.name}{tools.filter(candidate => candidate.name === entry.name).length > 1 ? ` · ${index + 1}` : ''}{entry.reserved ? ' (занят)' : ''}</option>)}</select></label>
             {world.inventoryError && <p role="alert">{world.inventoryError}</p>}
-            {!tools.length && <p className="hint">Создай инструмент в крафте и положи в основной рюкзак.</p>}
             <p className="world-action-reason" aria-live="polite">{reason || 'Инструмент подходит. Можно добывать.'}</p>
-            <button className="primary" disabled={controlsLocked || !!reason} onClick={() => { if (selectedBlock && tool) world.act({ type: 'harvest', position: selectedBlock.position, toolInstanceId: tool.id }); }}>Добыть блок</button>
+            <button className="primary" disabled={controlsLocked || paused || !!reason} onClick={() => { if (selectedBlock) hit(selectedBlock.position); }}>Бить</button>
             <details className="world-nearby"><summary>Блоки рядом · {near.length}</summary><div>{near.map(block => <button className={sameVoxel(block.position, selected) ? 'chosen' : ''} key={voxelKey(block.position)} onClick={() => setSelected(block.position)} aria-pressed={sameVoxel(block.position, selected)}>
               {view.region!.palette.find(entry => entry.id === block.blockId)?.name ?? block.blockId}<small>{block.position.x}, {block.position.y}, {block.position.z}</small></button>)}</div></details>
           </article>
-          <article className="panel world-movement"><div className="section-label">ПЕРЕМЕЩЕНИЕ ОТРЯДА</div><h3>{isLeader ? 'Выбирай направление' : 'Следуем за лидером'}</h3><p>{isLeader ? 'Кнопки или стрелки на клавиатуре. Север — верх карты.' : 'Позиция общая для всех. Осматривайся и добывай рядом.'}</p>
-            <div className="world-dpad">{directions.map(direction => { const target = stepTarget(view, direction.dx, direction.dz);
-              return <button key={direction.key} className={`world-step world-step-${direction.key}`} aria-label={direction.name} title={target ? direction.name : 'Нет видимой опоры для шага'} disabled={!isLeader || controlsLocked || !target} onClick={() => { if (target) world.act({ type: 'move', position: target }); }}>{direction.icon}</button>;
-            })}<span>С</span></div><div className="world-position">Позиция <b>{position.x} · {position.y} · {position.z}</b></div>
+          <article className="panel world-movement"><div className="section-label">ПЕРЕМЕЩЕНИЕ ОТРЯДА</div><h3>{isLeader ? 'Выбирай направление' : 'Следуем за лидером'}</h3><p>{isLeader ? 'WASD — движение в любом направлении. Можно управлять и в прыжке.' : 'Позиция общая для всех. Осматривайся и добывай рядом.'}</p>
+            <div className="world-dpad">{directions.map(direction => { 
+              return <button key={direction.key} className={`world-step world-step-${direction.key}`} aria-label={direction.name} title={direction.name} disabled={!isLeader || controlsLocked} onClick={() => move(direction.dx, direction.dz)}>{direction.icon}</button>;
+            })}<span>С</span></div><div className="world-position">Позиция <b>{(position.x * view.region.blockSizeMeters).toFixed(2)} · {(position.y * view.region.blockSizeMeters).toFixed(2)} · {(position.z * view.region.blockSizeMeters).toFixed(2)} м</b></div>
+            <button className="ghost" disabled={!isLeader || controlsLocked} onClick={() => move(0, 0, true)}>Прыгнуть</button>
             <button className="ghost" disabled={!isLeader || controlsLocked} onClick={() => world.act({ type: 'leave' })}>← Вернуться на карту</button>
           </article>
         </div>
@@ -84,9 +111,9 @@ export function WorldScreen({ world, playerId, party, partyReady, partyBusy, con
         })}</div>
         {!isLeader && <p className="hint">Отряд перемещает лидер. Ты войдёшь в участок вместе с ним.</p>}
       </details>
-      <article className="panel world-cargo"><div className="section-heading"><div><div className="section-label">ЛИЧНЫЙ ГРУЗ</div><h3>{cargoSize} <span>/ {view.cargoCapacity}</span></h3></div><span>{view.xp} XP добычи</span></div>
-        <div className="world-materials">{view.cargo.length ? view.cargo.map(entry => <span key={entry.itemId}>{itemName(entry.itemId)} <b>×{entry.quantity}</b></span>) : <p>Пока пусто. Выбери инструмент и добудь первый блок.</p>}</div>
-        <p>При завершении экспедиции материалы отправятся в рюкзак. Если места не хватит, их можно получить позже.</p>
+      <article className="panel world-cargo"><div className="section-heading"><div><div className="section-label">ПЕРЕДАЧА ДОБЫЧИ В РЮКЗАК</div><h3>{cargoSize} <span>/ {view.cargoCapacity}</span></h3></div><span>{view.xp} XP добычи</span></div>
+        <div className="world-materials">{view.cargo.length ? view.cargo.map(entry => <span key={entry.itemId}>{itemName(entry.itemId)} <b>×{entry.quantity}</b></span>) : <p>Нет ожидающей передачи добычи.</p>}</div>
+        <p>Материалы поступают в общий инвентарь сразу после добычи. Если места не хватит, освободи ячейки и нажми «Получить» ниже.</p>
       </article>
       <div className="world-close">{confirmClose ? <div className="world-close-confirm" role="group" aria-label="Завершение экспедиции"><p>Завершить для всей группы? Добыча сохранится, участки будут закрыты.</p><button disabled={!isLeader || controlsLocked} onClick={() => { setConfirmClose(false); world.act({ type: 'close' }); }}>Завершить и забрать груз</button><button className="ghost" onClick={() => setConfirmClose(false)}>Продолжить поход</button></div>
         : <button className="ghost" disabled={!isLeader || controlsLocked} onClick={() => setConfirmClose(true)}>Завершить экспедицию</button>}</div>

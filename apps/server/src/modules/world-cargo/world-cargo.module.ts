@@ -10,5 +10,5 @@ import { WorldCargoRepository } from './ports/world-cargo.repository';
 import { PostgresWorldCargoRepository } from './repositories/postgres-world-cargo.repository';
 import { WorldCargoController, WorldCargoMessageController } from './http/world-cargo.controller';
 @Module({ imports: [DatabaseModule, RabbitMessagingModule, InventoryModule, ContentModule, CharactersModule, WorldJournalModule],
-  controllers: [WorldCargoController], providers: [WorldCargoService, WorldCargoMessageController, { provide: WorldCargoRepository, useClass: PostgresWorldCargoRepository }] })
+  controllers: [WorldCargoController], providers: [WorldCargoService, WorldCargoMessageController, { provide: WorldCargoRepository, useClass: PostgresWorldCargoRepository }], exports: [WorldCargoService] })
 export class WorldCargoModule {}

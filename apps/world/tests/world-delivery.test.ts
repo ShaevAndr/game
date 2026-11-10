@@ -1,3 +1,4 @@
+import { worldVoxel } from '@game/core';
 import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,13 +18,14 @@ async function fixture() {
   const act = async (actor: WorldIdentity, action: { type: 'enter' | 'leave' | 'close' } | { type: 'harvest'; position: { x: number; y: number; z: number }; toolInstanceId: string }) => {
     const state = await f.service.get(worldId, actor);
     return send({ kind: 'action', party, request: { actor, command: { operationId: randomUUID(), expectedRevision: state.revision, action },
-      ...(action.type === 'harvest' ? { tool: { instanceId: action.toolInstanceId, ownerCharacterId: actor.characterId, toolClassId: 'shovel' } } : {}) } });
+      ...(action.type === 'harvest' ? { tool: { instanceId: action.toolInstanceId, ownerCharacterId: actor.characterId, toolClassId: 'shovel', power: 100, usedAt: state.revision * 300 } } : {}) } });
   };
   await send({ kind: 'start', actor: leader, operationId: randomUUID(), party });
   await act(leader, { type: 'enter' });
   const mine = async (actor = leader) => {
-    const p = (await f.service.get(worldId, actor)).location!.position!;
-    return act(actor, { type: 'harvest', position: { ...p, y: p.y - 1 }, toolInstanceId: randomUUID() });
+    const view = await f.service.get(worldId, actor), p = worldVoxel(view.location!.position!);
+    const block = view.region!.blocks.find(block => block.blockId !== 'bedrock' && block.position.x >= p.x && block.position.x <= p.x + 1 && block.position.z === p.z && block.position.y === p.y - 1)!;
+    return act(actor, { type: 'harvest', position: block.position, toolInstanceId: randomUUID() });
   };
   return { ...f, worldId, leader, member, party, envelope, send, act, mine };
 }
@@ -83,8 +85,8 @@ test('disband closes the expedition, preserves cargo, and a late projection cann
 test('delivery receipt failure rolls back the game mutation and its normal operation receipt', async () => {
   const f = await fixture(), state = await f.service.get(f.worldId, f.leader), p = state.location!.position!, toolInstanceId = randomUUID();
   const request = f.envelope({ kind: 'action', party: f.party, request: { actor: f.leader,
-    command: { operationId: randomUUID(), expectedRevision: state.revision, action: { type: 'harvest', position: { ...p, y: p.y - 1 }, toolInstanceId } },
-    tool: { instanceId: toolInstanceId, ownerCharacterId: f.leader.characterId, toolClassId: 'shovel' } } });
+    command: { operationId: randomUUID(), expectedRevision: state.revision, action: { type: 'harvest', position: { ...worldVoxel(p), y: Math.floor(p.y) - 1 }, toolInstanceId } },
+    tool: { instanceId: toolInstanceId, ownerCharacterId: f.leader.characterId, toolClassId: 'shovel', power: 100, usedAt: state.revision * 300 } } });
   const before = f.inspect(); f.failNext('delivery');
   await assert.rejects(f.deliveries.deliver(request), /Delivery persistence failed/); assert.deepEqual(f.inspect(), before);
   assert.equal((await f.deliveries.deliver(request)).status, 201); assert.equal((await f.service.get(f.worldId, f.leader)).xp, 1);

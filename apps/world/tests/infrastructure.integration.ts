@@ -1,3 +1,4 @@
+import { worldVoxel } from '@game/core';
 import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -104,8 +105,9 @@ test('PostgreSQL world service: process restart, concurrent commands, atomic rol
     return wire<T>(path, method, body, expected, key);
   }
   const makeCommand = (revision: number, action: unknown, identity = actor, tool?: WorldTool) => ({ actor: identity,
-    command: { operationId: randomUUID(), expectedRevision: revision, action }, ...(tool ? { tool } : {}) });
-  const shovel = { instanceId: randomUUID(), ownerCharacterId: actor.characterId, toolClassId: 'shovel' };
+    command: { operationId: randomUUID(), expectedRevision: revision, action }, ...(tool ? { tool: { ...tool, usedAt: revision * 300 } } : {}) });
+  const support = (view: WorldView) => { const p = worldVoxel(view.location!.position!); return view.region!.blocks.find(block => block.blockId !== 'bedrock' && block.position.x >= p.x && block.position.x <= p.x + 1 && block.position.z === p.z && block.position.y === p.y - 1)!; };
+  const shovel = { instanceId: randomUUID(), ownerCharacterId: actor.characterId, toolClassId: 'shovel', power: 100, usedAt: 0 };
   try {
     await admin.query(`CREATE DATABASE "${databaseName}"`); createdDatabase = true;
     const previous = process.env.POSTGRES_URL;
@@ -142,7 +144,7 @@ test('PostgreSQL world service: process restart, concurrent commands, atomic rol
       assert.deepEqual(entries.map(entry => entry.status).sort(), [201, 409]);
       assert.equal((await owner!.query('SELECT count(*) FROM world.regions WHERE world_id=$1', [worldId])).rows[0].count, '1');
       const view = await state(), p = view.location!.position!;
-      minedRequest = makeCommand(view.revision, { type: 'harvest', position: { ...p, y: p.y - 1 }, toolInstanceId: shovel.instanceId }, actor, shovel);
+      minedRequest = makeCommand(view.revision, { type: 'harvest', position: { ...worldVoxel(p), y: Math.floor(p.y) - 1 }, toolInstanceId: shovel.instanceId }, actor, shovel);
       const competitor = structuredClone(minedRequest); competitor.actor = member;
       competitor.command.operationId = randomUUID(); competitor.tool = { ...shovel, ownerCharacterId: member.characterId };
       const replies = await Promise.all([minedRequest, competitor].map(body => dispatch(worldId, body as ExecuteWorldRequest)));
@@ -158,6 +160,17 @@ test('PostgreSQL world service: process restart, concurrent commands, atomic rol
       assert.ok(stored.rolls.length > 0); assert.equal('rolls' in stored.result.outcome, false);
     });
 
+    await t.test('partial HP survives a real process restart and an operation replay does not hit twice', async () => {
+      const view = await state(), block = support(view), position = block.position;
+      const allowed = view.region!.palette.find(entry => entry.id === block.blockId)!.allowedToolClassIds;
+      const requestBody = makeCommand(view.revision, { type: 'harvest', position, toolInstanceId: shovel.instanceId }, actor, { ...shovel, toolClassId: allowed[0], power: 25 });
+      const result = await act(requestBody); assert.equal(result.outcome.hit?.hp, 75); assert.equal(result.outcome.xpGained, 0);
+      const damaged = await state(); assert.equal(damaged.xp, view.xp);
+      await stop(child); child = await start(restricted.toString());
+      assert.deepEqual(await state(), damaged); assert.deepEqual(await act(requestBody), result); assert.deepEqual(await state(), damaged);
+      minedView = await state(minedRequest.actor);
+    });
+
     await t.test('actual process restart restores block changes, cargo, XP and old command responses', async () => {
       await stop(child); child = await start(restricted.toString());
       assert.deepEqual(await state(minedRequest.actor), minedView);
@@ -168,13 +181,37 @@ test('PostgreSQL world service: process restart, concurrent commands, atomic rol
       assert.deepEqual((await owner!.query('SELECT data FROM world.regions WHERE world_id=$1', [worldId])).rows[0].data, before);
     });
 
+    await t.test('fractional movement and airborne velocity survive restart and receipt replay', async () => {
+      const before = await state(), start = before.location!.position!, sequence = before.location!.motion!.sequence;
+      let clock = Date.now();
+      const command = { ...makeCommand(before.revision, { type: 'move', frames: [
+        { sequence: sequence + 1, x: .6, z: .8, jump: true }, { sequence: sequence + 2, x: .6, z: .8, jump: false },
+      ] }), movement: { usedAt: clock } };
+      const result = await act(command), airborne = await state();
+      assert.ok(airborne.location!.position!.x > start.x && airborne.location!.position!.z > start.z);
+      assert.ok(airborne.location!.position!.y > start.y); assert.equal(result.motion!.grounded, false);
+      assert.deepEqual(result.motion!.position, airborne.location!.position);
+      assert.equal('simulatedAt' in airborne.location!.motion!, false);
+      await stop(child); child = await start(restricted.toString());
+      assert.deepEqual(await state(), airborne); assert.deepEqual(await act(command), result); assert.deepEqual(await state(), airborne);
+      for (let i = 0; i < 8; i++) {
+        const current = await state(), seq = current.location!.motion!.sequence; clock += 100;
+        await act({ ...makeCommand(current.revision, { type: 'move', frames: [
+          { sequence: seq + 1, x: 0, z: 0, jump: false }, { sequence: seq + 2, x: 0, z: 0, jump: false },
+        ] }), movement: { usedAt: clock } });
+      }
+      assert.equal((await state()).location!.motion!.grounded, true);
+      const current = await state(); await act(makeCommand(current.revision, { type: 'leave' }));
+      await act(makeCommand(current.revision + 1, { type: 'enter' }));
+    });
+
     await t.test('a real database error after mutation rolls back geometry, cargo, XP, RNG and receipt', async () => {
       await owner!.query("CREATE FUNCTION world.reject_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected receipt failure'; END $$");
       await owner!.query('CREATE TRIGGER reject_receipt BEFORE INSERT ON world.operations FOR EACH ROW EXECUTE FUNCTION world.reject_receipt()');
       const view = await state(), p = view.location!.position!;
-      const type = view.region!.blocks.find(block => block.position.x === p.x && block.position.z === p.z && block.position.y === p.y - 1)!.blockId;
+      const block = support(view), type = block.blockId;
       const tool = { ...shovel, toolClassId: type === 'stone' || type === 'copper-vein' ? 'pickaxe' : 'shovel' };
-      const requestBody = makeCommand(view.revision, { type: 'harvest', position: { ...p, y: p.y - 1 }, toolInstanceId: tool.instanceId }, actor, tool);
+      const requestBody = makeCommand(view.revision, { type: 'harvest', position: block.position, toolInstanceId: tool.instanceId }, actor, tool);
       const before = (await owner!.query('SELECT data FROM world.instances WHERE id=$1', [worldId])).rows[0].data;
       const region = (await owner!.query('SELECT data FROM world.regions WHERE world_id=$1', [worldId])).rows[0].data;
       await act(requestBody, 503);

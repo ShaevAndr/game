@@ -1,12 +1,13 @@
 import { ConflictException, ForbiddenException, HttpException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
-import { canonicalJson, normalizedWorldCommandSchema, publicWorldStartSchema, worldIdSchema, type AccountSession, type Party, type WorldIdentity } from '@game/core';
+import { canonicalJson, normalizedWorldCommandSchema, publicWorldStartSchema, worldIdSchema, type AccountSession, type Party, type WorldIdentity, cargoOfferSchema } from '@game/core';
 import { UnitOfWork } from '../../../shared/application/unit-of-work';
 import { PartiesService } from '../../parties/application/parties.service';
 import { InventoryService } from '../../inventory/application/inventory.service';
 import { ContentService } from '../../content/application/content.service';
 import { CharactersService } from '../../characters/application/characters.service';
 import { WorldJournalService, worldPartySnapshot, type WorldJournalEntry } from '../../world-journal/application/world-journal.service';
+import { WorldCargoService } from '../../world-cargo/application/world-cargo.service';
 import { WorldRemote } from '../ports/world-remote';
 
 const hash = (value: unknown) => createHash('sha256').update(canonicalJson(value)).digest('hex');
@@ -25,7 +26,7 @@ export class WorldGatewayService implements OnModuleInit, OnModuleDestroy {
   constructor(@Inject(UnitOfWork) private readonly transactions: UnitOfWork,
     @Inject(PartiesService) private readonly parties: PartiesService, @Inject(InventoryService) private readonly inventory: InventoryService,
     @Inject(ContentService) private readonly content: ContentService, @Inject(CharactersService) private readonly characters: CharactersService,
-    @Inject(WorldJournalService) private readonly journal: WorldJournalService, @Inject(WorldRemote) private readonly remote: WorldRemote) {}
+    @Inject(WorldJournalService) private readonly journal: WorldJournalService, @Inject(WorldRemote) private readonly remote: WorldRemote, @Inject(WorldCargoService) private readonly cargo: WorldCargoService) {}
   private enabled() {
     if (this.stopping) throw new ServiceUnavailableException('Сервер завершает работу');
     if (!this.remote.enabled()) throw new ServiceUnavailableException('Сервис мира не настроен');
@@ -61,7 +62,7 @@ export class WorldGatewayService implements OnModuleInit, OnModuleDestroy {
     this.enabled(); worldId = worldIdSchema.parse(worldId);
     const command = normalizedWorldCommandSchema.parse(raw), playerId = session.account.id;
     const signature = hash({ kind: 'action', worldId, playerId, command });
-    const content = await this.content.get(true);
+    const content = command.action.type === 'harvest' || command.action.type === 'build' ? await this.content.get(true) : undefined;
     const entry = await this.transactions.run(async context => {
       let existing = this.matching(await this.journal.operation(worldId, playerId, command.operationId, context), signature);
       if (existing) return existing;
@@ -71,11 +72,12 @@ export class WorldGatewayService implements OnModuleInit, OnModuleDestroy {
       if (existing) return existing;
       if (!registration || registration.partyId !== party.id) throw new ForbiddenException('Нет доступа к экспедиции этой группы');
       if (registration.state !== 'active') throw new ConflictException('Экспедиция завершается или уже закрыта');
-      if (command.action.type !== 'harvest' && party.leaderPlayerId !== playerId) throw new ForbiddenException('Отрядом управляет лидер');
+      if (command.action.type !== 'harvest' && command.action.type !== 'build' && command.action.type !== 'collect' && party.leaderPlayerId !== playerId) throw new ForbiddenException('Отрядом управляет лидер');
       const actor = identity(party, session), admissionId = randomUUID();
       const tool = command.action.type === 'harvest'
-        ? await this.inventory.reserveWorldTool(actor.characterId, command.action.toolInstanceId, admissionId, worldId, content, context) : undefined;
-      return this.journal.append(worldId, { kind: 'action', party: worldPartySnapshot(party), request: { actor, command, ...(tool ? { tool } : {}) } },
+        ? await this.inventory.reserveWorldTool(actor.characterId, command.action.toolInstanceId, admissionId, worldId, content!, context) : undefined;
+      const build = command.action.type === 'build' ? await this.inventory.reserveWorldBuilding(actor.characterId, command.action.recipeId, worldId, content!, context) : undefined;
+      return this.journal.append(worldId, { kind: 'action', party: worldPartySnapshot(party), request: { actor, command, ...(tool ? { tool } : {}), ...(build ? { build } : {}), ...(command.action.type === 'move' ? { movement: { usedAt: Date.now() } } : {}) } },
         playerId, command.operationId, signature, context, admissionId);
     });
     return this.resolve(entry);
@@ -120,9 +122,34 @@ export class WorldGatewayService implements OnModuleInit, OnModuleDestroy {
     for (const entry of await this.journal.pending(worldId)) {
       try {
         const result = await this.remote.deliver(entry.delivery);
+        const payload = entry.delivery.payload;
+        // Complete collection only after the canonical inventory import has committed.
+        // The cargo receipt makes races with outbox delivery and lost replies harmless.
+        if (payload.kind === 'action' && payload.request.command.action.type === 'collect' && result.status < 400 && 'outcome' in result.body) {
+          const ids = result.body.outcome.manifestIds;
+          if (ids.length) {
+            const actor = payload.request.actor, manifests = await this.remote.manifests(worldId, actor.playerId, actor.characterId);
+            if (!Array.isArray(manifests)) throw new Error('Неверный ответ с документами добычи');
+            let delivery: NonNullable<typeof result.body.inventoryDelivery> = { status: 'imported' };
+            for (const id of ids) {
+              const manifest = manifests.find(value => value?.id === id);
+              if (!manifest) throw new Error('Документ добычи пока недоступен');
+              const offer = cargoOfferSchema.parse({ manifest, hash: hash(manifest) });
+              if (offer.manifest.worldId !== worldId || offer.manifest.playerId !== actor.playerId || offer.manifest.characterId !== actor.characterId) throw new Error('Владелец документа добычи не совпадает');
+              const imported = await this.cargo.accept(offer);
+              if (imported.status === 'available') delivery = { status: 'available', reason: imported.reason };
+            }
+            result.body = { ...result.body, inventoryDelivery: delivery };
+          }
+        }
+        const content = payload.kind === 'action' && payload.request.build ? await this.content.get(true) : undefined;
         await this.transactions.run(async context => {
           await this.journal.registration(worldId, context);
+          // Another process may already have completed this exact delivery.
+          if (entry.playerId && entry.operationId && (await this.journal.operation(worldId, entry.playerId, entry.operationId, context))?.result) return;
           const payload = entry.delivery.payload;
+          if (payload.kind === 'action' && payload.request.build)
+            await this.inventory.finishWorldBuilding(payload.request.build, result.status < 400 && 'outcome' in result.body && result.body.outcome.success, content!, context);
           if (payload.kind === 'action' && payload.request.tool)
             await this.inventory.releaseWorldTool(entry.delivery.id, payload.request.tool.ownerCharacterId, context);
           await this.journal.complete(entry, result, context);

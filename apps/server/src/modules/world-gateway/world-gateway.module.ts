@@ -1,3 +1,4 @@
+import { WorldCargoModule } from '../world-cargo/world-cargo.module';
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../infrastructure/database/database.module';
 import { PartiesModule } from '../parties/parties.module';
@@ -10,6 +11,6 @@ import { WorldGatewayController } from './http/world-gateway.controller';
 import { WorldRemote } from './ports/world-remote';
 import { RabbitWorldRemote } from './repositories/rabbit-world-remote';
 import { RabbitMessagingModule } from '../../infrastructure/rabbitmq/rabbit-messaging.module';
-@Module({ imports: [DatabaseModule, PartiesModule, InventoryModule, CharactersModule, ContentModule, WorldJournalModule, RabbitMessagingModule], controllers: [WorldGatewayController],
+@Module({ imports: [DatabaseModule, PartiesModule, InventoryModule, CharactersModule, ContentModule, WorldJournalModule, RabbitMessagingModule, WorldCargoModule], controllers: [WorldGatewayController],
   providers: [WorldGatewayService, { provide: WorldRemote, useClass: RabbitWorldRemote }], exports: [WorldGatewayService] })
 export class WorldGatewayModule {}

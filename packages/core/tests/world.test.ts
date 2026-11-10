@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  applyWorldCommand, canStandInWorld, createVoxelWorld, defaultWorldSettings, generateWorldMap,
+  applyWorldCommand, canStandInWorld, worldVoxel, createVoxelWorld, defaultWorldSettings, generateWorldMap,
   generateWorldRegion, initialWorldCatalog, itemDefinitionSchema, seedContent, validateWorldCatalog,
   resolveWorldTool, worldBlockAt, worldCommandSchema, worldSettingsSchema, worldView, writeWorldBlock,
   type InventoryState, type ItemDefinition, type VoxelPosition, type VoxelWorld, type WorldAction, type WorldActor, type WorldTool,
@@ -11,16 +11,16 @@ const actor: WorldActor = { playerId: 'player', characterId: 'hero', partyId: 'p
 const member: WorldActor = { ...actor, playerId: 'other-player', characterId: 'other-hero', membershipId: 'other-membership', isLeader: false };
 const operationId = '00000000-0000-4000-8000-000000000001';
 const toolId = '00000000-0000-4000-8000-000000000002';
-const axe: WorldTool = { instanceId: toolId, ownerCharacterId: actor.characterId, toolClassId: 'axe' };
+const axe: WorldTool = { instanceId: toolId, ownerCharacterId: actor.characterId, toolClassId: 'axe', power: 100, usedAt: 0 };
 const shovel: WorldTool = { ...axe, toolClassId: 'shovel' };
 const pickaxe: WorldTool = { ...axe, toolClassId: 'pickaxe' };
 const settings = () => ({ ...structuredClone(defaultWorldSettings), minGroundHeight: 5, maxGroundHeight: 5, treeChanceBps: 0 });
 const gatherers = () => [actor, member].map(who => ({ playerId: who.playerId, characterId: who.characterId, xp: 0 }));
 const create = (seed = 31415) => createVoxelWorld({ id: 'world', partyId: actor.partyId, seed, catalog: initialWorldCatalog, settings: settings(), items: seedContent.items, gatherers: gatherers() });
 const command = (state: VoxelWorld, action: WorldAction, who = actor, tool?: WorldTool) =>
-  applyWorldCommand(state, { operationId, expectedRevision: state.revision, action }, who, tool);
+  applyWorldCommand(state, { operationId, expectedRevision: state.revision, action }, who, tool ? { ...tool, usedAt: state.revision * 300 } : undefined, undefined, undefined, action.type === 'move' ? { usedAt: state.revision * 300 } : undefined);
 const enter = () => command(create(), { type: 'enter' }).state;
-const floor = (state: VoxelWorld): VoxelPosition => ({ ...state.location!.position!, y: state.location!.position!.y - 1 });
+const floor = (state: VoxelWorld): VoxelPosition => ({ ...worldVoxel(state.location!.position!), y: Math.floor(state.location!.position!.y) - 1 });
 const harvest = (state: VoxelWorld, position: VoxelPosition, tool: WorldTool, who = actor) =>
   command(state, { type: 'harvest', position, toolInstanceId: tool.instanceId }, who, tool);
 const currentRegion = (state: VoxelWorld) => state.regions.find(region => region.cellId === state.location!.cellId)!;
@@ -59,7 +59,7 @@ test('tool class comes from the owned backpack instance and unavailable tools ar
     inventories: [{ id: 'bag', ownerId: actor.characterId, name: 'Рюкзак', primary: true, capacity: 50 }],
     items: [{ id: toolId, itemId: 'woodcutting-axe', ownerId: actor.characterId, inventoryId: 'bag', quantity: 1, equippedSlot: null }],
   };
-  assert.deepEqual(resolveWorldTool(inventory, toolId, seedContent.items), axe);
+  assert.deepEqual(resolveWorldTool(inventory, toolId, seedContent.items, 100), axe);
   for (const changes of [{ ownerId: 'stranger' }, { inventoryId: null }, { equippedSlot: 'main-hand' }, { quantity: 0 }, { itemId: 'oak-wood' }]) {
     const unavailable = structuredClone(inventory); Object.assign(unavailable.items[0], changes);
     assert.throws(() => resolveWorldTool(unavailable, toolId, seedContent.items), /инструмент/);
@@ -132,32 +132,33 @@ test('only current leader moves the whole party and a foreign party cannot read 
   assert.deepEqual(worldView(inside, actor).location, worldView(inside, member).location);
   assert.throws(() => command(inside, { type: 'travel', cellId: '2:2' }), /макрокарту/);
   // Leadership comes from the application, so transfer does not generate another world.
-  const moved = command(inside, { type: 'move', position: { ...inside.location!.position!, x: inside.location!.position!.x + 1 } }, { ...member, isLeader: true }).state;
+  const moved = command(inside, { type: 'move', frames: [{ sequence: 1, x: .5, z: .5, jump: false }] }, { ...member, isLeader: true }).state;
   assert.equal(moved.id, world.id); assert.equal(moved.regions.length, 1);
 });
 
-test('movement rejects teleporting, diagonals, unsupported destinations, collisions and member commands', () => {
-  const world = enter(), p = world.location!.position!;
-  for (const target of [{ ...p, x: p.x + 2 }, { ...p, x: p.x + 1, z: p.z + 1 }, { ...p, x: p.x + 1, y: p.y + 1 }])
-    assert.throws(() => command(world, { type: 'move', position: target }), /проходимый/);
-  assert.throws(() => command(world, { type: 'move', position: { ...p, x: p.x + 1 } }, member), /лидер/);
-  const obstructed = structuredClone(world); writeWorldBlock(currentRegion(obstructed), { ...p, x: p.x + 1, y: p.y + 1 }, 'leaves');
-  assert.throws(() => command(obstructed, { type: 'move', position: { ...p, x: p.x + 1 } }), /проходимый/);
-  assert.deepEqual(world.location!.position, p);
+test('movement accepts only sequenced input frames and reserves party control for the leader', () => {
+  const world = enter(), before = structuredClone(world);
+  assert.equal(worldCommandSchema.safeParse({ operationId, expectedRevision: world.revision, action: { type: 'move', position: { x: 99, y: 3, z: 9 } } }).success, false);
+  const frames = [{ sequence: 1, x: 1, z: 1, jump: true }];
+  assert.throws(() => command(world, { type: 'move', frames }, member), /лидер/);
+  const moved = command(world, { type: 'move', frames }).state;
+  assert.ok(moved.location!.position!.x > world.location!.position!.x && moved.location!.position!.z > world.location!.position!.z);
+  assert.ok(moved.location!.position!.y > world.location!.position!.y);
+  assert.deepEqual(world, before);
 });
 
 test('two distinct axes harvest two distinct trees by class, and only the acting member receives cargo', () => {
   const axes: ItemDefinition[] = [seedContent.items.find(item => item.id === 'woodcutting-axe')!,
     { id: 'another-axe', name: 'Другой топор', description: '', groupId: 'tools', stackLimit: 1, toolClassId: 'axe' }];
   for (const item of axes) for (const [blockId, material] of [['oak-trunk', 'oak-wood'], ['pine-trunk', 'pine-wood']]) {
-    const world = enter(), p = { ...world.location!.position!, x: world.location!.position!.x + 1 };
+    const world = enter(), p = { ...worldVoxel(world.location!.position!), x: Math.floor(world.location!.position!.x) + 2 };
     writeWorldBlock(currentRegion(world), p, blockId);
     const instanceId = item.id === 'woodcutting-axe' ? toolId : '00000000-0000-4000-8000-000000000003';
     const inventory: InventoryState = { ownerId: member.characterId,
       inventories: [{ id: 'bag', ownerId: member.characterId, name: 'Рюкзак', primary: true, capacity: 50 }],
       items: [{ id: instanceId, ownerId: member.characterId, inventoryId: 'bag', itemId: item.id, quantity: 1, equippedSlot: null }],
     };
-    const result = harvest(world, p, resolveWorldTool(inventory, instanceId, axes), member);
+    const result = harvest(world, p, resolveWorldTool(inventory, instanceId, axes, 100), member);
     assert.ok(result.outcome.loot.some(loot => loot.itemId === material && loot.quantity === 2));
     assert.equal(worldView(result.state, actor).cargo.length, 0);
     assert.deepEqual(worldView(result.state, member).cargo, result.outcome.loot);
@@ -261,20 +262,20 @@ test('failed minigame changes neither block, cargo, XP nor saved random stream',
   assert.deepEqual(result.state.regions, world.regions); assert.deepEqual(result.state.gatherers[0].cargo, []);
 });
 
-test('excavation moves the party down and revisiting loads the altered snapshot without regeneration', () => {
+test('excavation preserves a supported fractional position and revisiting loads the altered snapshot without regeneration', () => {
   const world = enter(), position = floor(world);
   const dug = harvest(world, position, shovel).state;
-  assert.equal(dug.location!.position!.y, position.y);
+  assert.equal(dug.location!.position!.y, world.location!.position!.y);
   const left = command(dug, { type: 'leave' }).state;
   const away = command(left, { type: 'travel', cellId: '2:1' }).state;
   const neighbor = command(away, { type: 'enter' }).state;
   const back = command(command(command(neighbor, { type: 'leave' }).state, { type: 'travel', cellId: '2:2' }).state, { type: 'enter' }).state;
   assert.deepEqual(currentRegion(back), currentRegion(dug)); assert.equal(back.regions.length, 2);
-  assert.equal(back.location!.position!.y, position.y); assert.deepEqual(back.gatherers, dug.gatherers);
+  assert.equal(back.location!.position!.y, world.location!.position!.y); assert.deepEqual(back.gatherers, dug.gatherers);
 });
 
 test('stale revisions cannot harvest a shared block again and a spent block rejects a new operation', () => {
-  const world = enter(), position = { ...world.location!.position!, x: world.location!.position!.x + 1 };
+  const world = enter(), position = { ...worldVoxel(world.location!.position!), x: Math.floor(world.location!.position!.x) + 2 };
   writeWorldBlock(currentRegion(world), position, 'oak-trunk');
   const dug = harvest(world, position, axe).state;
   assert.throws(() => applyWorldCommand(dug, { operationId, expectedRevision: world.revision,
@@ -286,12 +287,13 @@ test('stale revisions cannot harvest a shared block again and a spent block reje
 test('JSON snapshot round trip preserves generation, loot RNG, cargo and further command results', () => {
   const world = harvest(enter(), floor(enter()), shovel).state;
   const restored = JSON.parse(JSON.stringify(world)) as VoxelWorld;
-  assert.deepEqual(harvest(restored, floor(restored), shovel), harvest(world, floor(world), shovel));
+  const next = { ...floor(world), x: floor(world).x + 2 };
+  assert.deepEqual(harvest(restored, next, shovel), harvest(world, next, shovel));
   assert.deepEqual(worldView(restored, actor), worldView(world, actor));
 });
 
 test('view hides buried ore, sealed cavities, seeds, drop tables and internal chunk palettes', () => {
-  let world = enter(); const p = world.location!.position!;
+  let world = enter(); const p = worldVoxel(world.location!.position!);
   const hidden = { ...p, y: 1 };
   writeWorldBlock(currentRegion(world), hidden, 'copper-vein');
   writeWorldBlock(currentRegion(world), { x: 1, y: 1, z: 1 }, null);
@@ -300,16 +302,14 @@ test('view hides buried ore, sealed cavities, seeds, drop tables and internal ch
   assert.equal(view.region!.blocks.some(block => block.blockId === 'copper-vein'), false);
   const serialized = JSON.stringify(view);
   for (const key of ['seed', 'rngState', 'drops', 'chanceBps', 'chunks', 'catalog']) assert.equal(serialized.includes(`"${key}"`), false);
-  world = harvest(world, floor(world), shovel).state;
-  world = harvest(world, floor(world), shovel).state;
-  world = harvest(world, floor(world), pickaxe).state;
+  for (let y = Math.floor(world.location!.position!.y) - 1; y > 1; y--) writeWorldBlock(currentRegion(world), { ...worldVoxel(world.location!.position!), y }, null);
   assert.ok(worldView(world, actor).region!.blocks.some(block => block.blockId === 'copper-vein' && block.position.x === hidden.x && block.position.z === hidden.z));
   assert.equal(worldView(world, actor).region!.blocks.some(block => block.position.x === 2 && block.position.y === 1 && block.position.z === 1), false);
 });
 
 test('closing deletes geometry, seals each owner cargo and retains experience without granting inventory', () => {
   let world = harvest(enter(), floor(enter()), shovel).state;
-  world = harvest(world, floor(world), { ...shovel, ownerCharacterId: member.characterId }, member).state;
+  world = harvest(world, { ...floor(world), x: floor(world).x + 2 }, { ...shovel, ownerCharacterId: member.characterId }, member).state;
   const before = structuredClone(world);
   const result = command(world, { type: 'close' });
   assert.equal(result.outcome.manifests.length, 2); assert.equal(new Set(result.outcome.manifests.map(entry => entry.id)).size, 2);
@@ -323,4 +323,73 @@ test('closing deletes geometry, seals each owner cargo and retains experience wi
   assert.throws(() => command(result.state, { type: 'enter' }), /закрыта/);
   assert.throws(() => command(result.state, { type: 'close' }), /закрыта/);
   assert.deepEqual(world, before);
+});
+
+test('building requires exact reserved materials, safe reachable air, and preserves the input on failure', () => {
+  const world = enter(), p = worldVoxel(world.location!.position!), target = { ...p, x: p.x + 2 };
+  const region = currentRegion(world); writeWorldBlock(region, target, null);
+  const permit = { ownerCharacterId: actor.characterId, recipeId: 'stone-masonry', materials: [
+    { instanceId: 'stone', reservationId: 'r1', itemId: 'flint', quantity: 4 },
+    { instanceId: 'resin', reservationId: 'r2', itemId: 'tree-resin', quantity: 1 },
+  ] };
+  const build = (position = target, proof: typeof permit | undefined = permit, who = actor) => applyWorldCommand(world,
+    { operationId, expectedRevision: world.revision, action: { type: 'build', position, recipeId: permit.recipeId } }, who, undefined, undefined, proof);
+  const before = structuredClone(world);
+  assert.throws(() => applyWorldCommand(world, { operationId, expectedRevision: world.revision, action: { type: 'build', position: target, recipeId: permit.recipeId } }, actor), /зарезервированы/);
+  assert.throws(() => build(target, { ...permit, ownerCharacterId: 'stranger' }), /зарезервированы/);
+  assert.throws(() => build(target, { ...permit, materials: permit.materials.slice(0, 1) }), /рецепту/);
+  assert.throws(() => build(target, { ...permit, materials: [...permit.materials, permit.materials[0]] }), /рецепту/);
+  assert.throws(() => build({ ...target, x: target.x + 3 }), /недостижимо/);
+  assert.throws(() => build(p), /недостижимо|занято|входа/);
+  assert.throws(() => build(floor(world)), /занято/);
+  assert.deepEqual(world, before);
+  const result = build();
+  assert.equal(worldBlockAt(currentRegion(result.state), target), 'masonry');
+  assert.equal(result.state.revision, world.revision + 1);
+  assert.deepEqual(result.state.gatherers, world.gatherers);
+  assert.equal(result.outcome.type, 'build');
+  assert.equal(worldView(result.state, actor).region!.palette.find(block => block.id === 'masonry')?.name, 'Каменная кладка');
+  const follower = build(target, { ...permit, ownerCharacterId: member.characterId }, member);
+  assert.equal(worldBlockAt(currentRegion(follower.state), target), 'masonry');
+});
+
+
+test('collect seals only the acting member cargo without closing or changing the region', () => {
+  const world = enter(); world.gatherers[0].cargo = [{ itemId: 'oak-wood', quantity: 2 }]; world.gatherers[1].cargo = [{ itemId: 'flint', quantity: 3 }];
+  const before = structuredClone(world), result = command(world, { type: 'collect' }, member);
+  assert.deepEqual(world, before); assert.equal(result.state.status, 'active');
+  assert.deepEqual(result.state.regions, world.regions); assert.deepEqual(result.state.location, world.location);
+  assert.deepEqual(result.state.gatherers[0].cargo, world.gatherers[0].cargo); assert.deepEqual(result.state.gatherers[1].cargo, []);
+  assert.deepEqual(result.outcome.manifests[0].cargo, [{ itemId: 'flint', quantity: 3 }]);
+  assert.equal(result.outcome.manifests[0].characterId, member.characterId);
+  assert.deepEqual(command(result.state, { type: 'collect' }, member).outcome.manifests, []);
+});
+
+test('block HP is shared and persisted, strength changes hit count, and incompatible or fast hits are harmless', () => {
+  for (const [power, hits] of [[10, 10], [25, 4]]) {
+    let world = enter(); const p = { ...worldVoxel(world.location!.position!), x: Math.floor(world.location!.position!.x) + 2 };
+    writeWorldBlock(currentRegion(world), p, 'oak-trunk');
+    const initialXp = world.gatherers[0].xp, rng = world.rngState;
+    for (let n = 1; n <= hits; n++) {
+      const usedAt = n * 300, tool = { ...axe, power, usedAt }, request = { operationId, expectedRevision: world.revision, action: { type: 'harvest' as const, position: p, toolInstanceId: toolId } };
+      const before = structuredClone(world);
+      assert.throws(() => applyWorldCommand(world, request, actor, { ...tool, toolClassId: 'pickaxe' }), /класса/);
+      assert.deepEqual(world, before);
+      const result = applyWorldCommand(world, request, actor, tool); world = JSON.parse(JSON.stringify(result.state));
+      assert.equal(result.outcome.hit?.hp, Math.max(0, 100 - power * n));
+      if (n < hits) {
+        assert.deepEqual(result.outcome.loot, []); assert.equal(result.outcome.xpGained, 0);
+        assert.equal(world.rngState, rng); assert.equal(world.gatherers[0].xp, initialXp);
+        assert.equal(worldBlockAt(currentRegion(world), p), 'oak-trunk');
+        assert.equal(worldView(world, actor).region!.blocks.find(block => block.position.x === p.x && block.position.y === p.y && block.position.z === p.z)?.hp, 100 - power * n);
+        const fast = { ...request, expectedRevision: world.revision };
+        assert.throws(() => applyWorldCommand(world, fast, actor, { ...tool, usedAt: usedAt + 249 }), /частые/);
+      } else {
+        assert.equal(worldBlockAt(currentRegion(world), p), null); assert.equal(world.gatherers[0].xp, initialXp + 1);
+        assert.equal(result.outcome.hit?.destroyed, true); assert.ok(result.outcome.loot.some(item => item.itemId === 'oak-wood'));
+      }
+    }
+    writeWorldBlock(currentRegion(world), p, 'oak-trunk');
+    assert.equal(worldView(world, actor).region!.blocks.find(block => block.position.x === p.x && block.position.y === p.y && block.position.z === p.z)?.hp, 100);
+  }
 });

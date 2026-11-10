@@ -1,3 +1,4 @@
+import { worldVoxel } from '@game/core';
 import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,16 +11,16 @@ async function fixture() {
   const store = memoryWorld();
   const actor: WorldIdentity = { playerId: randomUUID(), characterId: randomUUID(), membershipId: randomUUID(), partyId: randomUUID() };
   const member: WorldIdentity = { ...actor, playerId: randomUUID(), characterId: randomUUID(), membershipId: randomUUID() };
-  const worldId = randomUUID(), tool: WorldTool = { instanceId: randomUUID(), ownerCharacterId: actor.characterId, toolClassId: 'shovel' };
+  const worldId = randomUUID(), tool: WorldTool = { instanceId: randomUUID(), ownerCharacterId: actor.characterId, toolClassId: 'shovel', power: 100, usedAt: 0 };
   const members = [actor, member].map(({ partyId: _, ...entry }) => entry);
   const start = { worldId, operationId: randomUUID(), actor, members };
   await store.service.start(start);
   const request = async (action: WorldAction, who = actor, selectedTool?: WorldTool): Promise<ExecuteWorldRequest> => ({ actor: who,
-    command: { operationId: randomUUID(), expectedRevision: (await store.service.get(worldId, who)).revision, action }, ...(selectedTool ? { tool: selectedTool } : {}) });
+    command: { operationId: randomUUID(), expectedRevision: (await store.service.get(worldId, who)).revision, action }, ...(selectedTool ? { tool: { ...selectedTool, usedAt: (await store.service.get(worldId, who)).revision * 300 } } : {}) });
   const act = async (action: WorldAction, who = actor, selectedTool?: WorldTool) => store.service.execute(worldId, await request(action, who, selectedTool));
   await act({ type: 'enter' });
   const position = (await store.service.get(worldId, actor)).location!.position!;
-  const harvest = await request({ type: 'harvest', position: { ...position, y: position.y - 1 }, toolInstanceId: tool.instanceId }, actor, tool);
+  const harvest = await request({ type: 'harvest', position: { ...worldVoxel(position), y: Math.floor(position.y) - 1 }, toolInstanceId: tool.instanceId }, actor, tool);
   return { ...store, actor, member, worldId, tool, start, request, act, harvest };
 }
 
@@ -104,4 +105,16 @@ test('UUID casing and object key order do not change identity or operation signa
   upper.tool!.instanceId = upper.tool!.instanceId.toUpperCase(); upper.tool!.ownerCharacterId = upper.tool!.ownerCharacterId.toUpperCase();
   assert.deepEqual(await f.service.execute(f.worldId.toUpperCase(), upper), result);
   assert.deepEqual(await f.service.get(f.worldId.toUpperCase(), upper.actor), await f.service.get(f.worldId, f.actor));
+});
+
+test('partial damage and its receipt commit atomically, survive reload and replay without a second hit', async () => {
+  const f = await fixture(), request = structuredClone(f.harvest); request.tool!.power = 25;
+  const before = f.inspect(); f.failNext('finish');
+  await assert.rejects(f.service.execute(f.worldId, request), /Receipt persistence failed/); assert.deepEqual(f.inspect(), before);
+  const result = await f.service.execute(f.worldId, request);
+  assert.equal(result.outcome.hit?.hp, 75); assert.equal(result.outcome.xpGained, 0); assert.deepEqual(result.outcome.loot, []);
+  const snapshot = await f.service.get(f.worldId, f.actor);
+  const p = request.command.action.type === 'harvest' ? request.command.action.position : null;
+  assert.ok(p); assert.equal(snapshot.region!.blocks.find(block => block.position.x === p.x && block.position.y === p.y && block.position.z === p.z)?.hp, 75);
+  assert.deepEqual(await f.service.execute(f.worldId, request), result); assert.deepEqual(await f.service.get(f.worldId, f.actor), snapshot);
 });

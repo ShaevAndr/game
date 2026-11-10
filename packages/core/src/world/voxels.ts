@@ -1,4 +1,4 @@
-import type { VoxelChunk, VoxelPosition, WorldRegion } from './types';
+import type { VoxelChunk, VoxelPosition, WorldRegion, WorldBlockDefinition } from './types';
 
 export const voxelIndex = (position: VoxelPosition, size: VoxelPosition) => (position.y * size.z + position.z) * size.x + position.x;
 export const sameVoxel = (a: VoxelPosition, b: VoxelPosition) => a.x === b.x && a.y === b.y && a.z === b.z;
@@ -27,6 +27,10 @@ export function writeWorldBlock(region: WorldRegion, p: VoxelPosition, blockId: 
   let paletteIndex = chunk.palette.indexOf(blockId);
   if (paletteIndex < 0) { paletteIndex = chunk.palette.length; chunk.palette.push(blockId); }
   chunk.blocks[index] = paletteIndex;
+  if (region.blockHealth) delete region.blockHealth[`${p.x}:${p.y}:${p.z}`];
+}
+export function worldBlockHealth(region: WorldRegion, p: VoxelPosition, definition: WorldBlockDefinition) {
+  return region.blockHealth?.[`${p.x}:${p.y}:${p.z}`] ?? { hp: definition.maxHp ?? 100, maxHp: definition.maxHp ?? 100 };
 }
 export function canStandInWorld(region: WorldRegion, p: VoxelPosition): boolean {
   const head = { ...p, y: p.y + 1 }, support = { ...p, y: p.y - 1 };

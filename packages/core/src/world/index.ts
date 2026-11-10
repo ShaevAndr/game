@@ -6,5 +6,7 @@ export * from './voxels';
 export * from './rules';
 export * from './view';
 export * from './tools';
+export * from './building';
 export * from './protocol';
 export * from './cargo';
+export * from './movement';

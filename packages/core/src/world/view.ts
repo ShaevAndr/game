@@ -1,6 +1,7 @@
+import { worldVoxel } from './movement';
 import type { GatheringLoot } from '../gathering/types';
 import type { VoxelPosition, VoxelWorld, WorldActor, WorldCell, WorldRegion } from './types';
-import { insideRegion, voxelIndex, voxelNeighbors, worldBlockAt } from './voxels';
+import { insideRegion, voxelIndex, voxelNeighbors, worldBlockAt, worldBlockHealth } from './voxels';
 import type { WorldMember } from './protocol';
 
 export interface WorldExpeditionView extends WorldView {
@@ -14,7 +15,7 @@ export interface WorldView {
   location: VoxelWorld['location']; cargo: GatheringLoot[]; xp: number; cargoCapacity: number;
   region: null | {
     cellId: string; revision: number; size: VoxelPosition; blockSizeMeters: number;
-    blocks: { position: VoxelPosition; blockId: string }[];
+    blocks: { position: VoxelPosition; blockId: string; hp?: number; maxHp?: number }[];
     palette: { id: string; name: string; color: string; allowedToolClassIds: string[] }[];
   };
 }
@@ -45,12 +46,16 @@ export function worldView(state: VoxelWorld, actor: WorldActor): WorldView {
   const gatherer = state.gatherers.find(entry => entry.characterId === actor.characterId);
   if (gatherer && gatherer.playerId !== actor.playerId) throw new Error('Владелец груза не совпадает');
   const snapshot = state.location?.position ? state.regions.find(entry => entry.cellId === state.location!.cellId) : undefined;
-  const blocks = snapshot ? visibleWorldBlocks(snapshot, state.location!.position!) : [];
+  const blocks = snapshot ? visibleWorldBlocks(snapshot, worldVoxel(state.location!.position!)).map(block => {
+    const definition = state.catalog.blocks.find(entry => entry.id === block.blockId)!;
+    return definition.harvest ? { ...block, ...worldBlockHealth(snapshot, block.position, definition) } : block;
+  }) : [];
   const visibleIds = new Set(blocks.map(block => block.blockId));
+  const location = structuredClone(state.location); if (location?.motion) delete location.motion.simulatedAt;
   return {
     id: state.id, revision: state.revision, status: state.status, map: structuredClone(state.map),
     biomes: state.catalog.biomes.map(({ id, name }) => ({ id, name })),
-    location: structuredClone(state.location), cargo: structuredClone(gatherer?.cargo ?? []),
+    location, cargo: structuredClone(gatherer?.cargo ?? []),
     xp: gatherer?.xp ?? 0, cargoCapacity: state.settings.cargoCapacity,
     region: snapshot ? { cellId: snapshot.cellId, revision: snapshot.revision, size: { ...snapshot.size },
       blockSizeMeters: state.settings.blockSizeMeters, blocks,

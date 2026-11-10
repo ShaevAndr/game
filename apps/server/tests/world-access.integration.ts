@@ -1,3 +1,8 @@
+import { worldVoxel } from '@game/core';
+import { ContentService } from '../src/modules/content/application/content.service';
+import { UnitOfWork as MainTransactions } from '../src/shared/application/unit-of-work';
+import { CharactersService } from '../src/modules/characters/application/characters.service';
+import { WorldCargoService } from '../src/modules/world-cargo/application/world-cargo.service';
 import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,6 +42,7 @@ test('main server admits world commands against current parties and canonical re
     catch (error) { await app.close(); throw error; }
   }
   async function call<T>(token: string, path: string, body?: unknown, expected = body === undefined ? 200 : 201, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
+    if (body && typeof body === 'object' && 'action' in body && (body as { action: { type: string } }).action?.type === 'harvest') await new Promise(resolve => setTimeout(resolve, 300));
     const response = await fetch(mainUrl + path, { method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20000) });
     const value = await response.json(); assert.equal(response.status, expected, JSON.stringify(value)); return value as T;
@@ -55,7 +61,7 @@ test('main server admits world commands against current parties and canonical re
   const makeMine = async (who: typeof actors[number], instanceId: string) => {
     const current = await state(who), p = current.location!.position!;
     return { operationId: randomUUID(), expectedRevision: current.revision,
-      action: { type: 'harvest', position: { ...p, y: p.y - 1 }, toolInstanceId: instanceId } };
+      action: { type: 'harvest', position: current.region!.blocks.find(block => block.blockId !== 'bedrock' && block.position.x >= Math.floor(p.x) && block.position.x <= Math.floor(p.x) + 1 && block.position.z === Math.floor(p.z) && block.position.y === Math.floor(p.y) - 1)!.position, toolInstanceId: instanceId } };
   };
   const sealed = (who: typeof actors[number], characterId = who.hero.id) => call<{ id: string; cargo: unknown }[]>(who.token, `${path}/manifests?characterId=${characterId}`);
   try {
@@ -71,6 +77,8 @@ test('main server admits world commands against current parties and canonical re
       const login = await call<AccountLogin>('', '/identity/session', { accountId: account.id });
       const hero = await call<Character>(login.token, '/characters', { name });
       await call(login.token, '/identity/session/character', { characterId: hero.id });
+      const content = await main!.get(ContentService).get(true);
+      await main!.get(MainTransactions).run(context => main!.get(CharactersService).update(hero.id, content, value => { value.baseAttributes = { ...value.baseAttributes, strength: 100 }; }, context));
       actors.push({ account, hero, token: login.token });
     }
     const [a, b] = actors;
@@ -108,6 +116,23 @@ test('main server admits world commands against current parties and canonical re
       assert.equal((await state(b)).xp, 1); assert.deepEqual((await state(a)).cargo, []);
     });
 
+    await t.test('collection credits the canonical inventory immediately and retries after a lost import reply never mint twice', async () => {
+      const before = await state(b), material = before.cargo[0]; assert.ok(material);
+      const count = async () => (await inventory(b)).items.filter(item => item.itemId === material.itemId).reduce((sum, item) => sum + item.quantity, 0);
+      const baseline = await count(), request = { operationId: randomUUID(), expectedRevision: before.revision, action: { type: 'collect' } };
+      const cargo = main!.get(WorldCargoService), accept = cargo.accept.bind(cargo); let lost = false;
+      cargo.accept = async offer => { if (lost) throw new Error('import reply unavailable'); const result = await accept(offer); lost = true; throw new Error('lost import acknowledgement'); };
+      await call(b.token, `${path}/actions`, request, 503);
+      assert.equal(await count(), baseline + material.quantity);
+      cargo.accept = accept;
+      const collected = await call<WorldCommandResult>(b.token, `${path}/actions`, request);
+      assert.equal(collected.inventoryDelivery?.status, 'imported');
+      assert.deepEqual((await state(b)).cargo, []);
+      assert.equal((await state(b)).status, 'active');
+      assert.deepEqual(await call(b.token, `${path}/actions`, request), collected);
+      assert.equal(await count(), baseline + material.quantity);
+    });
+
     await t.test('lost world reply keeps a durable reservation across main-server restart and recovers without extra mining', async () => {
       const remote = main!.get(WorldRemote), deliver = remote.deliver.bind(remote);
       const mining = await makeMine(b, bShovel); let lost = false;
@@ -142,13 +167,68 @@ test('main server admits world commands against current parties and canonical re
     });
 
     // Put a known resource beside the party through the world owner's test fixture, never via the main server's SQL.
-    const resource = async (blockId: string) => world!.get(WorldTransactions).run(async context => {
+    const resource = async (blockId: string | null) => world!.get(WorldTransactions).run(async context => {
       const repository = world!.get(WorldRepository), record = (await repository.load(worldId, context))!;
-      const position = { ...record.state.location!.position!, x: record.state.location!.position!.x + 1 };
+      const position = { ...worldVoxel(record.state.location!.position!), x: Math.floor(record.state.location!.position!.x) + 2 };
       const region = record.state.regions.find(entry => entry.cellId === record.state.location!.cellId)!;
       writeWorldBlock(region, position, blockId); region.revision++;
       const revision = record.state.revision++; await repository.save(record.state, revision, context); return position;
     });
+    await t.test('tree HP survives replay and a wrong canonical pickaxe cannot damage it', async () => {
+      const content = await main!.get(ContentService).get(true), characters = main!.get(CharactersService);
+      const strength = (value: number) => main!.get(MainTransactions).run(context => characters.update(a.hero.id, content, hero => { hero.baseAttributes = { ...hero.baseAttributes, strength: value }; }, context));
+      await strength(25);
+      try {
+        const position = await resource('oak-trunk'), before = await state(a), pick = await grant(a, 'mining-pick');
+        const request = { operationId: randomUUID(), expectedRevision: before.revision, action: { type: 'harvest', position, toolInstanceId: axes[0] } };
+        const first = await call<WorldCommandResult>(a.token, `${path}/actions`, request);
+        assert.equal(first.outcome.hit?.hp, 75); assert.deepEqual(first.outcome.loot, []); assert.equal(first.outcome.xpGained, 0);
+        assert.deepEqual(await call(a.token, `${path}/actions`, request), first);
+        const damaged = await state(a); assert.equal(damaged.xp, before.xp);
+        await call(a.token, `${path}/actions`, { ...request, operationId: randomUUID(), expectedRevision: damaged.revision, action: { ...request.action, toolInstanceId: pick } }, 400);
+        assert.deepEqual(await state(a), damaged);
+        for (let hit = 2; hit <= 4; hit++) {
+          const result = await call<WorldCommandResult>(a.token, `${path}/actions`, { ...request, operationId: randomUUID(), expectedRevision: (await state(a)).revision });
+          assert.equal(result.outcome.hit?.hp, 100 - hit * 25);
+          assert.equal(result.outcome.xpGained, hit === 4 ? 1 : 0);
+        }
+      } finally { await strength(100); }
+    });
+
+    await t.test('building reserves canonical stacks across lost replies, consumes once, and releases failed placements', async () => {
+      const position = await resource(null), service = main!.get(InventoryService);
+      const received = await service.receive(b.hero.id, 'flint', 8, randomUUID());
+      for (let i = 0; i < 3; i++) await service.execute({ type: 'split', instanceId: received.itemIds[0], quantity: 2 }, randomUUID());
+      await service.receive(b.hero.id, 'tree-resin', 2, randomUUID());
+      const count = async (id: string) => (await inventory(b)).items.filter(item => item.itemId === id).reduce((sum, item) => sum + item.quantity, 0);
+      const beforeFlint = await count('flint'), beforeResin = await count('tree-resin');
+      const request = { operationId: randomUUID(), expectedRevision: (await state(b)).revision, action: { type: 'build', position, recipeId: 'stone-masonry' } };
+      await call(b.token, `${path}/actions`, { ...request, build: { materials: [] } }, 400);
+      const remote = main!.get(WorldRemote), deliver = remote.deliver.bind(remote); let lost = false;
+      remote.deliver = async envelope => {
+        if (lost) throw new Error('simulated construction offline');
+        const result = await deliver(envelope);
+        if (envelope.payload.kind === 'action' && envelope.payload.request.command.operationId === request.operationId) { lost = true; throw new Error('simulated lost building reply'); }
+        return result;
+      };
+      await call(b.token, `${path}/actions`, request, 503);
+      assert.equal(await count('flint'), beforeFlint); assert.equal(await count('tree-resin'), beforeResin);
+      const held = await main!.get(Database).sql.selectFrom('inventory_world_reservations').selectAll().where('owner_id', '=', b.hero.id).execute();
+      assert.equal(held.length, 3);
+      await call(b.token, `/item-instances/${held[0].instance_id}`, { operationId: randomUUID(), quantity: 1 }, 409, 'DELETE');
+      remote.deliver = deliver;
+      const result = await call<WorldCommandResult>(b.token, `${path}/actions`, request);
+      assert.equal(result.outcome.type, 'build');
+      assert.equal(await count('flint'), beforeFlint - 4); assert.equal(await count('tree-resin'), beforeResin - 1);
+      assert.deepEqual(await call(b.token, `${path}/actions`, request), result);
+      assert.equal(await count('flint'), beforeFlint - 4);
+      assert.equal((await state(b)).region!.blocks.find(block => JSON.stringify(block.position) === JSON.stringify(position))?.blockId, 'masonry');
+      const blocked = { ...request, operationId: randomUUID(), expectedRevision: (await state(b)).revision };
+      await call(b.token, `${path}/actions`, blocked, 400);
+      assert.equal(await count('flint'), beforeFlint - 4); assert.equal(await count('tree-resin'), beforeResin - 1);
+      assert.equal((await main!.get(Database).sql.selectFrom('inventory_world_reservations').selectAll().execute()).length, 0);
+    });
+
     await t.test('two canonical axes work by class; leadership changes preserve the altered world', async () => {
       for (const [index, blockId] of ['oak-trunk', 'pine-trunk'].entries()) {
         const position = await resource(blockId), before = await state(a);

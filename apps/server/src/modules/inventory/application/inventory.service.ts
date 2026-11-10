@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { canonicalJson, receiveInventoryItems, resolveWorldTool } from '@game/core';
+import { canonicalJson, receiveInventoryItems, resolveWorldTool, worldBuildingRecipes, validateWorldBuildPermit, type WorldBuildPermit } from '@game/core';
 import { Content, InventoryCommand, InventoryState, ItemInstance, ItemStack, applyInventoryCommand, availableItemActions, backpackStacks, equipmentBonuses, equipmentAttributeSources, equipmentRequirementBlockers, projectCharacterAttributes, isBattleConsumable } from '@game/core';
 import { z } from 'zod';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
@@ -223,10 +223,47 @@ export class InventoryService {
     });
   }
 
+  async reserveWorldBuilding(ownerId: string, recipeId: string, worldId: string, content: Content, context: TransactionContext): Promise<WorldBuildPermit> {
+    const recipe = worldBuildingRecipes.find(entry => entry.id === recipeId);
+    if (!recipe) throw new BadRequestException('Неизвестная постройка');
+    const state = await this.state(ownerId, content, context), primary = state.inventories.find(bag => bag.primary);
+    const reserved = await this.reservations.forOwner(ownerId, context);
+    const materials: WorldBuildPermit['materials'] = [];
+    for (const cost of recipe.ingredients) {
+      let remaining = cost.quantity;
+      for (const item of state.items.filter(item => item.inventoryId === primary?.id && !item.equippedSlot && item.itemId === cost.itemId && !reserved.some(row => row.instanceId === item.id)).sort((a, b) => a.id.localeCompare(b.id))) {
+        const quantity = Math.min(remaining, item.quantity);
+        if (quantity) materials.push({ instanceId: item.id, itemId: item.itemId, quantity, reservationId: randomUUID() });
+        remaining -= quantity; if (!remaining) break;
+      }
+      if (remaining) throw new BadRequestException('Недостаточно свободных материалов в основном рюкзаке');
+    }
+    for (const row of materials) if (!await this.reservations.reserve({ instanceId: row.instanceId, ownerId, worldId, operationId: row.reservationId }, context)) throw new ConflictException('Материалы уже используются командой мира');
+    return { ownerCharacterId: ownerId, recipeId, materials };
+  }
+  /** Runs with the journal completion transaction. A lost response keeps every stack reserved. */
+  async finishWorldBuilding(permit: WorldBuildPermit, success: boolean, content: Content, context: TransactionContext) {
+    validateWorldBuildPermit(permit, permit.recipeId, permit.ownerCharacterId);
+    const state = await this.state(permit.ownerCharacterId, content, context);
+    const reserved = await this.reservations.forOwner(state.ownerId, context);
+    for (const row of permit.materials) {
+      if (!reserved.some(entry => entry.instanceId === row.instanceId && entry.operationId === row.reservationId)) throw new ConflictException('Резерв строительства не найден');
+      if (success) {
+        const item = state.items.find(item => item.id === row.instanceId && item.itemId === row.itemId);
+        if (!item || item.quantity < row.quantity) throw new ConflictException('Материалы строительства изменились');
+        item.quantity -= row.quantity;
+      }
+      await this.reservations.release(row.reservationId, state.ownerId, context);
+    }
+    if (success) { state.items = state.items.filter(item => item.quantity > 0); await this.commit([state], content, context); }
+  }
+
   async reserveWorldTool(ownerId: string, instanceId: string, operationId: string, worldId: string, content: Content, context: TransactionContext) {
     const state = await this.state(ownerId, content, context);
     let tool: ReturnType<typeof resolveWorldTool>;
-    try { tool = resolveWorldTool(state, instanceId, content.items); }
+    const character = await this.characters.get(ownerId, content, context, true);
+    const power = Math.min(1000000, Math.max(1, Math.floor(character.attributes?.effective.strength ?? character.baseAttributes?.strength ?? 10)));
+    try { tool = resolveWorldTool(state, instanceId, content.items, power, Date.now()); }
     catch (error) { throw new BadRequestException((error as Error).message); }
     if (!await this.reservations.reserve({ instanceId, ownerId, operationId, worldId }, context)) throw new ConflictException('Инструмент уже используется командой мира');
     return tool;

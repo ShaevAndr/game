@@ -3,7 +3,7 @@ import type { WorldCatalog, WorldSettings } from './types';
 /** Small initial settings; dimensions belong to the world, never to the battle grid. */
 export const defaultWorldSettings: WorldSettings = {
   mapWidth: 5, mapDepth: 5, regionSize: { x: 16, y: 16, z: 16 }, chunkSize: { x: 8, y: 8, z: 8 },
-  blockSizeMeters: 1, minGroundHeight: 3, maxGroundHeight: 5, treeChanceBps: 800, cargoCapacity: 24,
+  blockSizeMeters: .5, minGroundHeight: 3, maxGroundHeight: 5, treeChanceBps: 800, cargoCapacity: 24,
 };
 export const initialWorldCatalog: WorldCatalog = {
   toolClasses: [
@@ -12,6 +12,14 @@ export const initialWorldCatalog: WorldCatalog = {
   ],
   foundationBlockId: 'bedrock',
   blocks: [
+    { id: 'masonry', name: 'Каменная кладка', color: '#9a9993', harvest: {
+      resourceId: 'world-masonry', resourceType: 'mineral', level: 1, allowedToolClassIds: ['pickaxe'],
+      drops: [{ itemId: 'flint', quantity: 2, chanceBps: 10000 }],
+    } },
+    { id: 'planks', name: 'Деревянный блок', color: '#bc945e', harvest: {
+      resourceId: 'world-planks', resourceType: 'tree', level: 1, allowedToolClassIds: ['axe'],
+      drops: [{ itemId: 'oak-wood', quantity: 4, chanceBps: 10000 }],
+    } },
     { id: 'bedrock', name: 'Неразрушимое основание', color: '#30343b' },
     { id: 'soil', name: 'Грунт', color: '#79533a', harvest: {
       resourceId: 'forest-soil', resourceType: 'mineral', level: 1, allowedToolClassIds: ['pickaxe', 'shovel'],

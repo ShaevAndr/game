@@ -1,3 +1,7 @@
+import { worldVoxel } from '@game/core';
+import { ContentService } from '../src/modules/content/application/content.service';
+import { UnitOfWork as MainTransactions } from '../src/shared/application/unit-of-work';
+import { CharactersService } from '../src/modules/characters/application/characters.service';
 import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -59,7 +63,7 @@ test('sealed world cargo reaches canonical inventory once through durable Rabbit
     await call(token, `${path}/actions`, { operationId: randomUUID(), expectedRevision: 0, action: { type: 'enter' } });
     const position = await world!.get(WorldTransactions).run(async context => {
       const repository = world!.get(WorldRepository), record = (await repository.load(worldId, context))!;
-      const position = { ...record.state.location!.position!, y: record.state.location!.position!.y - 1 };
+      const position = { ...worldVoxel(record.state.location!.position!), y: Math.floor(record.state.location!.position!.y) - 1 };
       const region = record.state.regions.find(entry => entry.cellId === record.state.location!.cellId)!;
       writeWorldBlock(region, position, 'soil'); region.revision++;
       const revision = record.state.revision++; await repository.save(record.state, revision, context); return position;
@@ -83,6 +87,8 @@ test('sealed world cargo reaches canonical inventory once through durable Rabbit
       const account = await call<Account>('', '/accounts', { name: `${name} ${suffix.slice(0, 8)}` });
       const login = await call<AccountLogin>('', '/identity/session', { accountId: account.id });
       const character = await call<Character>(login.token, '/characters', { name });
+      const content = await main!.get(ContentService).get(true);
+      await main!.get(MainTransactions).run(context => main!.get(CharactersService).update(character.id, content, value => { value.baseAttributes = { ...value.baseAttributes, strength: 100 }; }, context));
       await call(login.token, '/identity/session/character', { characterId: character.id }); actors.push({ token: login.token, character });
     }
     token = actors[0].token; hero = actors[0].character; otherToken = actors[1].token; otherHero = actors[1].character;

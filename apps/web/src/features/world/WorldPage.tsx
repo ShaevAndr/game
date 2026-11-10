@@ -3,7 +3,7 @@ import { useWorld } from './model/useWorld';
 import { WorldScreen } from './components/WorldScreen';
 import './world.css';
 interface Props {
-  playerId: string; characterId: string; party: Party | null; partyReady: boolean; partyBusy: boolean; content: Content | null;
+  playerId: string; characterId: string; party: Party | null; partyReady: boolean; partyBusy: boolean; inventoryOpen: boolean; content: Content | null;
   onChanged: () => Promise<void>; onInventory: () => void; onCrafting: () => void; onGathering: () => void;
 }
 export function WorldPage(props: Props) {

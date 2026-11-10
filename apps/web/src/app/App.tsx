@@ -1,3 +1,4 @@
+import { Modal } from '../shared/ui/Modal';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { AccountSession, Content } from '@game/core';
 import { useNavigation } from './useNavigation';
@@ -53,6 +54,7 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
   const navigation = useNavigation();
   const { roomId, screen } = navigation;
   const { characters, characterId, character, updateCharacter, refreshCharacters } = useCharacters(session.characterId!);
+  const [worldInventoryOpen, setWorldInventoryOpen] = useState(false);
   const [content, setContent] = useState<Content | null>(null);
   const [error, setError] = useState('');
   const { rooms, refreshRooms } = useRooms(screen === 'arena' && !roomId, setError);
@@ -80,7 +82,8 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
   const openGathering = () => { setError(''); navigation.openGathering(); };
   const openWorld = () => { setError(''); navigation.openWorld(); };
   const openCrafting = () => { setError(''); navigation.openCrafting(); };
-  const openInventory = () => { setError(''); navigation.openInventory(); };
+  const openInventory = () => { setError(''); if (screen === 'world') setWorldInventoryOpen(true); else navigation.openInventory(); };
+  useEffect(() => { if (screen !== 'world') setWorldInventoryOpen(false); }, [screen]);
   const openEquipment = () => { setError(''); navigation.openEquipment(); };
   const workshop = ['inventory', 'equipment', 'crafting', 'gathering', 'world'].includes(screen);
   const heading = screen === 'world' ? 'Оставь свой след.' : screen === 'gathering' ? 'Отправляйся за находками.' : screen === 'equipment' ? 'Подготовь героя к бою.' : screen === 'inventory' ? 'Всё для следующего боя.' : screen === 'crafting' ? 'Кузница героя.' : screen === 'skills' ? 'Выбери свой путь.' : battle ? battle.name : roomId ? 'Загрузка боя…' : 'Каждый ход имеет значение.';
@@ -107,7 +110,7 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
         </aside>
         {screen === 'inventory' ? <InventoryPage key={characterId} ownerId={characterId} characters={characters} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters}/>
           : screen === 'equipment' ? <EquipmentPage key={characterId} ownerId={characterId} character={character} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters} onInventory={openInventory}/>
-          : screen === 'world' ? <Suspense fallback={<section className="panel" role="status">Загрузка мира…</section>}><WorldPage key={characterId} playerId={session.account.id} characterId={characterId} party={party.state?.party ?? null} partyReady={!!party.state} partyBusy={party.busy || party.pending} content={content} onChanged={refreshCharacters} onInventory={openInventory} onCrafting={openCrafting} onGathering={openGathering}/></Suspense>
+          : screen === 'world' ? <Suspense fallback={<section className="panel" role="status">Загрузка мира…</section>}><WorldPage key={characterId} playerId={session.account.id} characterId={characterId} party={party.state?.party ?? null} partyReady={!!party.state} partyBusy={party.busy || party.pending} inventoryOpen={worldInventoryOpen} content={content} onChanged={refreshCharacters} onInventory={openInventory} onCrafting={openCrafting} onGathering={openGathering}/></Suspense>
           : screen === 'gathering' ? <GatheringPage key={characterId} ownerId={characterId} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters} onCrafting={openCrafting} onInventory={openInventory}/>
           : screen === 'crafting' ? <CraftingPage key={characterId} ownerId={characterId} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters}/>
           : screen === 'skills' ? <SkillTree character={character} content={content} busy={busy}
@@ -123,6 +126,7 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
             onRefresh={() => void perform(refreshRooms)}
             onCreate={input => void perform(async () => { const room = await arenaApi.create({ ...input, characterId }); openRoom(room.id); })}/>}
       </div>
+      {worldInventoryOpen && screen === 'world' && <Modal title="Инвентарь" wide onClose={() => setWorldInventoryOpen(false)}>{error && <p className="error" role="alert">{error}</p>}<InventoryPage key={characterId} ownerId={characterId} characters={characters} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters}/></Modal>}
       <footer><span>СТИХИИ / ТАКТИЧЕСКАЯ АРЕНА</span><span>Состояние боя рассчитывает сервер</span></footer>
     </main>
   </div>;

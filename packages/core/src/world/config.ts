@@ -33,7 +33,7 @@ export const worldCatalogSchema = z.object({
   toolClasses: z.array(z.object({ id: contentId, name: z.string().min(1).max(80) }).strict()).min(1).max(64),
   foundationBlockId: contentId,
   blocks: z.array(z.object({
-    id: contentId, name: z.string().min(1).max(80), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), harvest: harvestSchema.optional(),
+    id: contentId, name: z.string().min(1).max(80), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), maxHp: positive.max(1000000).optional(), harvest: harvestSchema.optional(),
   }).strict()).min(1).max(256),
   biomes: z.array(z.object({
     id: contentId, name: z.string().min(1).max(80), weight: positive.max(10000),
@@ -43,12 +43,15 @@ export const worldCatalogSchema = z.object({
   }).strict()).min(1).max(64),
 }).strict();
 
+export const worldInputFrameSchema = z.object({ sequence: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), x: z.number().finite().min(-1).max(1), z: z.number().finite().min(-1).max(1), jump: z.boolean() }).strict();
 export const worldActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('travel'), cellId: z.string().regex(/^\d{1,2}:\d{1,2}$/) }).strict(),
   z.object({ type: z.literal('enter') }).strict(),
   z.object({ type: z.literal('leave') }).strict(),
-  z.object({ type: z.literal('move'), position: voxelPositionSchema }).strict(),
+  z.object({ type: z.literal('move'), frames: z.array(worldInputFrameSchema).min(1).max(4) }).strict(),
   z.object({ type: z.literal('harvest'), position: voxelPositionSchema, toolInstanceId: z.string().uuid() }).strict(),
+  z.object({ type: z.literal('build'), position: voxelPositionSchema, recipeId: contentId }).strict(),
+  z.object({ type: z.literal('collect') }).strict(),
   z.object({ type: z.literal('close') }).strict(),
 ]);
 export type WorldAction = z.infer<typeof worldActionSchema>;

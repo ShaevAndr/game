@@ -67,12 +67,13 @@ export class WorldService {
       if (replay) return replay;
       if (record.state.revision !== request.command.expectedRevision) throw new ConflictException('Состояние мира изменилось; перечитайте снимок');
       let transition: ReturnType<typeof applyWorldCommand>;
-      try { transition = applyWorldCommand(record.state, request.command, actor, request.tool); }
+      try { transition = applyWorldCommand(record.state, request.command, actor, request.tool, undefined, request.build, request.movement); }
       catch (error) { throw new BadRequestException((error as Error).message); }
       if (!await this.repository.save(transition.state, record.state.revision, context)) throw new ConflictException('Состояние мира изменилось');
       await this.repository.seal(transition.outcome.manifests, context);
       const result: WorldCommandResult = { worldId, operationId: request.command.operationId, revision: transition.state.revision,
-        outcome: { type: transition.outcome.type, success: transition.outcome.success, loot: transition.outcome.loot,
+        ...(request.command.action.type === 'move' && transition.state.location?.position && transition.state.location.motion ? { motion: { position: { ...transition.state.location.position }, velocity: { ...transition.state.location.motion.velocity }, grounded: transition.state.location.motion.grounded, sequence: transition.state.location.motion.sequence } } : {}),
+        outcome: { type: transition.outcome.type, success: transition.outcome.success, ...(transition.outcome.hit ? { hit: transition.outcome.hit } : {}), loot: transition.outcome.loot,
           xpGained: transition.outcome.xpGained, manifestIds: transition.outcome.manifests.filter(manifest => manifest.characterId === actor.characterId).map(manifest => manifest.id) } };
       await this.repository.finish(worldId, actor.playerId, hash, result, transition.outcome.rolls, context);
       return result;
