@@ -182,14 +182,14 @@ test('PostgreSQL world service: process restart, concurrent commands, atomic rol
     });
 
     await t.test('fractional movement and airborne velocity survive restart and receipt replay', async () => {
-      const before = await state(), start = before.location!.position!, sequence = before.location!.motion!.sequence;
+      const before = await state(), startingPosition = before.location!.position!, sequence = before.location!.motion!.sequence;
       let clock = Date.now();
       const command = { ...makeCommand(before.revision, { type: 'move', frames: [
         { sequence: sequence + 1, x: .6, z: .8, jump: true }, { sequence: sequence + 2, x: .6, z: .8, jump: false },
       ] }), movement: { usedAt: clock } };
       const result = await act(command), airborne = await state();
-      assert.ok(airborne.location!.position!.x > start.x && airborne.location!.position!.z > start.z);
-      assert.ok(airborne.location!.position!.y > start.y); assert.equal(result.motion!.grounded, false);
+      assert.ok(airborne.location!.position!.x > startingPosition.x && airborne.location!.position!.z > startingPosition.z);
+      assert.ok(airborne.location!.position!.y > startingPosition.y); assert.equal(result.motion!.grounded, false);
       assert.deepEqual(result.motion!.position, airborne.location!.position);
       assert.equal('simulatedAt' in airborne.location!.motion!, false);
       await stop(child); child = await start(restricted.toString());

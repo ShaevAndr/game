@@ -36,7 +36,7 @@ function buff(): Skill {
 function ready(battle: Battle, skill: Skill) {
   battle.activeId = 'hero'; battle.phase = 'choose'; battle.usedSkill = false; battle.matchedElements = [skill.element];
   const actor = battle.fighters.find(fighter => fighter.id === 'hero')!;
-  actor.skillEnergy = 30; actor.cooldowns[skill.id] = 0;
+  actor.skillEnergy = 200; actor.cooldowns[skill.id] = 0;
 }
 function cast(battle: Battle, skill: Skill) {
   applyAction(battle, 'hero', { type: 'skill', skillId: skill.id, targetId: 'hero' });
@@ -138,7 +138,7 @@ test('failed effects spend the cast but not other effects; 0 and 100 percent do 
   const skill = buff(); skill.effects![0].activationChanceBps = 0;
   skill.effects!.push({ ...structuredClone(skill.effects![0]), id: 'guaranteed', activationChanceBps: 10000 });
   const battle = fixture(skill); cast(battle, skill);
-  assert.equal(battle.fighters[0].skillEnergy, 30 - skill.cost);
+  assert.equal(battle.fighters[0].skillEnergy, 200 - skill.cost);
   assert.equal(battle.fighters[0].activeEffects!.length, 1);
   assert.ok(battle.fighters[0].cooldowns[skill.id] > 0);
   assert.deepEqual(battle.effectResults!.map(result => result.outcome), ['chance_failed', 'applied']);

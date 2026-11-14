@@ -1,5 +1,5 @@
 import type { Battle, Fighter } from '../types';
-import type { ActiveEffect, ActiveStatEffect, EffectSource, StatModifierEffect, StunEffect } from './types';
+import type { ActiveEffect, ActiveStatEffect, ActiveTimedEffect, EffectSource, StatModifierEffect, StunEffect, TimedEffect } from './types';
 import { calculateAttributes, compatibilityStats, fillBaseAttributes, type StatModifier } from '../attributes';
 import { replaceFighterModifiers } from './stat-modifiers';
 import { addLog } from '../combat/log';
@@ -97,3 +97,29 @@ export function applyStunEffect(battle: Battle, actor: Fighter, target: Fighter,
   addLog(battle, `${actor.name} → ${target.name}: оглушение, пропуск ${effect.durationTurns} ход.`);
 }
 export function isStunned(fighter: Fighter): boolean { return !!fighter.activeEffects?.some(effect => effect.kind === 'stun'); }
+
+/** A refreshed timed effect replaces its snapshot and never adds leftover shield capacity. */
+export function applyTimedEffect(battle: Battle, actor: Fighter, target: Fighter, source: EffectSource, effect: TimedEffect, magnitude: number): void {
+  if (magnitude <= 0) return;
+  initializeEffectFighter(battle, target);
+  const stackKey = effectGroupKey(source, effect), stacking = effect.stacking ?? 'refresh';
+  const existing = (target.activeEffects ?? []).filter(value => value.stackKey === stackKey)
+    .sort((a, b) => a.appliedSequence - b.appliedSequence || a.instanceId.localeCompare(b.instanceId));
+  if (existing.some(value => value.kind !== effect.kind || value.stacking !== stacking || value.kind === 'periodic_damage' && value.damageType !== effect.damageType)) throw new Error('Несовместимые эффекты одной группы');
+  const sequence = (battle.effectSequence ?? 0) + 1;
+  const maxStacks = stacking === 'independent' ? effect.maxStacks ?? 3 : 1;
+  const active: ActiveTimedEffect = { kind: effect.kind, instanceId: `${battle.id}:effect:${sequence}`, definitionId: `${source.id}:${effect.id}`,
+    name: effect.name ?? source.name, sourceFighterId: actor.id, sourceName: actor.name, sourceRank: source.rank,
+    ...(source.kind === 'item' ? { sourceItemId: source.id } : { sourceSkillId: source.id }), sourceLevel: actor.combatLevel ?? 1,
+    targetFighterId: target.id, polarity: effect.kind === 'periodic_damage' ? 'debuff' : 'buff', tags: [...(effect.tags ?? [])], dispellable: effect.dispellable ?? true,
+    remainingTurns: effect.durationTurns, eligibleFromTurn: (target.turnsStarted ?? 0) + 1, appliedSequence: sequence,
+    stackKey, stacking, stacks: 1, maxStacks, magnitude, unit: 'hp',
+    ...(effect.kind === 'shield' ? { remainingShield: magnitude } : {}), ...(effect.damageType ? { damageType: effect.damageType } : {}) };
+  let next = [...(target.activeEffects ?? [])];
+  if (stacking === 'refresh') next = next.filter(value => value.stackKey !== stackKey);
+  else if (existing.length >= maxStacks) next = next.filter(value => value.instanceId !== existing[0].instanceId);
+  next.push(active);
+  if (next.length > 64) throw new Error('Достигнут лимит активных эффектов');
+  target.activeEffects = next; battle.effectSequence = sequence;
+  addLog(battle, `${actor.name} → ${target.name}: «${active.name}», ${magnitude} ${effect.kind === 'shield' ? 'щита' : 'HP за ход'}, ${effect.durationTurns} ход.`);
+}

@@ -57,6 +57,7 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, animatin
         <div><span>{fighter.npc ? '⬡' : '◈'} {fighter.name}</span><small>Команда {fighter.team + 1}{fighter.id === me?.id ? ' · ты' : ''}{fighter.id === targetId ? ' · цель' : ''}</small>{(fighter.guardDefense ?? 0) > 0 && <small className="guard-status">⛨ Защита +{fighter.guardDefense} до своего хода</small>}</div>
         <b>{fighter.hp}<small> / {fighter.stats.maxHp}</small></b><div className="hp-track"><i style={{ width: `${100 * fighter.hp / fighter.stats.maxHp}%` }}/></div>
         {battle.combatVersion === 1 && <SkillEnergy value={skillEnergy(fighter)}/>}
+        {(fighter.activeEffects ?? []).some(effect => effect.kind === 'shield') && <small className="shield-status">◈ Щит: {(fighter.activeEffects ?? []).reduce((sum, effect) => sum + (effect.kind === 'shield' ? effect.remainingShield ?? 0 : 0), 0)} HP</small>}
       </button><button className="ghost inspect-fighter" onClick={() => setInspectedId(fighter.id)}>Посмотреть персонажа</button><ActiveEffects effects={fighter.activeEffects ?? []} fighters={battle.fighters} definitions={battle.content.statDefinitions ?? []}/></div>)}</div>
       {me?.attributes && battle.content.statDefinitions && <details className="battle-character-stats"><summary>Параметры в этом бою</summary><CharacterAttributes attributes={me.attributes} definitions={battle.content.statDefinitions}/></details>}
       {battle.status === 'waiting' && <div className="lobby-actions">

@@ -30,7 +30,7 @@ function fixture(kind: 'duel' | 'bot' = 'duel', battlefield: BattlefieldOptions 
   const winner = hero(winnerId), loser = hero(loserId);
   const battle = newBattle(battleId, 'test', kind, 'on-match', winner, seedContent, battlefield);
   if (kind === 'duel') joinBattle(battle, loser, 1); startBattle(battle, () => 0); battle.fighters[0].stats.attack = 1000;
-  battle.phase = 'choose'; battle.matchedElements = ['physical']; battle.fighters[0].skillEnergy = 3;
+  battle.phase = 'choose'; battle.matchedElements = ['physical']; battle.fighters[0].skillEnergy = 30;
   if (battle.battlefield!.elementTypes.includes('physical') && battle.battlefield!.elementTypes.includes('water')) {
     const { rows, cols } = battle.battlefield!.size;
     battle.board = Array.from({ length: rows }, (_, row) => Array.from({ length: cols }, (_, col) => (row + col) % 2 ? 'water' : 'physical'));
@@ -256,7 +256,7 @@ test('matched combat only rewards the finishing skill and rejects its duplicate 
   assert.ok(finished.boardMoves!.every(report => report.continuation));
   assert.equal(finished.pendingBattlefield, undefined);
   const secondary = moved.pendingBattlefield!.report.generated.count;
-  assert.equal(finished.fighters[0].skillEnergy, Math.min(30, moved.fighters[0].skillEnergy! - 3 + secondary));
+  assert.equal(finished.fighters[0].skillEnergy, Math.min(200, moved.fighters[0].skillEnergy! - 30 + secondary * 10));
   assert.equal(f.state().receipts.length, 1); assert.deepEqual(f.state().outbox[battleId], finished);
 });
 

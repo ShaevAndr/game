@@ -21,7 +21,8 @@ export interface DamageChances { hitChanceBps: number; luckAvoidChanceBps: numbe
 export interface DamageResolution extends DamageChances {
   sourceId: string; targetId: string; element: Element; skillId?: string; effectId?: string;
   outcome: 'hit' | 'miss' | 'luck_avoided' | 'zero'; critical: boolean;
-  raw: number; armorReductionBps: number; amount: number; hpLoss: number;
+  raw: number; armorReductionBps: number; amount: number; absorbed: number; hpLoss: number;
+  periodic?: boolean;
 }
 export function damageChances(battle: Pick<Battle, 'content'>, actor: Fighter, target: Fighter, element: Element, canMiss = element === 'physical'): DamageChances {
   const rules = battle.content.balance.formulas;

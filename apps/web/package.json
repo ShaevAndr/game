@@ -7,8 +7,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "node --require tsx/cjs tests/world.test.cts",
-    "test:browser": "pnpm build && node --require tsx/cjs tests/world.browser.cts"
+    "test": "node --require tsx/cjs --eval \"require('./tests/world.test.cts')\"",
+    "test:browser": "pnpm build && node --require tsx/cjs --eval \"require('./tests/world.browser.cts')\""
   },
   "dependencies": {
     "@babylonjs/core": "6.49.0",

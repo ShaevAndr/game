@@ -10,10 +10,12 @@ for (const definition of combatStatDefinitions) {
     continue;
   }
   if (definition.id === 'maxHp') definition.formula = { constant: 60, perLevel: 6, terms: [{ statId: 'vitality', coefficientBps: 60000 }] };
+  // Linear growth keeps equal-budget HP and attack on the same scale at higher levels.
   if (definition.id === 'physicalPower' || definition.id === 'magicPower') definition.formula = {
-    constant: definition.id === 'physicalPower' ? 4 : 5, perLevel: 1,
-    terms: definition.id === 'physicalPower' ? [{ statId: 'dexterity', coefficientBps: 1000 }] : [], factor: { constantBps: 10000,
-      terms: [{ statId: definition.id === 'physicalPower' ? 'strength' : 'intelligence', coefficientBps: 600 }] },
+    constant: definition.id === 'physicalPower' ? 1 : 2, perLevel: 1,
+    terms: definition.id === 'physicalPower'
+      ? [{ statId: 'strength', coefficientBps: 6000 }, { statId: 'dexterity', coefficientBps: 1000 }]
+      : [{ statId: 'intelligence', coefficientBps: 6000 }],
   };
   if (definition.id === 'criticalBonusBps') definition.formula = { constant: 5000, terms: [] };
   if (definition.id === 'physicalResistance') definition.formula = { terms: [{ statId: 'vitality', coefficientBps: 2000 }, { statId: 'strength', coefficientBps: 1000 }],

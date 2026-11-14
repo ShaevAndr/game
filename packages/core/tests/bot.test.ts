@@ -12,7 +12,7 @@ test('bot mirrors the hero without sharing mutable state or character identity',
   assert.equal(battle.totalWaves, 1); assert.equal(battle.activeId, hero.id);
   assert.equal(bot.npc, true); assert.equal(bot.characterId, undefined); assert.equal(bot.team, 1);
   assert.deepEqual(bot.stats, hero.stats); assert.deepEqual(bot.skillIds, hero.skillIds);
-  bot.stats.attack++; bot.skillIds.push('fireball'); bot.skillEnergy = 10;
+  bot.stats.attack++; bot.skillIds.push('fireball'); bot.skillEnergy = 100;
   assert.equal(hero.stats.attack, 8); assert.equal(hero.skillIds.includes('fireball'), false); assert.equal(hero.skillEnergy, 0);
 });
 test('other players cannot join a solo bot lobby', () => {
@@ -31,9 +31,9 @@ test('bot completes its board and skill phases under the same v1 rules', () => {
 });
 test('an injured bot can heal itself after directly matching the healing type', () => {
   const battle = botBattle(), [hero, bot] = battle.fighters;
-  bot.skillIds.push('phoenix-warmth'); bot.skillEnergy = 10; bot.hp = 30; battle.activeId = bot.id;
+  bot.skillIds.push('phoenix-warmth'); bot.skillEnergy = 100; bot.hp = 30; battle.activeId = bot.id;
   runNpcTurns(battle, fieldWithMatch('fire'));
-  assert.equal(bot.hp, 44); assert.equal(bot.cooldowns['phoenix-warmth'], 2);
+  assert.equal(bot.hp, 42); assert.equal(bot.cooldowns['phoenix-warmth'], 2);
   assert.equal(battle.activeId, hero.id);
 });
 test('bot battle has one winner, no dungeon waves, and never awards the NPC', () => {

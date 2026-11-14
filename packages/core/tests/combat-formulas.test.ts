@@ -35,12 +35,12 @@ test('new profile preserves starting HP/power, grows with level and separates cr
   assert.equal(first.attributes!.effective.accuracy, 120); assert.equal(first.attributes!.effective.evasion, 20);
   hero.level = 10;
   const grown = characterFighter(hero, 0, content);
-  assert.equal(grown.combatLevel, 10); assert.equal(grown.stats.maxHp, 174); assert.equal(grown.stats.attack, 22);
+  assert.equal(grown.combatLevel, 10); assert.equal(grown.stats.maxHp, 174); assert.equal(grown.stats.attack, 17);
   replaceFighterModifiers(grown, [modifier('luck', 90)], content.statDefinitions!);
   assert.equal(grown.attributes!.effective.criticalChanceBps, 5000);
   assert.equal(grown.attributes!.effective.criticalBonusBps, 5000);
   replaceFighterModifiers(grown, [], content.statDefinitions!);
-  assert.equal(grown.stats.maxHp, 174); assert.equal(grown.stats.attack, 22);
+  assert.equal(grown.stats.maxHp, 174); assert.equal(grown.stats.attack, 17);
 });
 
 test('primary defense amplification includes equipment and recalculates without accumulation', () => {
@@ -51,7 +51,7 @@ test('primary defense amplification includes equipment and recalculates without 
   assert.equal(calculateAttributes(stronger).effective.physicalResistance, 128);
   assert.deepEqual(calculateAttributes(input), calculateAttributes(input));
   const cyclic = structuredClone(combatStatDefinitions), power = cyclic.find(stat => stat.id === 'physicalPower')!;
-  if (power.kind === 'derived') power.formula.factor!.terms = [{ statId: 'physicalPower', coefficientBps: 1 }];
+  if (power.kind === 'derived') power.formula.terms = [{ statId: 'physicalPower', coefficientBps: 1 }];
   assert.throws(() => calculateAttributes({ ...input, definitions: cyclic }), /цикл/);
 });
 
@@ -154,7 +154,7 @@ test('simple and composed damage keep the same fraction through critical and arm
 test('direct-match power scales simple previews and precise composed damage before armor', () => {
   const { battle, actor, target } = fixture();
   battle.matchPowerBps = 13000;
-  battle.phase = 'choose'; battle.matchedElements = ['physical']; actor.skillEnergy = 30;
+  battle.phase = 'choose'; battle.matchedElements = ['physical']; actor.skillEnergy = 200;
   actor.attributes!.effective.physicalPower = 9;
   assert.equal(skillChoices(battle, actor)[0].magnitude, 19); // floor(9 × 13/8 × 1.3), no early rounding.
   actor.attributes!.effective.criticalChanceBps = 0;
@@ -171,7 +171,7 @@ test('direct-match power scales simple previews and precise composed damage befo
 
 test('previews are per target, never consume RNG, and a miss still consumes the action and energy', () => {
   const { battle, actor, target } = fixture();
-  battle.phase = 'choose'; battle.matchedElements = ['physical']; actor.skillEnergy = 30;
+  battle.phase = 'choose'; battle.matchedElements = ['physical']; actor.skillEnergy = 200;
   const choices = skillChoices(battle, actor);
   assert.equal(choices[0].damagePreviews![0].hitChanceBps, 9885);
   const skill = { ...battle.content.skills.find(skill => skill.id === 'strike')!, effects: [{ id: 'fire', kind: 'damage' as const,
@@ -180,7 +180,7 @@ test('previews are per target, never consume RNG, and a miss still consumes the 
   assert.equal(battle.attributeRngState, 0);
   battle.attributeRngState = seedFor(9900, 10000);
   applyAction(battle, actor.id, { type: 'skill', skillId: 'strike', targetId: target.id });
-  assert.equal(actor.skillEnergy, 27); assert.equal(battle.activeId, target.id); assert.equal(target.hp, 120);
+  assert.equal(actor.skillEnergy, 170); assert.equal(battle.activeId, target.id); assert.equal(target.hp, 120);
 });
 
 test('saved RNG and snapshots replay identically, while legacy formulas remain unchanged', () => {

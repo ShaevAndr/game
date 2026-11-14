@@ -7,7 +7,7 @@ function hero(): Character { return { id: 'hero', name: 'Hero', level: 1, experi
 test('victory experience carries over, awards points and grows stats at level up', () => {
   const c = hero(); assert.equal(gainExperience(c, 99, config), 0); assert.equal(c.level, 1); assert.equal(c.skillPoints, 2);
   assert.equal(gainExperience(c, 26, config), 1); assert.equal(c.experience, 25); assert.equal(c.level, 2); assert.equal(c.skillPoints, 3);
-  assert.deepEqual(c.stats, { maxHp: 132, attack: 10, defense: 4, maxEnergy: 30 }); assert.equal(experienceToNextLevel(c.level, config), 150);
+  assert.deepEqual(c.stats, { maxHp: 132, attack: 10, defense: 4, maxEnergy: 200 }); assert.equal(experienceToNextLevel(c.level, config), 150);
 });
 test('one reward can advance several levels and preserves excess experience', () => {
   const c = hero(); assert.equal(gainExperience(c, 460, config), 3); assert.equal(c.level, 4); assert.equal(c.experience, 10); assert.equal(c.skillPoints, 5); assert.equal(c.stats.attack, 14);

@@ -39,7 +39,7 @@ export interface Skill { id: string; name: string; description: string; element:
 export interface SkillProgression { maxLevel: number; pointCost: number; powerPerLevel: number }
 export interface Enemy { id: string; name: string; level?: number; stats: Stats; skillIds: string[] }
 export interface Progression { baseExperience: number; experiencePerLevel: number; startingSkillPoints: number; skillPointsPerLevel: number; statGrowth: Stats; victoryExperience: Record<BattleKind, number> }
-export interface CombatRules { version: 1; energyCap: 30; energyPerTile: 1; defensePerTile: number }
+export interface CombatRules { version: 1; energyCap: 200; energyPerTile: 10; defensePerTile: number }
 export interface Balance { formulas?: CombatFormulaRules; combat?: CombatRules; characterStats: Stats; starterItems: ItemStack[]; damagePerTile: number; energyPerTile: number; teamSize: number; dungeonWaves: string[]; progression: Progression; crafting?: { blind: BlindCraftRules }; attributes?: { skillReferencePower: number } }
 export interface Content { modifierRulesVersion?: 1; itemScalingProfiles?: ItemScalingProfile[]; itemRanks?: ItemRank[]; professions?: CraftingProfession[]; rankProfiles?: RankProfile[]; modifierDefinitions?: ModifierDefinition[]; itemGroups?: ItemGroup[]; skills: Skill[]; items: Item[]; enemies: Enemy[]; characterTemplates: CharacterTemplate[]; balance: Balance; recipes?: CraftingRecipe[]; statDefinitions?: StatDefinition[]; effectsVersion?: 1 }
 const statsSchema = z.object({ maxHp: z.number().int().positive().max(100000), attack: z.number().int().nonnegative().max(10000), defense: z.number().int().nonnegative().max(10000), maxEnergy: z.number().int().positive().max(10000) });
@@ -58,7 +58,7 @@ export const contentSchema = z.object({
   items: z.array(itemDefinitionSchema),
   recipes: z.array(craftingRecipeSchema).default([]),
   enemies: z.array(z.object({ level: z.number().int().min(1).max(1000).optional(), id: contentId, name: z.string().min(1).max(80), stats: statsSchema, skillIds: z.array(contentId).min(1) })).min(1),
-  balance: z.object({ formulas: combatFormulaRulesSchema.optional(), characterStats: statsSchema, starterItems: z.array(z.object({ itemId: contentId, quantity: z.number().int().nonnegative().max(1000), effects: z.array(skillEffectSchema).optional() })), damagePerTile: z.number().int().positive().max(100), energyPerTile: z.number().int().positive().max(100), teamSize: z.number().int().min(1).max(10), dungeonWaves: z.array(contentId).min(1).max(100), progression: progressionSchema, crafting: z.object({ blind: blindCraftRulesSchema }).optional(), combat: z.object({ version: z.literal(1), energyCap: z.literal(30), energyPerTile: z.literal(1), defensePerTile: z.number().int().min(1).max(100) }).optional(), attributes: z.object({ skillReferencePower: z.number().int().min(1).max(10000) }).optional() }),
+  balance: z.object({ formulas: combatFormulaRulesSchema.optional(), characterStats: statsSchema, starterItems: z.array(z.object({ itemId: contentId, quantity: z.number().int().nonnegative().max(1000), effects: z.array(skillEffectSchema).optional() })), damagePerTile: z.number().int().positive().max(100), energyPerTile: z.number().int().positive().max(100), teamSize: z.number().int().min(1).max(10), dungeonWaves: z.array(contentId).min(1).max(100), progression: progressionSchema, crafting: z.object({ blind: blindCraftRulesSchema }).optional(), combat: z.object({ version: z.literal(1), energyCap: z.literal(200), energyPerTile: z.literal(10), defensePerTile: z.number().int().min(1).max(100) }).optional(), attributes: z.object({ skillReferencePower: z.number().int().min(1).max(10000) }).optional() }),
 }).superRefine((content, ctx) => {
   const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
   try { validateCraftingProgression(content); } catch (error) { fail((error as Error).message); }
@@ -89,9 +89,9 @@ export const contentSchema = z.object({
   const starters = content.skills.filter(skill => skill.learning.starter);
   if (starters.length !== 1 || starters[0]?.element !== 'physical') fail('Должен быть ровно один стартовый физический навык');
   const modern = content.balance.combat?.version === 1;
-  const basic = starters.find(s => s.cooldown === 0 && s.effect === 'damage' && (modern ? s.cost > 0 && s.cost <= 3 : s.cost === 0));
+  const basic = starters.find(s => s.cooldown === 0 && s.effect === 'damage' && (modern ? s.cost > 0 && s.cost <= 30 : s.cost === 0));
   if (!basic) fail('Нужен доступный стартовый атакующий навык без перезарядки');
-  if (modern && content.skills.some(skill => skill.cost < 1 || skill.cost > 30)) fail('Стоимость навыка должна быть от 1 до 30 энергии');
+  if (modern && content.skills.some(skill => skill.cost < 1 || skill.cost > 200)) fail('Стоимость навыка должна быть от 1 до 200 энергии');
   const groups = new Set(content.itemGroups.map(group => group.id));
   if (groups.size !== content.itemGroups.length) fail('ID групп предметов должны быть уникальными');
   if (new Set(content.items.map(item => item.id)).size !== content.items.length) fail('ID предметов должны быть уникальными');
@@ -136,7 +136,7 @@ export const contentSchema = z.object({
   };
   for (const skill of content.skills) visit(skill.id);
   for (const e of content.enemies) {
-    if (!e.skillIds.some(id => content.skills.some(s => s.id === id && s.cooldown === 0 && s.effect === 'damage' && (modern ? s.cost > 0 && s.cost <= 3 : s.cost === 0)))) fail(`Противнику ${e.id} нужен доступный атакующий навык`);
+    if (!e.skillIds.some(id => content.skills.some(s => s.id === id && s.cooldown === 0 && s.effect === 'damage' && (modern ? s.cost > 0 && s.cost <= 30 : s.cost === 0)))) fail(`Противнику ${e.id} нужен доступный атакующий навык`);
     if (e.skillIds.some(id => !content.skills.some(s => s.id === id))) fail(`Неизвестный навык противника ${e.id}`);
   }
   for (const id of content.balance.dungeonWaves) if (!content.enemies.some(e => e.id === id)) fail(`Неизвестный противник ${id}`);

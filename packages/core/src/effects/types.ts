@@ -26,7 +26,12 @@ export interface DispelEffect extends EffectBase {
 export interface DamageEffect extends EffectBase { kind: 'damage'; magnitude: EffectExpression; damageType: Element; canCrit?: boolean }
 export interface HealEffect extends EffectBase { kind: 'heal'; magnitude: EffectExpression }
 export interface StunEffect extends EffectBase { kind: 'stun'; durationTurns: number; tags?: string[]; dispellable?: boolean }
-export type SkillEffect = StatModifierEffect | DispelEffect | DamageEffect | HealEffect | StunEffect;
+export interface TimedEffect extends EffectBase {
+  kind: 'shield' | 'periodic_damage' | 'periodic_heal'; magnitude: EffectExpression;
+  durationTurns: number; damageType?: Element; tags?: string[]; dispellable?: boolean;
+  stackKey?: string; stacking?: 'refresh' | 'independent'; maxStacks?: number;
+}
+export type SkillEffect = StatModifierEffect | DispelEffect | DamageEffect | HealEffect | StunEffect | TimedEffect;
 export interface EffectSource { kind: 'skill' | 'item'; id: string; name: string; rank: number; element?: Element; effects: SkillEffect[] }
 interface ActiveEffectBase {
   instanceId: string; definitionId: string; name: string; sourceFighterId: string; sourceName?: string;
@@ -41,7 +46,12 @@ export interface ActiveStatEffect extends ActiveEffectBase {
 export interface ActiveStunEffect extends ActiveEffectBase {
   kind: 'stun'; statId?: never; operation?: never; magnitude?: never; unit?: never; priority?: never;
 }
-export type ActiveEffect = ActiveStatEffect | ActiveStunEffect;
+export interface ActiveTimedEffect extends ActiveEffectBase {
+  kind: TimedEffect['kind']; magnitude: number; unit: 'hp'; damageType?: Element;
+  remainingShield?: number; sourceLevel: number;
+  statId?: never; operation?: never; priority?: never;
+}
+export type ActiveEffect = ActiveStatEffect | ActiveStunEffect | ActiveTimedEffect;
 export interface EffectPreview {
   hitChanceBps?: number; luckAvoidChanceBps?: number;
   activationChanceBps?: number;

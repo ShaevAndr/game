@@ -1,6 +1,7 @@
+import { ENERGY_CAP } from './combat/rules';
 import type { Character, Content, Skill, SkillProgression, Stats } from './types';
 
-export const defaultSkillProgression: SkillProgression = { maxLevel: 10, pointCost: 1, powerPerLevel: 2 };
+export const defaultSkillProgression: SkillProgression = { maxLevel: 10, pointCost: 1, powerPerLevel: 1 };
 export function skillProgression(skill: Skill): SkillProgression { return skill.progression ?? defaultSkillProgression; }
 export function skillLevel(character: Pick<Character, 'learnedSkillIds' | 'skillLevels'>, id: string): number {
   return character.learnedSkillIds.includes(id) ? character.skillLevels?.[id] ?? 1 : 0;
@@ -37,7 +38,7 @@ export function grantSkill(character: Character, id: string, content: Content): 
   return true;
 }
 export function effectiveStats(character: Pick<Character, 'stats' | 'equipmentBonuses' | 'attributes'>): Stats {
-  if (character.attributes) return { maxHp: character.attributes.effective.maxHp, attack: character.attributes.effective.physicalPower, defense: character.attributes.effective.physicalResistance, maxEnergy: 30 };
+  if (character.attributes) return { maxHp: character.attributes.effective.maxHp, attack: character.attributes.effective.physicalPower, defense: character.attributes.effective.physicalResistance, maxEnergy: ENERGY_CAP };
   const stats = { ...character.stats };
   for (const key of Object.keys(stats) as (keyof Stats)[]) stats[key] += character.equipmentBonuses?.[key] ?? 0;
   return stats;

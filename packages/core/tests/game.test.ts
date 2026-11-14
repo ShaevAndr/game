@@ -53,5 +53,5 @@ test('catalog rejects negative costs, missing wave enemies and an unaffordable s
   assert.ok(contentSchema.safeParse(seedContent).success);
   const negative = structuredClone(seedContent); negative.skills[0].cost = -1; assert.equal(contentSchema.safeParse(negative).success, false);
   const wave = structuredClone(seedContent); wave.balance.dungeonWaves = ['missing']; assert.equal(contentSchema.safeParse(wave).success, false);
-  const stuck = structuredClone(seedContent); stuck.skills[0].cost = 4; assert.equal(contentSchema.safeParse(stuck).success, false);
+  const stuck = structuredClone(seedContent); stuck.skills[0].cost = 31; assert.equal(contentSchema.safeParse(stuck).success, false);
 });

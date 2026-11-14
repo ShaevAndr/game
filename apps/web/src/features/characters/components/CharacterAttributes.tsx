@@ -16,6 +16,6 @@ export function CharacterAttributes({ attributes, definitions }: Props) {
         if (!values) return null;
         return <tr key={definition.id} className={definition.kind === 'primary' ? 'primary-attribute' : ''}><th scope="row" title={definition.description}>{definition.name}</th><td>{display(values.base, definition)}</td><td>{display(values.equipped - values.base, definition, true)}</td><td>{display(values.effective - values.equipped, definition, true)}</td><td><strong>{display(values.effective, definition)}</strong></td></tr>;
       })}</tbody></table></div>
-    <p className="hint">Защита уменьшает урон соответствующего типа. Лимит общей энергии — 30.</p>
+    <p className="hint">Защита уменьшает урон соответствующего типа. Лимит общей энергии — 200.</p>
   </section>;
 }

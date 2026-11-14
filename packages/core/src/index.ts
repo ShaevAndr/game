@@ -16,6 +16,7 @@ export * from './effects/schema';
 export * from './effects/lifecycle';
 export * from './effects/skill-effects';
 export * from './effects/content';
+export { tickPeriodicEffects } from './effects/periodic';
 export * from './formulas/effect-expression';
 export * from './targeting';
 export * from './battlefield';

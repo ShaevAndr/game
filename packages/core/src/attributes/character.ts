@@ -1,10 +1,11 @@
+import { ENERGY_CAP } from '../combat/rules';
 import type { Character, Content, Stats } from '../types';
 import { calculateAttributes, fillBaseAttributes } from './calculation';
 import { ATTRIBUTE_POINTS_PER_LEVEL, STARTING_ATTRIBUTE_POINTS } from './defaults';
 import { legacyEquipmentAttributes } from './equipment';
 
 export function compatibilityStats(values: Record<string, number>): Stats {
-  return { maxHp: values.maxHp, attack: values.physicalPower, defense: values.physicalResistance, maxEnergy: 30 };
+  return { maxHp: values.maxHp, attack: values.physicalPower, defense: values.physicalResistance, maxEnergy: ENERGY_CAP };
 }
 
 /** Old records are upgraded without losing level, XP, skills, equipment or spent attribute points. */

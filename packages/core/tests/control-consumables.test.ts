@@ -29,12 +29,12 @@ function guaranteed(battle: Battle): Skill {
 }
 function ready(battle: Battle, skill: Skill) {
   battle.phase = 'choose'; battle.matchedElements = [skill.element];
-  battle.fighters.find(fighter => fighter.id === battle.activeId)!.skillEnergy = 30;
+  battle.fighters.find(fighter => fighter.id === battle.activeId)!.skillEnergy = 200;
 }
 
-test('v1 catalog validates control and consumable effects and keeps cheap damage at three energy', () => {
+test('v1 catalog validates control and consumable effects and keeps cheap damage at thirty energy', () => {
   assert.ok(contentSchema.safeParse(catalog()).success);
-  for (const skill of seedContent.skills.filter(skill => skill.effect === 'damage')) assert.ok(skill.cost >= 3);
+  for (const skill of seedContent.skills.filter(skill => skill.effect === 'damage')) assert.ok(skill.cost >= 30);
   const invalid = catalog(); (invalid.skills.find(skill => skill.id === 'frost-lock')!.effects![0] as StunEffect).durationTurns = 0;
   assert.equal(contentSchema.safeParse(invalid).success, false);
   const invalidPotion = catalog(); invalidPotion.items.find(item => item.id === 'potion')!.effects = [{ ...guaranteed(fixture()).effects![0]!, recipient: 'caster' }];
@@ -84,16 +84,16 @@ test('damage, stun chance and duration progress independently; match size never 
   assert.equal(last.find(effect => effect.kind === 'stun')!.activationChanceBps, 5000);
   assert.equal(last.find(effect => effect.kind === 'stun')!.durationTurns, 1);
   const frost = battle.content.skills.find(skill => skill.id === 'frost-lock')!;
-  assert.equal(previewSkillEffects(battle, actor, frost)[0].activationChanceBps, 6500);
+  assert.equal(previewSkillEffects(battle, actor, frost)[0].activationChanceBps, 5000);
   actor.skillLevels![frost.id] = 10;
-  assert.equal(previewSkillEffects(battle, actor, frost)[0].activationChanceBps, 8000);
+  assert.equal(previewSkillEffects(battle, actor, frost)[0].activationChanceBps, 5900);
 });
 
 test('zero-chance stun consumes the skill normally and lets the opponent act', () => {
   const battle = fixture(), skill = guaranteed(battle);
   Object.assign(skill.effects![0], { activationChanceBps: 0, maxChanceBps: 0 }); ready(battle, skill);
   applyAction(battle, 'hero', { type: 'skill', skillId: skill.id, targetId: 'enemy' });
-  assert.equal(battle.activeId, 'enemy'); assert.equal(battle.fighters[0].skillEnergy, 25);
+  assert.equal(battle.activeId, 'enemy'); assert.equal(battle.fighters[0].skillEnergy, 150);
   assert.equal(battle.effectResults![0].outcome, 'chance_failed');
 });
 

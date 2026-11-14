@@ -7,7 +7,11 @@ export function ActiveEffects({ effects, fighters, definitions }: Props) {
   if (!effects.length) return null;
   return <div className="active-effects" aria-label="Действующие эффекты">{effects.map(effect => {
     const stat = definitions.find(definition => definition.id === effect.statId)?.name ?? effect.statId;
-    const description = effect.kind === 'stun' ? 'Пропуск собственного хода' : `${stat}: ${effectValue(effect.operation, effect.magnitude * effect.stacks, effect.unit)}`;
+    const description = effect.kind === 'stun' ? 'Пропуск собственного хода'
+      : effect.kind === 'shield' ? `Щит: осталось ${effect.remainingShield ?? 0} из ${effect.magnitude} HP`
+      : effect.kind === 'periodic_damage' ? `${effect.magnitude} урона до защиты в начале собственного хода`
+      : effect.kind === 'periodic_heal' ? `+${effect.magnitude} HP в начале собственного хода`
+      : `${stat}: ${effectValue(effect.operation!, effect.magnitude * effect.stacks, effect.unit)}`;
     const polarity = effect.polarity === 'buff' ? 'баф' : effect.polarity === 'debuff' ? 'дебаф' : 'эффект';
     return <details className={`active-effect ${effect.polarity}`} key={effect.instanceId}>
       <summary aria-label={`${effect.name}, ${polarity}, осталось ходов: ${effect.remainingTurns}`} title={`${effect.name}: ${description}`}>

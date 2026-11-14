@@ -5,6 +5,7 @@ import { projectCharacterAttributes } from '../attributes/character';
 import { addLog } from './log';
 import { endEffectTurn, initializeEffectFighter, isStunned, removeDeadEffects } from '../effects/lifecycle';
 import { battleBelt } from './belt';
+import { tickPeriodicEffects } from '../effects/periodic';
 export { addLog } from './log';
 export { damage } from './damage';
 
@@ -83,6 +84,8 @@ export function nextTurn(b: Battle) {
       b.activeId = next.id; b.turn++; b.phase = 'before'; b.usedSkill = false; b.pendingMatch = 0;
       for (const id of Object.keys(next.cooldowns)) next.cooldowns[id] = Math.max(0, next.cooldowns[id] - 1);
       addLog(b, `Ход ${b.turn}: ${next.name}`);
+      if (b.effectsVersion === 1) tickPeriodicEffects(b, next);
+      if (next.hp <= 0) { removeDeadEffects(b); break; }
       if (isStunned(next)) { addLog(b, `${next.name} оглушён и пропускает ход`); break; }
       return;
     }

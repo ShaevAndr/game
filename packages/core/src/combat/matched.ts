@@ -175,17 +175,11 @@ export function runMatchedNpcTurns(battle: Battle, fieldEngine: BattlefieldEngin
     }
     if (battle.status !== 'active' || battle.activeId !== actor.id) continue;
     const available = skillChoices(battle, actor).filter(choice => choice.enabled).map(choice => battle.content.skills.find(skill => skill.id === choice.skillId)!);
-    const magnitude = (skill: typeof available[number]) => skill.effects?.length ? previewSkillEffects(battle, actor, skill).filter(effect => effect.kind === 'damage' || effect.kind === 'heal').reduce((sum, effect) => sum + (effect.magnitude ?? 0), 0)
-      : actor.attributes ? skillMagnitude(skill, actor.skillLevels?.[skill.id] ?? 1, actor.attributes.effective, battle.content.balance.attributes?.skillReferencePower, matchPowerBps(battle)) : scaleMatchPower(battle, skillPower(skill, actor.skillLevels?.[skill.id] ?? 1));
-    const byPower = (a: typeof available[number], b: typeof available[number]) => magnitude(b) - magnitude(a);
-    const heal = actor.hp <= actor.stats.maxHp / 2 ? available.filter(skill => skill.effect === 'heal').sort(byPower)[0] : undefined;
-    const utility = battle.effectsVersion === 1 ? available.filter(skill => skill.effects?.length).flatMap(skill => legalSkillTargets(battle, actor, skill).map(receiver => ({ skill, receiver, score: effectSkillUtility(battle, actor, skill, receiver.id) })))
-      .filter(candidate => candidate.score > 0).sort((left, right) => right.score - left.score || left.skill.id.localeCompare(right.skill.id) || left.receiver.id.localeCompare(right.receiver.id))[0] : undefined;
-    const skill = heal ?? utility?.skill ?? available.filter(skill => skill.effect === 'damage').sort(byPower)[0];
-    if (!skill) { applyMatchedAction(battle, actor.id, { type: 'end' }, Math.random, fieldEngine, onAction); onAction?.(battle); continue; }
-    const victim = !heal && utility && utility.skill.id === skill.id ? utility.receiver : battle.effectsVersion === 1
-      ? legalSkillTargets(battle, actor, skill).sort((left, right) => skill.effect === 'heal' ? left.hp / left.stats.maxHp - right.hp / right.stats.maxHp : left.id.localeCompare(right.id))[0]
-      : skill.effect === 'heal' ? actor : battle.fighters.find(fighter => fighter.hp > 0 && fighter.team !== actor.team)!;
+    const best = available.flatMap(skill => legalSkillTargets(battle, actor, skill).map(receiver => ({ skill, receiver,
+      score: effectSkillUtility(battle, actor, skill, receiver.id) / Math.sqrt(Math.max(1, skill.cost / 30)) })))
+      .filter(candidate => candidate.score > 0).sort((a, b) => b.score - a.score || a.skill.id.localeCompare(b.skill.id) || a.receiver.id.localeCompare(b.receiver.id))[0];
+    if (!best) { applyMatchedAction(battle, actor.id, { type: 'end' }, Math.random, fieldEngine, onAction); onAction?.(battle); continue; }
+    const { skill, receiver: victim } = best;
     applyMatchedAction(battle, actor.id, { type: 'skill', skillId: skill.id, targetId: victim.id }, Math.random, fieldEngine, onAction);
     onAction?.(battle);
   }

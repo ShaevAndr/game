@@ -42,7 +42,7 @@ test('the single v1 init creates the complete schema, seeds heroes and preserves
     assert.equal((await database.sql.selectFrom('accounts').selectAll().execute()).length, 2);
     for (const account of demoAccounts) assert.equal(initial.filter(row => row.account_id === account.id).length, 5);
     assert.ok(initial.every(row => row.data.accountId === row.account_id));
-    assert.ok(initial.every(row => row.data.level === 10 && row.data.learnedSkillIds.length >= 6 && row.data.stats.maxEnergy === 30));
+    assert.ok(initial.every(row => row.data.level === 10 && row.data.learnedSkillIds.length >= 6 && row.data.stats.maxEnergy === 200));
     for (const table of ['battles', 'battle_rewards', 'battle_archive_outbox', 'inventory_operations', 'inventory_world_reservations', 'world_journal_worlds', 'world_journal_entries', 'crafting_operations', 'gathering_states', 'gathering_operations', 'parties', 'party_members', 'party_invitations', 'party_operations', 'social_players', 'social_pairs', 'social_operations', 'chat_streams', 'chat_messages', 'chat_deliveries', 'chat_operations'] as const) {
       assert.equal((await database.sql.selectFrom(table).selectAll().execute()).length, 0);
     }

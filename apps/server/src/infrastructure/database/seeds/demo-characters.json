@@ -5,15 +5,15 @@
     "templateId": "pyromancer",
     "level": 10,
     "experience": 0,
-    "skillPoints": 0,
+    "skillPoints": 1,
     "learnedSkillIds": [
       "strike",
       "ember",
       "fireball",
       "inferno",
+      "burning-brand",
+      "purging-flame",
       "phoenix-warmth",
-      "healing-flame",
-      "phoenix-heart",
       "fire-vulnerability",
       "meteor-shower"
     ],
@@ -21,7 +21,7 @@
       "maxHp": 228,
       "attack": 26,
       "defense": 12,
-      "maxEnergy": 30
+      "maxEnergy": 200
     },
     "energy": {
       "fire": 0,
@@ -112,9 +112,9 @@
       "ember": 1,
       "fireball": 1,
       "inferno": 1,
+      "burning-brand": 1,
+      "purging-flame": 1,
       "phoenix-warmth": 1,
-      "healing-flame": 1,
-      "phoenix-heart": 1,
       "fire-vulnerability": 1,
       "meteor-shower": 1
     }
@@ -125,23 +125,22 @@
     "templateId": "phoenix",
     "level": 10,
     "experience": 0,
-    "skillPoints": 0,
+    "skillPoints": 2,
     "learnedSkillIds": [
       "strike",
       "ember",
       "fireball",
-      "inferno",
       "phoenix-warmth",
       "healing-flame",
       "phoenix-heart",
-      "fire-vulnerability",
+      "burning-brand",
       "meteor-shower"
     ],
     "stats": {
       "maxHp": 228,
       "attack": 26,
       "defense": 12,
-      "maxEnergy": 30
+      "maxEnergy": 200
     },
     "energy": {
       "fire": 0,
@@ -231,11 +230,10 @@
       "strike": 1,
       "ember": 1,
       "fireball": 1,
-      "inferno": 1,
       "phoenix-warmth": 1,
       "healing-flame": 1,
       "phoenix-heart": 1,
-      "fire-vulnerability": 1,
+      "burning-brand": 1,
       "meteor-shower": 1
     }
   },
@@ -245,23 +243,22 @@
     "templateId": "tidekeeper",
     "level": 10,
     "experience": 0,
-    "skillPoints": 0,
+    "skillPoints": 2,
     "learnedSkillIds": [
       "strike",
+      "ice-shard",
       "spring",
       "tide",
       "renewal",
-      "ice-shard",
-      "ice-lance",
+      "mending-stream",
       "purify",
-      "frost-lock",
       "healing-rain"
     ],
     "stats": {
       "maxHp": 228,
       "attack": 26,
       "defense": 12,
-      "maxEnergy": 30
+      "maxEnergy": 200
     },
     "energy": {
       "fire": 0,
@@ -349,13 +346,12 @@
     "createdAt": "2026-10-28T00:00:00.000Z",
     "skillLevels": {
       "strike": 1,
+      "ice-shard": 1,
       "spring": 1,
       "tide": 1,
       "renewal": 1,
-      "ice-shard": 1,
-      "ice-lance": 1,
+      "mending-stream": 1,
       "purify": 1,
-      "frost-lock": 1,
       "healing-rain": 1
     }
   },
@@ -365,23 +361,22 @@
     "templateId": "frostmage",
     "level": 10,
     "experience": 0,
-    "skillPoints": 0,
+    "skillPoints": 2,
     "learnedSkillIds": [
       "strike",
-      "spring",
-      "tide",
       "ice-shard",
       "ice-lance",
       "glacier",
+      "spring",
+      "mending-stream",
       "purify",
-      "frost-lock",
-      "healing-rain"
+      "frost-lock"
     ],
     "stats": {
       "maxHp": 228,
       "attack": 26,
       "defense": 12,
-      "maxEnergy": 30
+      "maxEnergy": 200
     },
     "energy": {
       "fire": 0,
@@ -469,14 +464,13 @@
     "createdAt": "2026-10-28T00:00:00.000Z",
     "skillLevels": {
       "strike": 1,
-      "spring": 1,
-      "tide": 1,
       "ice-shard": 1,
       "ice-lance": 1,
       "glacier": 1,
+      "spring": 1,
+      "mending-stream": 1,
       "purify": 1,
-      "frost-lock": 1,
-      "healing-rain": 1
+      "frost-lock": 1
     }
   },
   {
@@ -485,15 +479,14 @@
     "templateId": "geomancer",
     "level": 10,
     "experience": 0,
-    "skillPoints": 0,
+    "skillPoints": 2,
     "learnedSkillIds": [
       "strike",
       "pebble",
       "quake",
       "landslide",
       "lifesap",
-      "grove",
-      "world-tree",
+      "earthen-barrier",
       "stone-skin",
       "earthen-grasp"
     ],
@@ -501,7 +494,7 @@
       "maxHp": 228,
       "attack": 26,
       "defense": 12,
-      "maxEnergy": 30
+      "maxEnergy": 200
     },
     "energy": {
       "fire": 0,
@@ -593,8 +586,7 @@
       "quake": 1,
       "landslide": 1,
       "lifesap": 1,
-      "grove": 1,
-      "world-tree": 1,
+      "earthen-barrier": 1,
       "stone-skin": 1,
       "earthen-grasp": 1
     }
@@ -605,15 +597,14 @@
     "templateId": "druid",
     "level": 10,
     "experience": 0,
-    "skillPoints": 0,
+    "skillPoints": 2,
     "learnedSkillIds": [
       "strike",
       "pebble",
-      "quake",
-      "landslide",
       "lifesap",
       "grove",
       "world-tree",
+      "earthen-barrier",
       "stone-skin",
       "earthen-grasp"
     ],
@@ -621,7 +612,7 @@
       "maxHp": 228,
       "attack": 26,
       "defense": 12,
-      "maxEnergy": 30
+      "maxEnergy": 200
     },
     "energy": {
       "fire": 0,
@@ -710,11 +701,10 @@
     "skillLevels": {
       "strike": 1,
       "pebble": 1,
-      "quake": 1,
-      "landslide": 1,
       "lifesap": 1,
       "grove": 1,
       "world-tree": 1,
+      "earthen-barrier": 1,
       "stone-skin": 1,
       "earthen-grasp": 1
     }
@@ -725,23 +715,23 @@
     "templateId": "stormcaller",
     "level": 10,
     "experience": 0,
-    "skillPoints": 0,
+    "skillPoints": 1,
     "learnedSkillIds": [
       "strike",
       "breeze",
       "gust",
       "tempest",
       "soothing-wind",
-      "cloud-rest",
-      "sky-blessing",
+      "sheltering-wind",
+      "thunderclap",
       "arcane-focus",
-      "thunderclap"
+      "flying-blade"
     ],
     "stats": {
       "maxHp": 228,
       "attack": 26,
       "defense": 12,
-      "maxEnergy": 30
+      "maxEnergy": 200
     },
     "energy": {
       "fire": 0,
@@ -833,10 +823,10 @@
       "gust": 1,
       "tempest": 1,
       "soothing-wind": 1,
-      "cloud-rest": 1,
-      "sky-blessing": 1,
+      "sheltering-wind": 1,
+      "thunderclap": 1,
       "arcane-focus": 1,
-      "thunderclap": 1
+      "flying-blade": 1
     }
   },
   {
@@ -845,23 +835,22 @@
     "templateId": "windkeeper",
     "level": 10,
     "experience": 0,
-    "skillPoints": 0,
+    "skillPoints": 3,
     "learnedSkillIds": [
       "strike",
       "breeze",
-      "gust",
-      "tempest",
       "soothing-wind",
       "cloud-rest",
       "sky-blessing",
+      "sheltering-wind",
       "arcane-focus",
-      "thunderclap"
+      "flying-blade"
     ],
     "stats": {
       "maxHp": 228,
       "attack": 26,
       "defense": 12,
-      "maxEnergy": 30
+      "maxEnergy": 200
     },
     "energy": {
       "fire": 0,
@@ -950,13 +939,12 @@
     "skillLevels": {
       "strike": 1,
       "breeze": 1,
-      "gust": 1,
-      "tempest": 1,
       "soothing-wind": 1,
       "cloud-rest": 1,
       "sky-blessing": 1,
+      "sheltering-wind": 1,
       "arcane-focus": 1,
-      "thunderclap": 1
+      "flying-blade": 1
     }
   },
   {
@@ -965,24 +953,23 @@
     "templateId": "duelist",
     "level": 10,
     "experience": 0,
-    "skillPoints": 0,
+    "skillPoints": 1,
     "learnedSkillIds": [
       "strike",
+      "flying-blade",
+      "lunge",
       "cleave",
       "execution",
-      "lunge",
       "second-wind",
-      "blade-dance",
-      "battle-cry",
-      "weakening",
-      "rending-strike",
-      "concussive-blow"
+      "bleeding-cut",
+      "concussive-blow",
+      "rending-strike"
     ],
     "stats": {
       "maxHp": 228,
       "attack": 26,
       "defense": 12,
-      "maxEnergy": 30
+      "maxEnergy": 200
     },
     "energy": {
       "fire": 0,
@@ -1070,15 +1057,14 @@
     "createdAt": "2026-10-28T00:00:00.000Z",
     "skillLevels": {
       "strike": 1,
+      "flying-blade": 1,
+      "lunge": 1,
       "cleave": 1,
       "execution": 1,
-      "lunge": 1,
       "second-wind": 1,
-      "blade-dance": 1,
-      "battle-cry": 1,
-      "weakening": 1,
-      "rending-strike": 1,
-      "concussive-blow": 1
+      "bleeding-cut": 1,
+      "concussive-blow": 1,
+      "rending-strike": 1
     }
   },
   {
@@ -1087,14 +1073,13 @@
     "templateId": "veteran",
     "level": 10,
     "experience": 0,
-    "skillPoints": 0,
+    "skillPoints": 2,
     "learnedSkillIds": [
       "strike",
-      "cleave",
-      "execution",
+      "flying-blade",
       "lunge",
       "second-wind",
-      "blade-dance",
+      "bleeding-cut",
       "battle-cry",
       "weakening",
       "rending-strike",
@@ -1104,7 +1089,7 @@
       "maxHp": 228,
       "attack": 26,
       "defense": 12,
-      "maxEnergy": 30
+      "maxEnergy": 200
     },
     "energy": {
       "fire": 0,
@@ -1192,11 +1177,10 @@
     "createdAt": "2026-10-28T00:00:00.000Z",
     "skillLevels": {
       "strike": 1,
-      "cleave": 1,
-      "execution": 1,
+      "flying-blade": 1,
       "lunge": 1,
       "second-wind": 1,
-      "blade-dance": 1,
+      "bleeding-cut": 1,
       "battle-cry": 1,
       "weakening": 1,
       "rending-strike": 1,

@@ -21,7 +21,7 @@ function fixture(extra: Skill[] = []) {
 const skill = (id: string) => structuredClone(seedEffectSkills.find(skill => skill.id === id)!);
 function ready(battle: Battle, skillId: string) {
   const actor = battle.fighters.find(fighter => fighter.id === battle.activeId)!;
-  actor.skillEnergy = 30; actor.cooldowns[skillId] = 0; battle.usedSkill = false;
+  actor.skillEnergy = 200; actor.cooldowns[skillId] = 0; battle.usedSkill = false;
   battle.phase = 'choose'; battle.matchedElements = [battle.content.skills.find(skill => skill.id === skillId)!.element];
 }
 function cast(battle: Battle, skillId: string, targetId: string) {
@@ -31,7 +31,7 @@ function pass(battle: Battle) { battle.phase = 'choose'; applyAction(battle, bat
 
 test('seed effect skills form valid content and remain learnable, non-starter skills', () => {
   assert.equal(contentSchema.safeParse(content).success, true);
-  assert.equal(seedEffectSkills.length, 13);
+  assert.equal(seedEffectSkills.length, 20);
   assert.ok(seedEffectSkills.every(skill => !skill.learning.starter && skill.effects?.length && skill.targeting));
 });
 
@@ -42,7 +42,7 @@ test('a self buff applies now, survives the current turn and expires after two s
   assert.equal(fighter.attributes!.effective.strength, 12);
   assert.equal(fighter.activeEffects![0].remainingTurns, 2);
   assert.equal(fighter.activeEffects![0].eligibleFromTurn, 2);
-  assert.equal(fighter.skillEnergy, 27);
+  assert.equal(fighter.skillEnergy, 170);
   assert.equal(first.baseAttributes!.strength, 10);
   pass(battle); // enemy ends; first subsequent own turn starts
   assert.equal(battle.fighters[0].activeEffects![0].remainingTurns, 2);
@@ -217,5 +217,5 @@ test('NPCs use the same buff and turn lifecycle, without refreshing a healthy ef
   ready(battle, 'battle-cry'); runNpcTurns(battle);
   assert.equal(battle.activeId, first.id);
   assert.ok(battle.fighters.some(fighter => fighter.activeEffects?.length));
-  assert.equal(battle.fighters[1].skillEnergy, 27);
+  assert.equal(battle.fighters[1].skillEnergy, 170);
 });

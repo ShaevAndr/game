@@ -23,7 +23,13 @@ export const targetingSchema = z.discriminatedUnion('kind', [
 ]);
 const base = { id, name: z.string().min(1).max(80).optional(), recipient: z.enum(['selected', 'caster']),
   activationChanceBps: z.number().int().min(0).max(10000).optional(), chancePerSkillRankBps: z.number().int().min(0).max(10000).optional(), maxChanceBps: z.number().int().min(0).max(10000).optional() };
+const timed = { ...base, magnitude: effectExpressionSchema, durationTurns: z.number().int().min(1).max(5),
+  tags: z.array(id).max(16).optional(), dispellable: z.boolean().optional(), stackKey: id.optional(),
+  stacking: z.enum(['refresh', 'independent']).optional(), maxStacks: z.number().int().min(1).max(3).optional() };
 export const skillEffectSchema = z.discriminatedUnion('kind', [
+  z.object({ ...timed, kind: z.literal('shield') }).strict(),
+  z.object({ ...timed, kind: z.literal('periodic_damage'), damageType: z.enum(elements) }).strict(),
+  z.object({ ...timed, kind: z.literal('periodic_heal') }).strict(),
   z.object({ ...base, modifierDefinitionId: id.optional(), modifierDefinitionVersion: z.number().int().min(1).optional(), coefficientBps: z.number().int().min(0).max(10_000_000).optional(), coefficientPerSkillRankBps: z.number().int().min(-1_000_000).max(1_000_000).optional(), kind: z.literal('stat_modifier'), polarity: z.enum(['buff', 'debuff', 'neutral']), statId: statIdSchema,
     operation: z.enum(['add_flat', 'add_percent', 'multiply', 'set']), magnitude: effectExpressionSchema,
     durationTurns: z.union([z.number().int().min(1).max(20), effectExpressionSchema]), tags: z.array(id).max(16).optional(), dispellable: z.boolean().optional(),
@@ -55,10 +61,17 @@ export function validateSkillEffects(skills: { id: string; targeting?: SkillTarg
         continue;
       }
       if (effect.kind === 'dispel') continue;
+      if (effect.kind === 'periodic_damage' && (effect.recipient !== 'selected' || !['enemy_single', 'enemies_all'].includes(skill.targeting.kind))) throw new Error('Периодический урон требует цель-противника');
+      if ((effect.kind === 'shield' || effect.kind === 'periodic_heal') && effect.recipient === 'selected' && !['self', 'ally_single', 'allies_all'].includes(skill.targeting.kind)) throw new Error('Щит и регенерация требуют союзную цель');
+      if ((effect.kind === 'shield' || effect.kind === 'periodic_damage' || effect.kind === 'periodic_heal') && effect.stackKey) {
+        const signature = JSON.stringify([effect.kind, effect.damageType, effect.stacking ?? 'refresh', effect.stacking === 'independent' ? effect.maxStacks ?? 3 : 1]);
+        if (groups.has(effect.stackKey) && groups.get(effect.stackKey) !== signature) throw new Error(`Несовместимая группа эффектов ${effect.stackKey}`);
+        groups.set(effect.stackKey, signature);
+      }
       const expressions = [effect.magnitude, ...(effect.kind === 'stat_modifier' && typeof effect.durationTurns !== 'number' ? [effect.durationTurns] : [])];
       for (const expression of expressions) for (const term of expression.terms ?? []) if (!byId.has(term.statId)) throw new Error(`Неизвестная характеристика эффекта ${term.statId}`);
       if (effect.kind !== 'stat_modifier') {
-        if (effect.magnitude.unit !== 'hp' || (!effect.magnitude.terms?.length && !(allowConstantHealing && effect.kind === 'heal' && (effect.magnitude.constant ?? -1) >= 0)) || (effect.magnitude.min ?? -1) < 0) throw new Error(`Урон и лечение ${skill.id} требуют неотрицательной формулы HP от характеристик`);
+        if (effect.magnitude.unit !== 'hp' || (!effect.magnitude.terms?.length && !(allowConstantHealing && effect.kind === 'heal' && (effect.magnitude.constant ?? -1) >= 0)) || (effect.magnitude.min ?? -1) < 0) throw new Error(`Урон, лечение и щиты ${skill.id} требуют неотрицательной формулы HP от характеристик`);
         continue;
       }
       const definition = byId.get(effect.statId);

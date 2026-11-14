@@ -30,7 +30,7 @@ test('skills have ten ranks, spend configured points and scale combat power', ()
   const character = hero(); character.skillPoints = 20;
   const skill = seedContent.skills[0];
   for (let rank = 2; rank <= 10; rank++) { upgradeSkill(character, skill.id, seedContent); assert.equal(skillLevel(character, skill.id), rank); }
-  assert.equal(character.skillPoints, 11); assert.equal(skillPower(skill, 10), skill.power + 18);
+  assert.equal(character.skillPoints, 11); assert.equal(skillPower(skill, 10), skill.power + 9);
   const before = structuredClone(character);
   assert.throws(() => upgradeSkill(character, skill.id, seedContent), /максимальный/);
   assert.deepEqual(character, before);
@@ -57,7 +57,7 @@ test('legacy learned skills become rank one and new battles freeze ranks and equ
   const previousHp = battle.fighters[1].hp;
   match(battle);
   applyAction(battle, 'hero', { type: 'skill', skillId: 'strike', targetId: battle.fighters[1].id });
-  assert.equal(previousHp - battle.fighters[1].hp, seedContent.skills[0].power + 2 + battle.fighters[0].stats.attack - battle.fighters[1].stats.defense);
+  assert.equal(previousHp - battle.fighters[1].hp, seedContent.skills[0].power + 1 + battle.fighters[0].stats.attack - battle.fighters[1].stats.defense);
   assert.equal(effectiveStats(normalized).attack, normalized.stats.attack + 3);
 });
 
