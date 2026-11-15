@@ -1,4 +1,4 @@
-import { Battle, Character, ChatMessage, SocialPair, SocialRelationship, ItemQuality, SkillEffect, CraftingResult, InventoryResult } from '@game/core';
+import { ArenaChallenge, Battle, Character, ChatMessage, SocialPair, SocialRelationship, ItemQuality, SkillEffect, CraftingResult, InventoryResult } from '@game/core';
 import { ColumnType } from 'kysely';
 import type { GatheringReceipt, GatheringState } from '@game/core';
 import type { Party, PartyCommandResult, PartyInvitation } from '@game/core';
@@ -38,6 +38,7 @@ export interface Tables {
   crafting_operations: { id: string; signature: string; result: ColumnType<CraftingResult | null, string | null, string> };
   characters: { id: string; account_id: string; data: ColumnType<Character, string, string> };
   battles: { id: string; data: ColumnType<Battle, string, string>; version: number };
+  arena_challenges: { id: string; battle_id: string; challenger_id: string; recipient_id: string; status: ArenaChallenge['status']; data: ColumnType<ArenaChallenge, string, string> };
   battle_rewards: { battle_id: string; character_id: string; experience: number };
   battle_archive_outbox: {
     id: string;

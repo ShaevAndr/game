@@ -1,0 +1,13 @@
+.arena-room { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #82754d44; }
+.arena-room .room-row { flex: 1; min-width: 0; border-bottom: 0; }
+.arena-room .room-row strong, .arena-offer strong { overflow-wrap: anywhere; }
+.arena-room > button.primary { flex-shrink: 0; margin-right: 12px; }
+.arena-notifications { margin-bottom: 20px; }
+.arena-offer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; }
+.arena-offer small { display: block; margin-top: 4px; color: var(--muted); }
+.arena-offer > div { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .arena-room, .arena-offer { align-items: stretch; flex-direction: column; }
+  .arena-room { padding-bottom: 12px; gap: 0; }
+  .arena-room > button.primary { margin: 0 12px; }
+}

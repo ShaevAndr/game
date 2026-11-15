@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { Battle } from '@game/core';
+import { ArenaChallenge, ArenaState, Battle } from '@game/core';
 import { sql } from 'kysely';
 import { Database } from '../../../infrastructure/database/database.service';
 import { TransactionContext } from '../../../shared/application/unit-of-work';
@@ -10,7 +10,49 @@ export class PostgresBattlesRepository extends BattlesRepository {
   constructor(@Inject(Database) private readonly db: Database) { super(); }
   async list() {
     return (await this.db.sql.selectFrom('battles').select('data')
+      .where(sql<boolean>`data->>'status' = 'waiting'`)
+      .where(sql<boolean>`NOT EXISTS (SELECT 1 FROM battles AS active
+        WHERE active.data->>'status' = 'active' AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements(active.data->'fighters') AS fighter
+          WHERE fighter->>'characterId' = battles.data->'fighters'->0->>'characterId'
+            AND COALESCE((fighter->>'surrendered')::boolean, false) = false))`)
       .orderBy(sql`data->>'createdAt'`, 'desc').limit(100).execute()).map(row => row.data);
+  }
+  // A single short transaction lock orders offer changes and all battle starts across processes.
+  async lockMatchmaking(context: TransactionContext) {
+    await sql`SELECT pg_advisory_xact_lock(71824, 1)`.execute(this.db.session(context));
+  }
+  async arenaState(characterId: string, context: TransactionContext): Promise<ArenaState> {
+    const offers = await this.db.session(context).selectFrom('arena_challenges').select('data')
+      .where('status', '=', 'pending').where(eb => eb.or([
+        eb('challenger_id', '=', characterId), eb('recipient_id', '=', characterId),
+      ])).orderBy('id').execute();
+    const active = await this.db.session(context).selectFrom('battles').select('id')
+      .where(sql<boolean>`data->>'status' = 'active' AND EXISTS (
+        SELECT 1 FROM jsonb_array_elements(data->'fighters') AS fighter
+        WHERE fighter->>'characterId' = ${characterId} AND COALESCE((fighter->>'surrendered')::boolean, false) = false)`)
+      .executeTakeFirst();
+    return { incoming: offers.map(row => row.data).filter(offer => offer.recipientId === characterId),
+      outgoing: offers.map(row => row.data).filter(offer => offer.challengerId === characterId), activeBattleId: active?.id ?? null };
+  }
+  async challenge(id: string, context: TransactionContext) {
+    return (await this.db.session(context).selectFrom('arena_challenges').select('data').where('id', '=', id).executeTakeFirst())?.data;
+  }
+  async pendingChallenge(battleId: string, challengerId: string, context: TransactionContext) {
+    return (await this.db.session(context).selectFrom('arena_challenges').select('data')
+      .where('battle_id', '=', battleId).where('challenger_id', '=', challengerId).where('status', '=', 'pending').executeTakeFirst())?.data;
+  }
+  async saveChallenge(offer: ArenaChallenge, context: TransactionContext) {
+    await this.db.session(context).insertInto('arena_challenges').values({ id: offer.id, battle_id: offer.battleId,
+      challenger_id: offer.challengerId, recipient_id: offer.recipientId, status: offer.status, data: JSON.stringify(offer) })
+      .onConflict(oc => oc.column('id').doUpdateSet({ status: offer.status, data: JSON.stringify(offer) })).execute();
+  }
+  async cancelChallenges(characterIds: string[], context: TransactionContext) {
+    await this.db.session(context).updateTable('arena_challenges')
+      .set({ status: 'cancelled', data: sql`jsonb_set(data, '{status}', '"cancelled"'::jsonb)` })
+      .where('status', '=', 'pending').where(eb => eb.or([
+        eb('challenger_id', 'in', characterIds), eb('recipient_id', 'in', characterIds),
+      ])).execute();
   }
   async find(id: string) {
     return (await this.db.sql.selectFrom('battles').select('data').where('id', '=', id).executeTakeFirst())?.data;

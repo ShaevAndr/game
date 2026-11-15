@@ -1,6 +1,6 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomInt, randomUUID } from 'node:crypto';
-import { Battle, BattleFrame, DEFAULT_TURN_SECONDS, applyAction, battleBelt, characterFighter, commandSchema, createBattleSchema, expireMatchedTurn, joinBattle, joinBattleSchema, newBattle, runNpcTurns, startBattle } from '@game/core';
+import { ArenaChallenge, Battle, BattleFrame, DEFAULT_TURN_SECONDS, applyAction, battleBelt, characterFighter, commandSchema, createBattleSchema, expireMatchedTurn, joinBattle, joinBattleSchema, newBattle, runNpcTurns, startBattle } from '@game/core';
 import { z } from 'zod';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
 import { CharactersService } from '../../characters/application/characters.service';
@@ -50,8 +50,9 @@ export class BattlesService {
     return battle;
   }
 
-  private async mutate(id: string, expected: number | undefined, change: (battle: Battle, context: TransactionContext, checkpoint: (battle: Battle) => void) => void | Promise<void>, guard?: (battle: Battle) => boolean) {
+  private async mutate(id: string, expected: number | undefined, change: (battle: Battle, context: TransactionContext, checkpoint: (battle: Battle) => void) => void | Promise<void>, guard?: (battle: Battle) => boolean, matchmaking = false) {
     const result = await this.transactions.run(async context => {
+      if (matchmaking) await this.repository.lockMatchmaking(context);
       const row = await this.repository.lock(id, context);
       if (!row) throw new NotFoundException('Бой не найден');
       if (expected !== undefined && expected !== row.version) throw new ConflictException('Состояние изменилось. Повторите действие.');
@@ -95,7 +96,10 @@ export class BattlesService {
     const input = joinBattleSchema.parse(body);
     const content = await this.content.get();
     const character = await this.characters.get(input.characterId, content);
-    return this.mutate(id, undefined, state => domainAction(() => joinBattle(state, character, input.team)));
+    return this.mutate(id, undefined, state => {
+      if (state.kind === 'duel') throw new BadRequestException('Отправьте вызов владельцу комнаты');
+      domainAction(() => joinBattle(state, character, input.team));
+    });
   }
 
   start(id: string, body: unknown) {
@@ -103,26 +107,96 @@ export class BattlesService {
     return this.mutate(id, version, async (state, context) => {
       if (!state.fighters.some(fighter => fighter.characterId === characterId)) throw new BadRequestException('Выберите участника боя');
       if (state.status !== 'waiting') throw new BadRequestException('Бой уже начался');
-      state.combatVersion = 1; state.rule = 'on-match'; state.skillChoices = []; state.matchedElements = [];
-      state.content = await this.content.get(true);
-      if (state.content.modifierRulesVersion === 1) state.attributeRngState = randomInt(0, 4294967296);
-      state.effectsVersion = state.content.effectsVersion;
-      if (state.effectsVersion === 1) state.effectSequence = 0;
-      state.totalWaves = state.kind === 'dungeon' ? state.content.balance.dungeonWaves.length : 1;
-      for (const fighter of [...state.fighters].filter(f => !f.npc).sort((a, b) => a.id.localeCompare(b.id))) {
-        const character = await this.characters.get(fighter.id, state.content, context, true);
-        if (await this.repository.hasActiveCharacter(character.id, context)) throw new ConflictException(`${character.name} уже участвует в активном бою`);
-        const items = await this.inventory.state(character.id, state.content, context);
-        const primary = items.inventories.find(inventory => inventory.primary);
-        const current = characterFighter(character, fighter.team, state.content);
-        current.equipment = structuredClone(items.items.filter(item => item.equippedSlot));
-        current.backpack = structuredClone(items.items.filter(item => primary && item.inventoryId === primary.id && !item.equippedSlot));
-        current.inventory = battleBelt(current.backpack.map(item => ({ itemId: item.itemId, quantity: item.quantity, instanceId: item.id, effects: item.effects })), state.content);
-        state.fighters[state.fighters.findIndex(f => f.id === fighter.id)] = current;
-      }
-      state.turnDurationSeconds = DEFAULT_TURN_SECONDS;
-      domainAction(() => startBattle(state, () => this.runtime.random()));
+      if (state.kind === 'duel') throw new BadRequestException('Дуэль начинается после принятия вызова');
+      await this.prepareStart(state, context);
+    }, undefined, true);
+  }
+
+  private async prepareStart(state: Battle, context: TransactionContext) {
+    state.combatVersion = 1; state.rule = 'on-match'; state.skillChoices = []; state.matchedElements = [];
+    state.content = await this.content.get(true);
+    if (state.content.modifierRulesVersion === 1) state.attributeRngState = randomInt(0, 4294967296);
+    state.effectsVersion = state.content.effectsVersion;
+    if (state.effectsVersion === 1) state.effectSequence = 0;
+    state.totalWaves = state.kind === 'dungeon' ? state.content.balance.dungeonWaves.length : 1;
+    for (const fighter of [...state.fighters].filter(f => !f.npc).sort((a, b) => a.id.localeCompare(b.id))) {
+      const character = await this.characters.get(fighter.id, state.content, context, true);
+      if (await this.repository.hasActiveCharacter(character.id, context)) throw new ConflictException(`${character.name} уже участвует в активном бою`);
+      const items = await this.inventory.state(character.id, state.content, context);
+      const primary = items.inventories.find(inventory => inventory.primary);
+      const current = characterFighter(character, fighter.team, state.content);
+      current.equipment = structuredClone(items.items.filter(item => item.equippedSlot));
+      current.backpack = structuredClone(items.items.filter(item => primary && item.inventoryId === primary.id && !item.equippedSlot));
+      current.inventory = battleBelt(current.backpack.map(item => ({ itemId: item.itemId, quantity: item.quantity, instanceId: item.id, effects: item.effects })), state.content);
+      state.fighters[state.fighters.findIndex(f => f.id === fighter.id)] = current;
+    }
+    state.turnDurationSeconds = DEFAULT_TURN_SECONDS;
+    domainAction(() => startBattle(state, () => this.runtime.random()));
+    await this.repository.cancelChallenges(state.fighters.filter(f => !f.npc).map(f => f.id), context);
+  }
+
+  async arenaState(characterId: string) {
+    return this.transactions.run(async context => {
+      await this.repository.lockMatchmaking(context);
+      return this.repository.arenaState(characterId, context);
     });
+  }
+
+  async challenge(id: string, body: unknown) {
+    const { characterId } = z.object({ characterId: z.string().uuid() }).strict().parse(body);
+    return this.transactions.run(async context => {
+      await this.repository.lockMatchmaking(context);
+      const row = await this.repository.lock(id, context);
+      if (!row) throw new NotFoundException('Комната не найдена');
+      const room = row.battle;
+      if (room.kind !== 'duel' || room.status !== 'waiting') throw new ConflictException('Комната недоступна для вызова');
+      const host = room.fighters[0];
+      if (!host?.characterId || host.characterId === characterId) throw new BadRequestException('Нельзя вызвать самого себя');
+      for (const participant of [host.characterId, characterId]) {
+        if (await this.repository.hasActiveCharacter(participant, context)) throw new ConflictException('Участник уже находится в бою');
+      }
+      const existing = await this.repository.pendingChallenge(id, characterId, context);
+      if (existing) return existing;
+      const character = await this.characters.get(characterId, await this.content.get(), context);
+      const offer: ArenaChallenge = { id: randomUUID(), battleId: id, roomName: room.name,
+        challengerId: characterId, challengerName: character.name, recipientId: host.characterId,
+        recipientName: host.name, status: 'pending', createdAt: new Date(this.runtime.now()).toISOString() };
+      await this.repository.saveChallenge(offer, context);
+      return offer;
+    });
+  }
+
+  async acceptChallenge(id: string, challengeId: string, body: unknown) {
+    const { characterId } = z.object({ characterId: z.string().uuid() }).strict().parse(body);
+    return this.mutate(id, undefined, async (state, context) => {
+      const offer = await this.requireChallenge(id, challengeId, context);
+      if (offer.recipientId !== characterId) throw new ForbiddenException('Принять вызов может только владелец комнаты');
+      if (offer.status !== 'pending') throw new ConflictException('Предложение уже сброшено или обработано');
+      if (state.kind !== 'duel' || state.status !== 'waiting' || state.fighters[0]?.characterId !== characterId) {
+        throw new ConflictException('Комната недоступна для вызова');
+      }
+      const challenger = await this.characters.get(offer.challengerId, await this.content.get(), context);
+      domainAction(() => joinBattle(state, challenger, 1));
+      await this.repository.saveChallenge({ ...offer, status: 'accepted' }, context);
+      await this.prepareStart(state, context);
+    }, undefined, true);
+  }
+
+  async dismissChallenge(id: string, challengeId: string, body: unknown) {
+    const { characterId } = z.object({ characterId: z.string().uuid() }).strict().parse(body);
+    return this.transactions.run(async context => {
+      await this.repository.lockMatchmaking(context);
+      const offer = await this.requireChallenge(id, challengeId, context);
+      if (offer.recipientId !== characterId && offer.challengerId !== characterId) throw new ForbiddenException('Это чужой вызов');
+      if (offer.status === 'pending') await this.repository.saveChallenge({ ...offer,
+        status: offer.recipientId === characterId ? 'declined' : 'cancelled' }, context);
+    });
+  }
+
+  private async requireChallenge(id: string, challengeId: string, context: TransactionContext) {
+    const offer = await this.repository.challenge(challengeId, context);
+    if (!offer || offer.battleId !== id) throw new NotFoundException('Вызов не найден');
+    return offer;
   }
 
   command(id: string, body: unknown) {

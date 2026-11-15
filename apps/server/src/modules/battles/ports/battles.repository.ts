@@ -1,7 +1,13 @@
-import { Battle } from '@game/core';
+import { ArenaChallenge, ArenaState, Battle } from '@game/core';
 import { TransactionContext } from '../../../shared/application/unit-of-work';
 
 export abstract class BattlesRepository {
+  abstract lockMatchmaking(context: TransactionContext): Promise<void>;
+  abstract arenaState(characterId: string, context: TransactionContext): Promise<ArenaState>;
+  abstract challenge(id: string, context: TransactionContext): Promise<ArenaChallenge | undefined>;
+  abstract pendingChallenge(battleId: string, challengerId: string, context: TransactionContext): Promise<ArenaChallenge | undefined>;
+  abstract saveChallenge(challenge: ArenaChallenge, context: TransactionContext): Promise<void>;
+  abstract cancelChallenges(characterIds: string[], context: TransactionContext): Promise<void>;
   abstract list(): Promise<Battle[]>;
   abstract find(id: string): Promise<Battle | undefined>;
   abstract hasActiveCharacter(characterId: string, context?: TransactionContext): Promise<boolean>;

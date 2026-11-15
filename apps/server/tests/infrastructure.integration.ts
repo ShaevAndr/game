@@ -15,7 +15,7 @@ import { Pool } from 'pg';
 import { MongoClient } from 'mongodb';
 import Redis from 'ioredis';
 import { io, Socket } from 'socket.io-client';
-import { Account, AccountLogin, Battle, Character, Content, InventoryView, InventoryResult, findBattlefieldMove, findBattlefieldMatches, gainExperience, combatStatDefinitions, defaultModifierDefinitions, defaultCombatFormulaRules, seedContent, seedEffectSkills, skillChoices } from '@game/core';
+import { Account, AccountLogin, ArenaChallenge, ArenaState, Battle, Character, Content, InventoryView, InventoryResult, findBattlefieldMove, findBattlefieldMatches, gainExperience, combatStatDefinitions, defaultModifierDefinitions, defaultCombatFormulaRules, seedContent, seedEffectSkills, skillChoices } from '@game/core';
 import { InventoryService } from '../src/modules/inventory/application/inventory.service';
 import { InventoryRepository } from '../src/modules/inventory/ports/inventory.repository';
 import { AppModule } from '../src/app.module';
@@ -119,6 +119,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     await verifyDexterityWeapon(request, app);
     await verifyRankedCrafting(request, app);
     const gatheringCheckpoint = await verifyGathering(app, origin, authToken, request);
+    await verifyArena(request, app);
     await verifyBattleEffects(request, app);
     await verifyTimedBattleEffects(request, app);
     await verifyModifierModel(request, app);
@@ -604,8 +605,8 @@ async function verifyBattleEffects(request: TestRequest, app: INestApplication) 
   await request(`/characters/${second.id}/skills`, { skillId: 'strike' });
   await request(`/characters/${second.id}/skills`, { skillId: 'weakening' });
   const created = await request<Battle>('/battles', { name: 'Проверка бафов', characterId: first.id, kind: 'duel' });
-  const joined = await request<Battle>(`/battles/${created.id}/join`, { characterId: second.id, team: 1 });
-  let battle = await request<Battle>(`/battles/${created.id}/start`, { characterId: first.id, version: joined.version });
+  const offered = await request<ArenaChallenge>(`/battles/${created.id}/challenges`, { characterId: second.id });
+  let battle = await request<Battle>(`/battles/${created.id}/challenges/${offered.id}/accept`, { characterId: first.id });
   assert.equal(battle.effectsVersion, 1);
   const read = () => request<Battle>(`/battles/${battle.id}`);
   const database = app.get(Database);
@@ -669,8 +670,8 @@ async function verifyTimedBattleEffects(request: TestRequest, app: INestApplicat
     hero.skillLevels = { ...hero.skillLevels, 'earthen-barrier': 1, 'burning-brand': 1, 'mending-stream': 1 };
   }, context));
   const room = await request<Battle>('/battles', { name: 'Сохранение новых эффектов', characterId: first.id, kind: 'duel' });
-  const joined = await request<Battle>(`/battles/${room.id}/join`, { characterId: second.id, team: 1 });
-  let battle = await request<Battle>(`/battles/${room.id}/start`, { characterId: first.id, version: joined.version });
+  const offered = await request<ArenaChallenge>(`/battles/${room.id}/challenges`, { characterId: second.id });
+  let battle = await request<Battle>(`/battles/${room.id}/challenges/${offered.id}/accept`, { characterId: first.id });
   const repository = app.get(BattlesRepository), uow = app.get(UnitOfWork);
   const read = () => request<Battle>(`/battles/${battle.id}`);
   const prepare = async (actorId: string, skillId: string) => {
@@ -789,8 +790,8 @@ async function verifyModifierModel(request: TestRequest, app: INestApplication) 
   await request(`/characters/${first.id}/skills`, { skillId: 'strike' });
   await request(`/characters/${first.id}/skills`, { skillId: skill.id });
   const room = await request<Battle>('/battles', { name: 'Проверка допов', characterId: first.id, kind: 'duel' });
-  await request(`/battles/${room.id}/join`, { characterId: second.id, team: 1 });
-  let battle = await request<Battle>(`/battles/${room.id}/start`, { characterId: first.id, version: 1 });
+  const offered = await request<ArenaChallenge>(`/battles/${room.id}/challenges`, { characterId: second.id });
+  let battle = await request<Battle>(`/battles/${room.id}/challenges/${offered.id}/accept`, { characterId: first.id });
   await app.get(UnitOfWork).run(async tx => {
     const row = await app.get(BattlesRepository).lock(battle.id, tx); assert.ok(row);
     row.battle.phase = 'choose'; row.battle.matchedElements = [skill.element]; row.battle.attributeRngState = 0;
@@ -825,8 +826,8 @@ async function verifyCombatFormulas(request: TestRequest, app: INestApplication)
   await request(`/characters/${first.id}/skills`, { skillId: 'ember' });
   await request(`/characters/${first.id}/skills`, { skillId: 'strike' });
   const room = await request<Battle>('/battles', { name: 'Формулы и удача', characterId: first.id, kind: 'duel' });
-  await request(`/battles/${room.id}/join`, { characterId: second.id, team: 1 });
-  let battle = await request<Battle>(`/battles/${room.id}/start`, { characterId: first.id, version: 1 });
+  const offered = await request<ArenaChallenge>(`/battles/${room.id}/challenges`, { characterId: second.id });
+  let battle = await request<Battle>(`/battles/${room.id}/challenges/${offered.id}/accept`, { characterId: first.id });
   assert.equal(battle.content.balance.formulas!.armorK, 30);
   assert.ok(battle.fighters.every(fighter => fighter.combatLevel === 1));
   const repository = app.get(BattlesRepository), uow = app.get(UnitOfWork);
@@ -993,11 +994,11 @@ async function verifyBattleSession(request: TestRequest, app: INestApplication) 
   const sword = initial.items.find(item => item.itemId === 'iron-sword' && item.quality?.rank.id === 'common')!;
   await inventory.execute({ type: 'equip', instanceId: sword.id }, randomUUID());
   const room = await request<Battle>('/battles', { name: 'Жеребьёвка и пояс', characterId: hero.id, kind: 'duel' });
-  const joined = await request<Battle>(`/battles/${room.id}/join`, { characterId: enemy.id, team: 1 });
+  const offered = await request<ArenaChallenge>(`/battles/${room.id}/challenges`, { characterId: enemy.id });
   const runtime = app.get(BattleRuntime), random = runtime.random;
   runtime.random = () => 0.99;
   let battle: Battle;
-  try { battle = await request<Battle>(`/battles/${room.id}/start`, { characterId: hero.id, version: joined.version }); }
+  try { battle = await request<Battle>(`/battles/${room.id}/challenges/${offered.id}/accept`, { characterId: hero.id }); }
   finally { runtime.random = random; }
   assert.equal(battle.activeId, enemy.id);
   assert.equal(battle.turnDurationSeconds, 30);
@@ -1142,4 +1143,68 @@ async function verifyIdentity(origin: string, request: TestRequest, accounts: Ac
     const result = await new Promise<{ error?: string }>(resolve => unauthenticated.emit('watch', foreignRoom.data.id, resolve));
     assert.equal(result.error, 'Выберите аккаунт');
   } finally { unauthenticated.disconnect(); }
+}
+
+async function verifyArena(request: TestRequest, app: INestApplication) {
+  const heroes = await Promise.all(['Арена Один', 'Арена Два', 'Арена Три', 'Арена Четыре'].map(name => request<Character>('/characters', { name })));
+  const [challenger, first, second, other] = heroes;
+  const create = (hero: Character) => request<Battle>('/battles', { name: `Арена ${hero.name}`, characterId: hero.id, kind: 'duel' });
+  const [roomA, roomB] = await Promise.all([create(first), create(second)]);
+  const rooms = await request<Battle[]>('/battles');
+  assert.ok(rooms.some(room => room.id === roomA.id));
+  const challenge = (room: Battle, hero: Character) => request<ArenaChallenge>(`/battles/${room.id}/challenges`, { characterId: hero.id });
+  const state = (hero: Character) => request<ArenaState>(`/battles/arena/${hero.id}`);
+  await request(`/battles/${roomA.id}/challenges`, { characterId: first.id }, 400);
+  await request(`/battles/${roomA.id}/join`, { characterId: challenger.id, team: 1 }, 400);
+  await request(`/battles/${roomA.id}/start`, { characterId: first.id, version: 0 }, 400);
+  const offerA = await challenge(roomA, challenger);
+  assert.equal((await challenge(roomA, challenger)).id, offerA.id);
+  const offerB = await challenge(roomB, challenger);
+  const competing = await challenge(roomA, other);
+  assert.equal((await state(first)).incoming.length, 2);
+  assert.equal((await state(challenger)).outgoing.length, 2);
+  assert.equal((await request<Battle>(`/battles/${roomA.id}`)).fighters.length, 1);
+  await request(`/battles/${roomA.id}/challenges/${offerA.id}/accept`, { characterId: other.id }, 403);
+  // A failed battle write must roll back the accepted offer and all cancellations.
+  const repository = app.get(BattlesRepository), save = repository.save.bind(repository);
+  repository.save = async () => { throw new Error('arena simulated write failure'); };
+  try { await request(`/battles/${roomA.id}/challenges/${offerA.id}/accept`, { characterId: first.id }, 500); }
+  finally { repository.save = save; }
+  assert.equal((await state(first)).incoming.length, 2);
+  assert.equal((await state(challenger)).outgoing.length, 2);
+  assert.equal((await request<Battle>(`/battles/${roomA.id}`)).status, 'waiting');
+  const results = await Promise.allSettled([
+    request<Battle>(`/battles/${roomA.id}/challenges/${offerA.id}/accept`, { characterId: first.id }),
+    request<Battle>(`/battles/${roomB.id}/challenges/${offerB.id}/accept`, { characterId: second.id }),
+  ]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  const started = results.find((result): result is PromiseFulfilledResult<Battle> => result.status === 'fulfilled')!.value;
+  assert.equal(started.status, 'active'); assert.equal(started.version, 1);
+  assert.equal(started.fighters.length, 2); assert.ok(started.turnDeadlineAt);
+  assert.equal((await state(challenger)).activeBattleId, started.id);
+  assert.equal((await state(challenger)).outgoing.length, 0);
+  const winner = started.id === roomA.id ? first : second;
+  assert.equal((await state(winner)).incoming.length, 0);
+  assert.ok(!(await request<Battle[]>('/battles')).some(room => room.id === started.id));
+  await request(`/battles/${started.id}/challenges/${started.id === roomA.id ? offerA.id : offerB.id}/accept`, { characterId: winner.id }, 409);
+  // The other independent incoming offer is cancelled only when its recipient starts a fight.
+  if (started.id === roomA.id) assert.equal((await state(other)).outgoing.length, 0);
+  else {
+    assert.equal((await state(other)).outgoing[0].id, competing.id);
+    await request(`/battles/${roomA.id}/challenges/${competing.id}/dismiss`, { characterId: first.id });
+    assert.equal((await state(other)).outgoing.length, 0);
+  }
+  const available = started.id === roomA.id ? roomB : roomA;
+  const availableHost = started.id === roomA.id ? second : first;
+  const declined = await challenge(available, other);
+  await request(`/battles/${available.id}/challenges/${declined.id}/dismiss`, { characterId: availableHost.id });
+  await request(`/battles/${available.id}/challenges/${declined.id}/accept`, { characterId: availableHost.id }, 409);
+  const withdrawn = await challenge(available, other);
+  await request(`/battles/${available.id}/challenges/${withdrawn.id}/dismiss`, { characterId: other.id });
+  assert.equal((await state(availableHost)).incoming.length, 0);
+  // Starting a different mode also clears pending offers.
+  await challenge(available, other);
+  const bot = await request<Battle>('/battles', { name: 'Вместо вызова', characterId: other.id, kind: 'bot' });
+  await request(`/battles/${bot.id}/start`, { characterId: other.id, version: bot.version });
+  assert.equal((await state(availableHost)).incoming.length, 0);
 }

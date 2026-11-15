@@ -37,6 +37,7 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     if (path === '/identity/session') return send({ account, characterId: character.id, expiresAt: Date.now() + 3600000 });
     if (path === '/characters') return send([character]);
     if (path === '/content') return send(seedContent);
+    if (path.startsWith('/battles/arena/')) return send({ incoming: [], outgoing: [], activeBattleId: null });
     if (path === '/parties') return send({ party, incoming: [], outgoing: [], players: [], capacity: 6, serverTime: Date.now() });
     if (path === '/social') return send({ revision: 1, visibilityRevision: 1, relationships: [] });
     if (path === '/chat/feed') return send({ messages: [], before: '', after: '', hasMore: false, partyAccess: null });

@@ -11,6 +11,15 @@ const idSchema = z.string().uuid();
 export class BattlesController {
   constructor(@Inject(BattlesService) private readonly service: BattlesService) {}
   @Get() async list() { return (await this.service.list()).map(battleView); }
+  @OwnResources({ kind: 'character', from: 'params', key: 'characterId' })
+  @Get('arena/:characterId') arena(@Param('characterId') characterId: string) { return this.service.arenaState(idSchema.parse(characterId)); }
+  @Post(':id/challenges') challenge(@Param('id') id: string, @Body() body: unknown) { return this.service.challenge(idSchema.parse(id), body); }
+  @Post(':id/challenges/:challengeId/accept') async accept(@Param('id') id: string, @Param('challengeId') challengeId: string, @Body() body: unknown) {
+    return battleView(await this.service.acceptChallenge(idSchema.parse(id), idSchema.parse(challengeId), body));
+  }
+  @Post(':id/challenges/:challengeId/dismiss') async dismiss(@Param('id') id: string, @Param('challengeId') challengeId: string, @Body() body: unknown) {
+    await this.service.dismissChallenge(idSchema.parse(id), idSchema.parse(challengeId), body); return { ok: true };
+  }
   @Get(':id') async get(@Param('id') id: string) { return battleView(await this.service.get(idSchema.parse(id))); }
   @Post() async create(@Body() body: unknown) { return battleView(await this.service.create(body)); }
   @Post(':id/join') async join(@Param('id') id: string, @Body() body: unknown) { return battleView(await this.service.join(idSchema.parse(id), body)); }

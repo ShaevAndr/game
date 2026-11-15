@@ -85,6 +85,8 @@ function fixture(kind: 'duel' | 'bot' = 'duel', battlefield: BattlefieldOptions 
   const history = new BattleHistoryService(new PostgresBattleArchiveOutbox(adapter), {} as BattleHistoryRepository, {} as TaskQueue);
   const battles = new PostgresBattlesRepository(adapter);
   battles.hasActiveCharacter = async id => Object.values(state.battles).some(row => row.data.status === 'active' && row.data.fighters.some(f => f.characterId === id));
+  battles.lockMatchmaking = async () => {};
+  battles.cancelChallenges = async () => {};
   let time = 100000;
   battles.expired = async now => Object.values(state.battles).filter(row => row.data.status === 'active' && row.data.turnDeadlineAt !== undefined && row.data.turnDeadlineAt <= now).map(row => row.data.id);
   const inventory = { state: async (ownerId: string) => ({ ownerId, inventories: [], items: [] }) } as unknown as InventoryService;
@@ -168,9 +170,9 @@ test('server learning accepts an alternative parent node member and concurrent p
   assert.equal(learned.skillPoints, 1); assert.ok(learned.learnedSkillIds.includes('fireball'));
   assert.ok(!learned.learnedSkillIds.includes('ember'));
 });
-test('starting a lobby freezes the latest learned skills and stats, and content rules', async () => {
+test('starting a team lobby freezes the latest learned skills and stats, and content rules', async () => {
   const f = fixture(), room = f.state().battles[battleId].data;
-  room.status = 'waiting'; room.activeId = null;
+  room.kind = 'team'; room.status = 'waiting'; room.activeId = null;
   for (const skill of room.content.skills) Reflect.deleteProperty(skill, 'learning');
   await f.skills.learn(winnerId, { skillId: 'ember' });
   const started = await f.service.start(battleId, { characterId: winnerId, version: 0 });

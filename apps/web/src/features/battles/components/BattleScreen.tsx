@@ -19,10 +19,11 @@ interface Props {
   battle: Battle; characterId: string; hasCharacter: boolean; busy: boolean;
   animating?: boolean; fieldMotion?: FieldMotion;
   clockOffset?: number;
+  onChallenge?: () => void; challengePending?: boolean; canChallenge?: boolean;
   onCommand: (action: Action) => void; onJoin: (team: number) => void; onStart: () => void; onCopy: () => void;
 }
 
-export function BattleScreen({ battle, characterId, hasCharacter, busy, animating, fieldMotion, clockOffset = 0, onCommand, onJoin, onStart, onCopy }: Props) {
+export function BattleScreen({ battle, characterId, hasCharacter, busy, animating, fieldMotion, clockOffset = 0, onChallenge, challengePending, canChallenge, onCommand, onJoin, onStart, onCopy }: Props) {
   const controls = useBattleControls(battle, characterId, busy, onCommand);
   const { me, active, myTurn, targetId, healTarget } = controls;
   const dialog = useRef<HTMLDialogElement>(null);
@@ -62,10 +63,11 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, animatin
       <button className="ghost" onClick={onCopy}>Скопировать приглашение ↗</button></div></div>
       <BattleRewards battle={battle} characterId={characterId}/>
       {battle.status === 'waiting' && <div className="lobby-actions">
-        {!me ? <>{(battle.kind === 'bot' ? [] : [0, 1]).filter(team => battle.kind !== 'dungeon' || team === 0).map(team =>
+        {battle.kind === 'duel' ? !me ? <button className="primary" disabled={busy || !hasCharacter || !canChallenge || challengePending} onClick={onChallenge}>{challengePending ? 'Вызов отправлен' : 'Бросить вызов'}</button>
+          : <p role="status">Комната доступна другим игрокам. Ожидаем вызовов.</p> : !me ? <>{(battle.kind === 'bot' ? [] : [0, 1]).filter(team => battle.kind !== 'dungeon' || team === 0).map(team =>
           <button key={team} disabled={!hasCharacter || busy} onClick={() => onJoin(team)}>Вступить в команду {team + 1}</button>)}</>
           : <button className="primary" disabled={busy} onClick={onStart}>Начать бой →</button>}
-        <p className="hint">{battle.kind === 'bot' ? 'Играй один: бот получит характеристики и навыки твоего героя и будет ходить автоматически.' : battle.kind === 'dungeon' ? 'Можно играть одному или пригласить ещё двух героев.' : 'Другой игрок открывает приглашение и выбирает своего персонажа.'}</p>
+        <p className="hint">{battle.kind === 'duel' ? 'Владелец комнаты получает вызов и принимает его или отклоняет. Бой начинается сразу после принятия.' : battle.kind === 'bot' ? 'Играй один: бот получит характеристики и навыки твоего героя и будет ходить автоматически.' : battle.kind === 'dungeon' ? 'Можно играть одному или пригласить ещё двух героев.' : 'Другой игрок открывает приглашение и выбирает своего персонажа.'}</p>
       </div>}
     </section>
     <div className="battle-arena">

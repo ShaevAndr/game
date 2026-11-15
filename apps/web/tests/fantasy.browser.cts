@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { allocateAttributes, applyAction, combatStatDefinitions, createBoard, createCharacter, defaultCombatFormulaRules, defaultProfessions,
   gatheringCatalog, gatheringView, gainExperience, initialGatheringState, joinBattle, learnSkill, newBattle, possibleMove, seedContent, seedEffectSkills,
-  startBattle, upgradeSkill, type Content, type InventoryState } from '@game/core';
+  startBattle, upgradeSkill, type ArenaChallenge, type ArenaState, type Content, type InventoryState } from '@game/core';
 
 // Browser fixture stays outside the player's database. Commands still use the actual pure combat rules.
 test('fantasy interface: all screens, responsive battle, target selection and a complete skill choice', { timeout: 120000 }, async t => {
@@ -37,6 +37,10 @@ test('fantasy interface: all screens, responsive battle, target selection and a 
   battle.fighters[0].hp = 211; battle.fighters[1].hp = 184;
   battle.fighters[0].skillEnergy = 36; battle.fighters[1].skillEnergy = 52;
   battle.turn = 7; battle.attributeRngState = 1;
+  const availableRooms = [enemy, { ...enemy, id: randomUUID(), name: 'Другой соперник' }].map(owner => newBattle(randomUUID(), `Дуэль ${owner.name}`, 'duel', 'on-match', owner, content));
+  const arena: ArenaState = { incoming: [], outgoing: [], activeBattleId: null };
+  const offer = (roomId: string, challengerId: string, recipientId: string): ArenaChallenge => ({ id: randomUUID(), battleId: roomId, roomName: 'Испытание арены',
+    challengerId, challengerName: enemy.name, recipientId, recipientName: hero.name, status: 'pending', createdAt: new Date().toISOString() });
   const inventory: InventoryState = { ownerId: hero.id, inventories: [{ id: hero.id, ownerId: hero.id, name: 'Рюкзак', capacity: 50, primary: true }],
     items: hero.inventory.map((stack, i) => ({ id: `item-${i}`, ownerId: hero.id, inventoryId: hero.id, itemId: stack.itemId, quantity: stack.quantity, equippedSlot: null })) };
   const inventoryView = { ...inventory, definitions: content.items, groups: content.itemGroups, items: inventory.items.map(item => ({ ...item, actions: [] })) };
@@ -67,7 +71,23 @@ test('fantasy interface: all screens, responsive battle, target selection and a 
     if (path.endsWith('/gathering')) return send(gatheringView(initialGatheringState(), gatheringCatalog, inventory, content.items));
     if (path === '/world/expeditions/current') return send({ worldId: null, state: null });
     if (path === '/world/cargo') return send([]);
-    if (path === '/battles') return send([snapshot()]);
+    if (path === `/battles/arena/${hero.id}`) return send(arena);
+    if (path.endsWith('/challenges')) {
+      const existing = arena.outgoing.find(value => value.battleId === path.split('/')[2]);
+      const pending = existing ?? offer(path.split('/')[2], hero.id, enemy.id);
+      if (!existing) arena.outgoing.push(pending);
+      return send(pending, 201);
+    }
+    if (path.endsWith('/dismiss')) {
+      arena.incoming = arena.incoming.filter(value => value.id !== path.split('/').at(-2));
+      arena.outgoing = arena.outgoing.filter(value => value.id !== path.split('/').at(-2));
+      return send({ ok: true }, 201);
+    }
+    if (path.endsWith('/accept')) {
+      arena.incoming = []; arena.outgoing = []; arena.activeBattleId = battle.id;
+      return send(snapshot(), 201);
+    }
+    if (path === '/battles') return send(availableRooms);
     if (path === `/battles/${battle.id}`) return send(snapshot());
     if (path === `/battles/${battle.id}/actions`) {
       battle.boardMoves = []; applyAction(battle, hero.id, body.action, random); battle.version++;
@@ -85,6 +105,29 @@ test('fantasy interface: all screens, responsive battle, target selection and a 
     await page.getByRole('button', { name: /Алира/ }).waitFor(); await shot('fantasy-characters.png');
     await page.getByRole('button', { name: /Алира/ }).click();
     await page.locator('.create-room').waitFor(); await shot('fantasy-arena.png');
+    await page.getByRole('button', { name: 'Бросить вызов', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Вызов отправлен', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Бросить вызов', exact: true }).click();
+    await page.getByRole('heading', { name: 'Ожидают ответа' }).waitFor();
+    assert.equal(arena.outgoing.length, 2);
+    assert.equal(await page.getByRole('button', { name: 'Вызов отправлен', exact: true }).count(), 2);
+    await page.setViewportSize({ width: 390, height: 844 }); await noOverflow('arena challenges mobile');
+    await page.getByRole('button', { name: 'Отозвать', exact: true }).first().click();
+    await page.waitForFunction(() => document.querySelectorAll('.arena-offers .arena-offer').length === 1);
+    arena.incoming = [offer(battle.id, enemy.id, hero.id)];
+    await page.goto(`${origin}/#skills`); await page.reload();
+    await page.getByText(`${enemy.name} бросает тебе вызов`).waitFor();
+    await noOverflow('arena notification mobile');
+    await page.getByRole('button', { name: 'Отклонить', exact: true }).click();
+    await page.locator('.arena-notifications').waitFor({ state: 'hidden' });
+    arena.incoming = [offer(battle.id, enemy.id, hero.id)];
+    await page.reload();
+    await page.getByRole('button', { name: 'Принять', exact: true }).click();
+    await page.locator('.battle-arena').waitFor();
+    assert.equal(arena.outgoing.length, 0); assert.equal(arena.incoming.length, 0);
+    assert.equal(await page.getByRole('button', { name: 'Начать бой →' }).count(), 0);
+    arena.activeBattleId = null;
+    await page.setViewportSize({ width: 1440, height: 1120 });
     for (const [hash, ready] of [['skills', '.skill-branches'], ['inventory', '.backpack-grid'], ['equipment', '.equipment-workspace'], ['crafting', '.recipe-options'], ['gathering', '.gathering-areas'], ['world', '.world-lobby']]) {
       await page.goto(`${origin}/#${hash}`); await page.locator(ready).waitFor(); await noOverflow(hash); await shot(`fantasy-${hash}.png`);
       await page.setViewportSize({ width: 390, height: 844 }); await noOverflow(`${hash} mobile`);

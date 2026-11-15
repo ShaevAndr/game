@@ -53,6 +53,16 @@ export const initialMigration: Migration = {
       .addColumn('data', 'jsonb', c => c.notNull())
       .addColumn('version', 'integer', c => c.notNull().defaultTo(0)).execute();
     await sql`CREATE INDEX battles_turn_deadline ON battles (((data->>'turnDeadlineAt')::bigint)) WHERE data->>'status' = 'active'`.execute(db);
+    await db.schema.createTable('arena_challenges').addColumn('id', 'uuid', c => c.primaryKey())
+      .addColumn('battle_id', 'uuid', c => c.notNull().references('battles.id'))
+      .addColumn('challenger_id', 'uuid', c => c.notNull().references('characters.id'))
+      .addColumn('recipient_id', 'uuid', c => c.notNull().references('characters.id'))
+      .addColumn('status', 'varchar(16)', c => c.notNull()).addColumn('data', 'jsonb', c => c.notNull())
+      .addCheckConstraint('arena_challenge_status', sql`status in ('pending', 'accepted', 'declined', 'cancelled')`)
+      .addCheckConstraint('arena_challenge_other', sql`challenger_id <> recipient_id`).execute();
+    await sql`CREATE UNIQUE INDEX arena_challenge_pending ON arena_challenges(battle_id, challenger_id) WHERE status = 'pending'`.execute(db);
+    await db.schema.createIndex('arena_challenge_recipient').on('arena_challenges').columns(['recipient_id', 'status']).execute();
+    await db.schema.createIndex('arena_challenge_challenger').on('arena_challenges').columns(['challenger_id', 'status']).execute();
     await db.schema.createTable('battle_rewards')
       .addColumn('battle_id', 'uuid', c => c.notNull().references('battles.id'))
       .addColumn('character_id', 'uuid', c => c.notNull().references('characters.id'))

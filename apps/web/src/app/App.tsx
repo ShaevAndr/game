@@ -8,6 +8,7 @@ import { CharacterPanel } from '../features/characters/components/CharacterPanel
 import { contentApi } from '../features/content/api/content.api';
 import { SkillTree } from '../features/skills/components/SkillTree';
 import { skillsApi } from '../features/skills/api/skills.api';
+import { useArena } from '../features/arena/model/useArena';
 import { useRooms } from '../features/arena/model/useRooms';
 import { ArenaScreen } from '../features/arena/components/ArenaScreen';
 import { arenaApi } from '../features/arena/api/arena.api';
@@ -57,11 +58,12 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
   const [worldInventoryOpen, setWorldInventoryOpen] = useState(false);
   const [content, setContent] = useState<Content | null>(null);
   const [error, setError] = useState('');
+  const { arena, refreshArena } = useArena(characterId, setError);
   const { rooms, refreshRooms } = useRooms(screen === 'arena' && !roomId, setError);
   const { battle, connected, clockOffset, updateBattle, refreshBattle, animating, fieldMotion } = useBattle(roomId, setError);
   const recover = useCallback(async () => {
-    await Promise.allSettled([refreshCharacters(), refreshBattle(), refreshRooms()]);
-  }, [refreshCharacters, refreshBattle, refreshRooms]);
+    await Promise.allSettled([refreshCharacters(), refreshBattle(), refreshRooms(), refreshArena()]);
+  }, [refreshCharacters, refreshBattle, refreshRooms, refreshArena]);
   const { busy, perform } = useAsyncAction(setError, recover);
   const fighter = battle?.fighters.find(value => value.id === characterId);
 
@@ -101,6 +103,12 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
     <main>
       <div className="page-heading"><div><div className="eyebrow">СОБИРАЙ. НАПОЛНЯЙ. ПОБЕЖДАЙ.</div><h1>{heading}</h1><p>{description}</p></div>{roomId && <button className="ghost" onClick={() => openRoom('')}>← Все комнаты</button>}</div>
       {(error || sessionError) && <div className="error" role="alert">{error || sessionError}<button onClick={() => setError('')} aria-label="Закрыть ошибку">×</button></div>}
+      {arena && (arena.incoming.length > 0 || arena.activeBattleId && arena.activeBattleId !== roomId) && <section className="panel arena-notifications" aria-label="Уведомления арены">
+        {arena.activeBattleId && arena.activeBattleId !== roomId && <div className="arena-offer" role="status"><strong>Бой начался</strong><button className="primary" onClick={() => openRoom(arena.activeBattleId!)}>Перейти в бой</button></div>}
+        {arena.incoming.map(offer => <div className="arena-offer" key={offer.id} role="status"><span><strong>{offer.challengerName} бросает тебе вызов</strong><small>{offer.roomName}</small></span>
+          <div><button className="primary" disabled={busy} onClick={() => void perform(async () => { const started = await arenaApi.accept(offer, characterId); await refreshArena(); openRoom(started.id); })}>Принять</button>
+            <button className="ghost" disabled={busy} onClick={() => void perform(async () => { await arenaApi.dismiss(offer, characterId); await refreshArena(); })}>Отклонить</button></div></div>)}
+      </section>}
       <div className={`layout${workshop ? ` ${screen}-layout` : ''}${roomId && screen === 'arena' ? ' battle-layout' : ''}`}>
         <aside className="sidebar">
           <CharacterPanel compact={workshop} character={character} content={content} fighter={fighter} busy={busy || sessionBusy} onCharacters={onCharacters} onSkills={openSkills} onInventory={openInventory} onEquipment={openEquipment}/>
@@ -117,12 +125,17 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
           onUpgrade={(skillId, level) => void perform(async () => updateCharacter(await skillsApi.upgrade(characterId, skillId, level)))}
           onLearn={skillId => void perform(async () => updateCharacter(await skillsApi.learn(characterId, skillId)))}/>
           : roomId ? battle ? <BattleScreen key={battle.id} battle={battle} characterId={characterId} hasCharacter={!!character} busy={busy || animating} animating={animating} fieldMotion={fieldMotion} clockOffset={clockOffset}
+            canChallenge={!!arena && !arena.activeBattleId} challengePending={arena?.outgoing.some(offer => offer.battleId === battle.id)}
+            onChallenge={() => void perform(async () => { await arenaApi.challenge(battle.id, characterId); await refreshArena(); })}
             onCommand={action => void perform(async () => updateBattle(await battlesApi.command(battle.id, characterId, battle.version, action)))}
             onJoin={team => void perform(async () => updateBattle(await battlesApi.join(battle.id, characterId, team)))}
             onStart={() => void perform(async () => updateBattle(await battlesApi.start(battle.id, characterId, battle.version)))}
             onCopy={() => void perform(async () => { await navigator.clipboard.writeText(location.href); })}/>
             : <section className="panel" role="status">Загрузка боя…</section>
-          : <ArenaScreen rooms={rooms} canCreate={!!character} busy={busy} onOpen={openRoom}
+          : <ArenaScreen characterId={characterId} arena={arena}
+            onChallenge={id => void perform(async () => { await arenaApi.challenge(id, characterId); await refreshArena(); })}
+            onDismiss={offer => void perform(async () => { await arenaApi.dismiss(offer, characterId); await refreshArena(); })}
+            rooms={rooms} canCreate={!!character} busy={busy} onOpen={openRoom}
             onRefresh={() => void perform(refreshRooms)}
             onCreate={input => void perform(async () => { const room = await arenaApi.create({ ...input, characterId }); openRoom(room.id); })}/>}
       </div>
