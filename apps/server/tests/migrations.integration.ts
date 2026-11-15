@@ -43,13 +43,20 @@ test('the single v1 init creates the complete schema, seeds heroes and preserves
     for (const account of demoAccounts) assert.equal(initial.filter(row => row.account_id === account.id).length, 5);
     assert.ok(initial.every(row => row.data.accountId === row.account_id));
     assert.ok(initial.every(row => row.data.level === 1 && row.data.learnedSkillIds.length === 0 && row.data.skillPoints === 3 && row.data.attributePoints === 5 && row.data.stats.maxHp === 240 && row.data.stats.maxEnergy === 200));
-    for (const table of ['battles', 'battle_rewards', 'battle_archive_outbox', 'inventory_operations', 'inventory_world_reservations', 'world_journal_worlds', 'world_journal_entries', 'crafting_operations', 'gathering_states', 'gathering_operations', 'parties', 'party_members', 'party_invitations', 'party_operations', 'social_players', 'social_pairs', 'social_operations', 'chat_streams', 'chat_messages', 'chat_deliveries', 'chat_operations'] as const) {
+    for (const table of ['battles', 'battle_rewards', 'battle_archive_outbox', 'inventory_world_reservations', 'world_journal_worlds', 'world_journal_entries', 'crafting_operations', 'gathering_states', 'gathering_operations', 'parties', 'party_members', 'party_invitations', 'party_operations', 'social_players', 'social_pairs', 'social_operations', 'chat_streams', 'chat_messages', 'chat_deliveries', 'chat_operations'] as const) {
       assert.equal((await database.sql.selectFrom(table).selectAll().execute()).length, 0);
     }
     const inventories = await database.sql.selectFrom('inventories').selectAll().execute();
     assert.equal(inventories.length, 10); assert.ok(inventories.every(value => value.is_primary && value.capacity === 50));
     const items = await database.sql.selectFrom('item_instances').selectAll().execute();
-    assert.ok(items.every(item => item.quality === null && item.item_level === 1 && item.definition_version === 1));
+    assert.ok(items.every(item => item.item_level === 1 && item.definition_version === 1));
+    assert.equal((await database.sql.selectFrom('inventory_operations').selectAll().execute()).length, 10);
+    for (const character of initial) for (const itemId of ['iron-sword', 'leather-armor']) {
+      const samples = items.filter(item => item.owner_id === character.id && item.item_id === itemId);
+      assert.equal(samples.length, 7);
+      assert.deepEqual(samples.map(item => item.quality!.rank.order).sort(), [1, 2, 3, 4, 5, 6, 7]);
+      assert.ok(samples.every(item => item.quality!.version === 1 && item.quality!.itemLevel === 1 && item.quality!.affixes.length === item.quality!.rank.order - 1));
+    }
     for (const character of initial) for (const itemId of ['woodcutting-axe', 'mining-pick'])
       assert.equal(items.filter(item => item.owner_id === character.id && item.item_id === itemId).reduce((sum, item) => sum + item.quantity, 0), 1);
     for (const character of initial) for (const stack of character.data.inventory) {

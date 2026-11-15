@@ -272,7 +272,7 @@ test('matched combat only rewards the finishing skill and rejects its duplicate 
   assert.ok(finished.boardMoves!.every(report => report.continuation));
   assert.equal(finished.pendingBattlefield, undefined);
   const secondary = moved.pendingBattlefield!.report.generated.count;
-  assert.equal(finished.fighters[0].skillEnergy, Math.min(200, moved.fighters[0].skillEnergy! - 1 + secondary));
+  assert.equal(finished.fighters[0].skillEnergy, Math.min(200, moved.fighters[0].skillEnergy! - 1 + secondary * 2));
   assert.equal(f.state().receipts.length, 1); assert.deepEqual(f.state().outbox[battleId], finished);
 });
 

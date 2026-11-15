@@ -41,7 +41,7 @@ test('expiry during choice settles the saved cascades after restoring the battle
   } };
   const restored: Battle = JSON.parse(JSON.stringify(battle));
   expireMatchedTurn(restored);
-  assert.deepEqual(restored.board, finalBoard); assert.equal(restored.fighters[0].skillEnergy, 4);
+  assert.deepEqual(restored.board, finalBoard); assert.equal(restored.fighters[0].skillEnergy, 8);
   assert.equal(restored.activeId, 'enemy'); assert.equal(restored.pendingBattlefield, undefined);
   assert.equal(restored.fighters[1].hp, restored.fighters[1].stats.maxHp);
 });

@@ -222,7 +222,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     await request(`/battles/${room.id}/actions`, { characterId: character.id, version: started.version, action }, 409);
     const result = await request<Battle>(`/battles/${room.id}/actions`, { characterId: character.id, version: moved.version, action: { type: 'skill', skillId: 'strike', targetId: 'bot-opponent' } });
     assert.equal(result.status, 'finished');
-    assert.equal(result.fighters[0].skillEnergy, Math.min(200, moved.fighters[0].skillEnergy! - 1 + pendingMove.report.generated.count));
+    assert.equal(result.fighters[0].skillEnergy, Math.min(200, moved.fighters[0].skillEnergy! - 1 + pendingMove.report.generated.count * 2));
     assert.equal(result.pendingBattlefield, undefined);
     assert.equal((await request<Character>(`/characters/${character.id}`)).level, 2);
     assert.equal((await request<Character>(`/characters/${character.id}`)).attributePoints, 10);
@@ -363,6 +363,15 @@ async function verifyCharacterCreation(character: Character, request: TestReques
   assert.equal(containers[0].capacity, 50);
   const items = await database.sql.selectFrom('item_instances').selectAll().where('owner_id', '=', character.id).execute();
   assert.ok(items.every(item => item.inventory_id === containers[0].id));
+  for (const itemId of ['iron-sword', 'leather-armor']) {
+    const samples = items.filter(item => item.item_id === itemId);
+    assert.deepEqual(samples.map(item => item.quality!.rank.order).sort(), [1, 2, 3, 4, 5, 6, 7]);
+    assert.ok(samples.every(item => item.item_level === 1 && item.quality!.version === 1 && item.quality!.affixes.length === item.quality!.rank.order - 1));
+  }
+  const beforeReplay = structuredClone(items);
+  await app.get(InventoryService).seedEquipmentSamples(character.id);
+  const replayed = await database.sql.selectFrom('item_instances').selectAll().where('owner_id', '=', character.id).execute();
+  assert.deepEqual(replayed.sort((a,b) => a.id.localeCompare(b.id)), beforeReplay.sort((a,b) => a.id.localeCompare(b.id)));
   const totals = (rows: typeof items) => Object.fromEntries(character.inventory.map(stack => [stack.itemId, rows.filter(item => item.item_id === stack.itemId).reduce((sum, item) => sum + item.quantity, 0)]));
   assert.deepEqual(totals(items), Object.fromEntries(character.inventory.map(stack => [stack.itemId, stack.quantity])));
   const views = await Promise.all([0, 1].map(() => request<InventoryView>(`/characters/${character.id}/inventories`)));
@@ -397,7 +406,7 @@ async function verifyOperations(character: Character, request: TestRequest, app:
   assert.ok(groups.some(group => group.id === 'tools'));
   const initial = await view();
   const ore = initial.items.find(item => item.itemId === 'iron-ore')!;
-  const sword = initial.items.find(item => item.itemId === 'iron-sword')!;
+  const sword = initial.items.find(item => item.itemId === 'iron-sword' && item.quality?.rank.id === 'common')!;
   const scroll = initial.items.find(item => item.itemId === 'ember-scroll')!;
   assert.equal((await request<{ definition: { groupId: string } }>(`/item-instances/${sword.id}`)).definition.groupId, 'weapons');
 
@@ -489,7 +498,7 @@ async function verifyOperations(character: Character, request: TestRequest, app:
   assert.equal((await request<{ id: string; level: number }[]>(`/characters/${owner}/skills`)).find(skill => skill.id === 'strike')?.level, 10);
   await action(sword.id, { action: 'equip' });
   const equippedCharacter = await request<Character>(`/characters/${owner}`);
-  assert.ok(!equippedCharacter.inventory.some(stack => stack.itemId === 'iron-sword'));
+  assert.equal(equippedCharacter.inventory.find(stack => stack.itemId === 'iron-sword')?.quantity, 6);
   const replacement = await inventory.receive(owner, 'iron-sword', 1, randomUUID());
   await action(replacement.itemIds[0], { action: 'equip' });
   const replaced = await view();
@@ -497,7 +506,7 @@ async function verifyOperations(character: Character, request: TestRequest, app:
   assert.equal(replaced.items.find(item => item.id === replacement.itemIds[0])?.equippedSlot, 'main-hand');
   const afterReplacement = await request<Character>(`/characters/${owner}`);
   assert.equal(afterReplacement.equipmentBonuses?.attack, 4);
-  assert.equal(afterReplacement.inventory.find(stack => stack.itemId === 'iron-sword')?.quantity, 1);
+  assert.equal(afterReplacement.inventory.find(stack => stack.itemId === 'iron-sword')?.quantity, 7);
   // Swap both directions so correctness cannot depend on which random UUID sorts first.
   await action(sword.id, { action: 'equip' });
   const switchedBack = await view();
@@ -872,7 +881,7 @@ async function verifyEquipmentLock(request: TestRequest, app: INestApplication) 
   const hero = await request<Character>('/characters', { name: 'Блокировка экипировки' });
   await request(`/characters/${hero.id}/skills`, { skillId: 'strike' });
   const inventory = app.get(InventoryService), battles = app.get(BattlesService);
-  const sword = (await inventory.get(hero.id)).items.find(item => item.itemId === 'iron-sword')!;
+  const sword = (await inventory.get(hero.id)).items.find(item => item.itemId === 'iron-sword' && item.quality?.rank.id === 'common')!;
   const room = await request<Battle>('/battles', { name: 'Гонка старта и экипировки', characterId: hero.id, kind: 'bot' });
   assert.equal((await inventory.get(hero.id)).items.find(item => item.id === sword.id)!.actions.find(action => action.id === 'equip')!.enabled, true);
   const equipOperationId = randomUUID();
@@ -981,7 +990,7 @@ async function verifyBattleSession(request: TestRequest, app: INestApplication) 
   const inventory = app.get(InventoryService), database = app.get(Database), repository = app.get(BattlesRepository);
   await inventory.receive(hero.id, 'potion', 20, randomUUID());
   const initial = await inventory.get(hero.id);
-  const sword = initial.items.find(item => item.itemId === 'iron-sword')!;
+  const sword = initial.items.find(item => item.itemId === 'iron-sword' && item.quality?.rank.id === 'common')!;
   await inventory.execute({ type: 'equip', instanceId: sword.id }, randomUUID());
   const room = await request<Battle>('/battles', { name: 'Жеребьёвка и пояс', characterId: hero.id, kind: 'duel' });
   const joined = await request<Battle>(`/battles/${room.id}/join`, { characterId: enemy.id, team: 1 });

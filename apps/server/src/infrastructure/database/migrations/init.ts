@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { Migration, sql } from 'kysely';
-import { seedContent, consumableEffects, demoAccounts } from '@game/core';
+import { seedContent, consumableEffects, demoAccounts, addEquipmentSamples, equipmentSampleDefinitions, equipmentSampleSignature, backpackStacks, type InventoryState } from '@game/core';
 import characters from '../seeds/demo-characters.json';
 
 /** Pre-release v1 baseline. Schema changes belong here until a new release is explicitly started. */
@@ -200,15 +200,26 @@ export const initialMigration: Migration = {
       .addCheckConstraint('world_delivery_sequence', sql`sequence between 1 and 9007199254740991`).execute();
     for (const [index, character] of characters.entries()) {
       const accountId = demoAccounts[Math.floor(index / 5)].id;
-      await db.insertInto('characters').values({ id: character.id, account_id: accountId, data: JSON.stringify({ ...character, accountId }) }).execute();
-      await db.insertInto('inventories').values({ id: character.id, owner_id: character.id, name: 'Рюкзак', capacity: 50, is_primary: true }).execute();
-      for (const stack of character.inventory) {
+      const initial: InventoryState = { ownerId: character.id,
+        inventories: [{ id: character.id, ownerId: character.id, name: 'Рюкзак', capacity: 50, primary: true }], items: [] };
+      const sampleDefinitions = equipmentSampleDefinitions(seedContent);
+      for (const stack of character.inventory.filter(stack => !sampleDefinitions.some(item => item.id === stack.itemId))) {
         const definition = seedContent.items.find(item => item.id === stack.itemId)!;
         for (let remaining = stack.quantity; remaining > 0; remaining -= definition.stackLimit) {
-          await db.insertInto('item_instances').values({ id: randomUUID(), owner_id: character.id, inventory_id: character.id,
-            item_id: stack.itemId, effects: consumableEffects(definition).length ? JSON.stringify(consumableEffects(definition)) : null, quantity: Math.min(remaining, definition.stackLimit), item_level: definition.itemLevel ?? 1, definition_version: definition.version ?? 1 }).execute();
+          const effects = consumableEffects(definition);
+          initial.items.push({ id: randomUUID(), ownerId: character.id, inventoryId: character.id, equippedSlot: null,
+            itemId: stack.itemId, ...(effects.length ? { effects } : {}), quantity: Math.min(remaining, definition.stackLimit), itemLevel: definition.itemLevel ?? 1, definitionVersion: definition.version ?? 1 });
         }
       }
+      const samples = addEquipmentSamples(initial, seedContent, randomUUID, max => randomInt(0, max));
+      await db.insertInto('characters').values({ id: character.id, account_id: accountId, data: JSON.stringify({ ...character, accountId, inventory: backpackStacks(samples.state) }) }).execute();
+      await db.insertInto('inventories').values({ id: character.id, owner_id: character.id, name: 'Рюкзак', capacity: 50, is_primary: true }).execute();
+      for (const item of samples.state.items) {
+        await db.insertInto('item_instances').values({ id: item.id, owner_id: item.ownerId, inventory_id: item.inventoryId,
+          item_id: item.itemId, effects: item.effects ? JSON.stringify(item.effects) : null, quantity: item.quantity,
+          item_level: item.itemLevel ?? 1, definition_version: item.definitionVersion ?? 1, quality: item.quality ? JSON.stringify(item.quality) : null }).execute();
+      }
+      await db.insertInto('inventory_operations').values({ id: character.id, signature: equipmentSampleSignature(character.id), result: JSON.stringify(samples.result) }).execute();
     }
   },
 };

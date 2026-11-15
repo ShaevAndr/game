@@ -9,6 +9,7 @@ export * from './items';
 export * from './skills';
 export * from './skill-tree';
 export * from './inventory';
+export * from './equipment-samples';
 export * from './crafting';
 export * from './attributes';
 export * from './effects/stat-modifiers';

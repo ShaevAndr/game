@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
+import { addEquipmentSamples, equipmentSampleDefinitions, equipmentSampleSignature } from '@game/core';
 import { canonicalJson, receiveInventoryItems, resolveWorldTool, worldBuildingRecipes, validateWorldBuildPermit, type WorldBuildPermit } from '@game/core';
 import { Content, InventoryCommand, InventoryState, ItemInstance, ItemStack, applyInventoryCommand, availableItemActions, backpackStacks, equipmentBonuses, equipmentAttributeSources, equipmentRequirementBlockers, projectCharacterAttributes, isBattleConsumable } from '@game/core';
 import { z } from 'zod';
@@ -41,7 +42,28 @@ export class InventoryService {
   /** Creates the owner's backpack and starting items in the character creation transaction. */
   async initialize(ownerId: string, content: Content, context: TransactionContext) {
     const character = await this.characters.get(ownerId, content, context, true);
-    await this.repository.ensurePrimary(ownerId, character.inventory, Object.fromEntries(content.items.map(item => [item.id, item.stackLimit])), context, content.items);
+    const samples = equipmentSampleDefinitions(content);
+    await this.repository.ensurePrimary(ownerId, character.inventory.filter(stack => !samples.some(item => item.id === stack.itemId)), this.limits(content), context, content.items);
+    await this.seedEquipmentSamples(ownerId, context, content);
+  }
+
+  /** Local fixtures only; no HTTP route. The owner UUID is a stable grant receipt. */
+  async seedEquipmentSamples(ownerId: string, context?: TransactionContext, catalog?: Content) {
+    const content = catalog ?? await this.content.get(true);
+    const apply = async (transaction: TransactionContext) => {
+      const signature = equipmentSampleSignature(ownerId);
+      const receipt = await this.repository.claimOperation(ownerId, signature, transaction);
+      if (receipt.signature !== signature) throw new ConflictException('ID набора экипировки уже занят другой операцией');
+      if (receipt.result) return receipt.result;
+      const state = await this.state(ownerId, content, transaction);
+      let samples: ReturnType<typeof addEquipmentSamples>;
+      try { samples = addEquipmentSamples(state, content, randomUUID, max => randomInt(0, max)); }
+      catch (error) { throw new BadRequestException((error as Error).message); }
+      await this.commit([samples.state], content, transaction);
+      await this.repository.finishOperation(ownerId, samples.result, transaction);
+      return samples.result;
+    };
+    return context ? apply(context) : this.transactions.run(apply);
   }
 
   async get(ownerId: string) {

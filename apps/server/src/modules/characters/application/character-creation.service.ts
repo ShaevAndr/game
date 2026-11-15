@@ -18,7 +18,7 @@ export class CharacterCreationService {
     return this.transactions.run(async context => {
       const character = await this.characters.create(input, content, context, accountId);
       await this.inventory.initialize(character.id, content, context);
-      return character;
+      return this.characters.get(character.id, content, context, true);
     });
   }
 }

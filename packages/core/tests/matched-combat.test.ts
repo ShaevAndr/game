@@ -25,13 +25,14 @@ function swap(battle: Battle, direct: Partial<Record<TileType, number>> = {}, ge
 function cast(battle: Battle, skillId = 'strike', targetId = 'enemy') { applyAction(battle, battle.activeId!, { type: 'skill', skillId, targetId }); }
 function pass(battle: Battle) { swap(battle); applyAction(battle, battle.activeId!, { type: 'end' }); }
 
-test('every ordinary or defense match supplies one energy per cell and pays for the basic attack', () => {
+test('every ordinary or defense cell supplies two energy, with cascades credited after the basic attack', () => {
   for (const type of tileTypes) {
-    const battle = duel(); swap(battle, { [type]: 3 });
-    assert.equal(battle.fighters[0].skillEnergy, 3);
+    const battle = duel(); swap(battle, { [type]: 3 }, { [type]: 3 });
+    assert.equal(battle.fighters[0].skillEnergy, 6);
     assert.ok(battle.skillChoices!.find(choice => choice.skillId === 'strike')!.enabled);
     assert.equal(battle.fighters[0].guardDefense, type === 'defense' ? 30 : 0);
-    cast(battle); assert.equal(battle.fighters[0].skillEnergy, 2);
+    cast(battle); assert.equal(battle.fighters[0].skillEnergy, 11);
+    assert.equal(battle.fighters[0].guardDefense, type === 'defense' ? 30 : 0);
   }
 });
 
@@ -41,7 +42,7 @@ test('all learned skills are visible after any swap, with separate bonuses and r
   assert.equal(battle.skillChoices!.find(choice => choice.skillId === 'ember')!.matchPowerBps, 10000);
   assert.equal(battle.skillChoices!.find(choice => choice.skillId === 'spring')!.matchPowerBps, 15000);
   assert.equal(battle.skillChoices!.find(choice => choice.skillId === 'spring')!.reason, 'Недостаточно энергии');
-  cast(battle, 'ember'); assert.equal(battle.fighters[0].skillEnergy, 0); assert.equal(battle.fighters[1].hp, 226);
+  cast(battle, 'ember'); assert.equal(battle.fighters[0].skillEnergy, 3); assert.equal(battle.fighters[1].hp, 226);
 });
 
 test('a nonmatching swap keeps positions and allows a saved-energy skill without resonance', () => {
@@ -74,10 +75,10 @@ test('resonance is per school, starts at 1.5, caps at 2.5 and ignores unrelated 
 
 test('only direct energy can fund this cast; secondary energy arrives once after spending', () => {
   const battle = duel(['fireball']); swap(battle, { air: 3 }, { fire: 40 });
-  assert.equal(battle.fighters[0].skillEnergy, 3);
+  assert.equal(battle.fighters[0].skillEnergy, 6);
   const before = structuredClone(battle);
   assert.throws(() => cast(battle, 'fireball'), /энергии/); assert.deepEqual(battle, before);
-  cast(battle); assert.equal(battle.fighters[0].skillEnergy, 42);
+  cast(battle); assert.equal(battle.fighters[0].skillEnergy, 85);
   assert.equal(battle.pendingBattlefield, undefined); assert.deepEqual(battle.directMatches, {});
   assert.throws(() => cast(battle), /не изучен|другого участника|перестановку/);
 });
@@ -86,7 +87,7 @@ test('capacity is freed before cascades, and the shared pool never exceeds 200',
   const battle = duel(['fireball']); battle.fighters[0].skillEnergy = 199;
   swap(battle, { air: 3 }, { water: 3 });
   assert.equal(battle.fighters[0].skillEnergy, 200);
-  cast(battle, 'fireball'); assert.equal(battle.fighters[0].skillEnergy, 178);
+  cast(battle, 'fireball'); assert.equal(battle.fighters[0].skillEnergy, 181);
   pass(battle); swap(battle, { earth: 3 }, { defense: 100 }); applyAction(battle, 'hero', { type: 'end' });
   assert.equal(battle.fighters[0].skillEnergy, 200);
 });
@@ -95,7 +96,7 @@ test('healing can use stored energy after another school and is strengthened onl
   for (const [type, expected] of [['fire', 70], ['water', 75]] as const) {
     const battle = duel(['spring']); battle.fighters[0].hp = 60; battle.fighters[0].skillEnergy = 8;
     swap(battle, { [type]: 3 }, { water: 20 }); cast(battle, 'spring', 'hero');
-    assert.equal(battle.fighters[0].hp, expected); assert.equal(battle.fighters[0].skillEnergy, 23);
+    assert.equal(battle.fighters[0].hp, expected); assert.equal(battle.fighters[0].skillEnergy, 46);
   }
 });
 
@@ -127,7 +128,7 @@ test('a potion consumes the one application but preserves the mandatory swap and
   assert.throws(() => applyAction(battle, 'hero', { type: 'end' }), /перестановку/);
   swap(battle, { defense: 3 }, { physical: 4 });
   assert.equal(battle.activeId, 'enemy'); assert.equal(battle.fighters[0].hp, 135);
-  assert.equal(battle.fighters[0].skillEnergy, 7); assert.equal(battle.fighters[0].guardDefense, 30);
+  assert.equal(battle.fighters[0].skillEnergy, 14); assert.equal(battle.fighters[0].guardDefense, 30);
 });
 
 test('NPC can spend energy after an unrelated or nonmatching swap under the same rules', () => {
@@ -151,5 +152,5 @@ test('saved continuations restore without rerolling the board, and publish each 
   const restored: Battle = JSON.parse(JSON.stringify(battle));
   assert.equal(restored.skillChoices!.find(choice => choice.skillId === 'ember')!.matchPowerBps, 17500);
   applyAction(restored, 'hero', { type: 'skill', skillId: 'ember', targetId: 'enemy' }, () => { throw new Error('must not reroll'); }, staged);
-  assert.equal(calls, 1); assert.deepEqual(restored.board, finalBoard); assert.equal(restored.fighters[0].skillEnergy, 4);
+  assert.equal(calls, 1); assert.deepEqual(restored.board, finalBoard); assert.equal(restored.fighters[0].skillEnergy, 11);
 });

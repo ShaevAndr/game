@@ -105,6 +105,31 @@ test('inventory service persists equip, replacement and unequip with character p
   assert.equal(f.state().characters[hero.id].inventory.find(stack => stack.itemId === 'iron-sword')?.quantity, 2);
 });
 
+test('equipment sample grant preserves development and equipped items; replay keeps the saved random rolls', async () => {
+  const f = fixture(), hero = f.seed('Сравнение');
+  const sword = (await f.inventory.get(hero.id)).items.find(item => item.itemId === 'iron-sword')!;
+  await f.inventory.execute({ type: 'equip', instanceId: sword.id }, randomUUID());
+  Object.assign(f.state().characters[hero.id], { level: 3, experience: 70, skillPoints: 2, learnedSkillIds: ['strike'], skillLevels: { strike: 2 } });
+  const before = structuredClone(f.state().characters[hero.id]);
+  const result = await f.inventory.seedEquipmentSamples(hero.id);
+  assert.equal(result.createdItems!.length, 14);
+  assert.equal(f.state().inventories[hero.id].items.find(item => item.id === sword.id)!.equippedSlot, 'main-hand');
+  const after = f.state().characters[hero.id];
+  assert.deepEqual({ ...after, inventory: before.inventory }, before);
+  const committed = structuredClone(f.state());
+  assert.deepEqual(await f.inventory.seedEquipmentSamples(hero.id), result);
+  assert.deepEqual(f.state(), committed);
+});
+
+test('a sample grant persistence failure rolls back instances, projections and receipt; retry issues one complete set', async () => {
+  const f = fixture(), hero = f.seed('Откат набора'), before = structuredClone(f.state());
+  f.failSave(true);
+  await assert.rejects(f.inventory.seedEquipmentSamples(hero.id), /inventory persistence failed/);
+  assert.deepEqual(f.state(), before);
+  f.failSave(false);
+  assert.equal((await f.inventory.seedEquipmentSamples(hero.id)).createdItems!.length, 14);
+});
+
 test('active battles block equip, replacement and unequip; views explain the block and rejected receipts roll back', async () => {
   const f = fixture(), hero = f.seed('Участник'), other = f.seed('Вне боя');
   const sword = (await f.inventory.get(hero.id)).items.find(item => item.itemId === 'iron-sword')!;
