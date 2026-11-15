@@ -1,3 +1,4 @@
+import { skillBranchSchema, skillIcons, validateSkillTree, type SkillBranch, type SkillIcon } from './skill-tree';
 import { z } from 'zod';
 import { combatFormulaRulesSchema, type CombatFormulaRules, type DamageChances, type DamageResolution } from './combat/formulas';
 import { itemScalingProfileSchema, modifierAllowed, type ItemScalingProfile } from './modifiers';
@@ -34,8 +35,8 @@ export interface Character { id: string; name: string; templateId?: string; leve
   equipmentModifiers?: StatModifier[]; equipmentScaling?: ScaledEquipmentBonus[];
 }
 export interface CharacterTemplate { id: string; name: string; description: string; element: Element; skillId: string }
-export interface SkillLearning { pointCost: number; level: number; prerequisites: string[]; stats: Partial<Stats>; starter: boolean; requirements?: Record<string, number> }
-export interface Skill { matchBonus?: boolean; id: string; name: string; description: string; element: Element; cost: number; power: number; effect: 'damage' | 'heal' | 'modifier' | 'dispel'; cooldown: number; learning: SkillLearning; progression?: SkillProgression; targeting?: SkillTargeting; effects?: SkillEffect[] }
+export interface SkillLearning { branch?: SkillBranch; pointCost: number; level: number; prerequisites: string[]; stats: Partial<Stats>; starter: boolean; requirements?: Record<string, number> }
+export interface Skill { icon?: SkillIcon; matchBonus?: boolean; id: string; name: string; description: string; element: Element; cost: number; power: number; effect: 'damage' | 'heal' | 'modifier' | 'dispel'; cooldown: number; learning: SkillLearning; progression?: SkillProgression; targeting?: SkillTargeting; effects?: SkillEffect[] }
 export interface SkillProgression { maxLevel: number; pointCost: number; powerPerLevel: number }
 export interface Enemy { id: string; name: string; level?: number; stats: Stats; skillIds: string[] }
 export interface Progression { baseExperience: number; experiencePerLevel: number; startingSkillPoints: number; skillPointsPerLevel: number; statGrowth: Stats; victoryExperience: Record<BattleKind, number> }
@@ -44,7 +45,7 @@ export interface Balance { formulas?: CombatFormulaRules; combat?: CombatRules; 
 export interface Content { modifierRulesVersion?: 1; itemScalingProfiles?: ItemScalingProfile[]; itemRanks?: ItemRank[]; professions?: CraftingProfession[]; rankProfiles?: RankProfile[]; modifierDefinitions?: ModifierDefinition[]; itemGroups?: ItemGroup[]; skills: Skill[]; items: Item[]; enemies: Enemy[]; characterTemplates: CharacterTemplate[]; balance: Balance; recipes?: CraftingRecipe[]; statDefinitions?: StatDefinition[]; effectsVersion?: 1 }
 const statsSchema = z.object({ maxHp: z.number().int().positive().max(100000), attack: z.number().int().nonnegative().max(10000), defense: z.number().int().nonnegative().max(10000), maxEnergy: z.number().int().positive().max(10000) });
 const contentId = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
-const learningSchema = z.object({ pointCost: z.number().int().min(1).max(100), level: z.number().int().min(1).max(1000), prerequisites: z.array(contentId).max(20), stats: statsSchema.partial(), starter: z.boolean(), requirements: z.record(z.string(), z.number().int().min(0).max(1_000_000)).optional() });
+const learningSchema = z.object({ branch: skillBranchSchema.optional(), pointCost: z.number().int().min(1).max(100), level: z.number().int().min(1).max(1000), prerequisites: z.array(contentId).max(20), stats: statsSchema.partial(), starter: z.boolean(), requirements: z.record(z.string(), z.number().int().min(0).max(1_000_000)).optional() });
 export const progressionSchema = z.object({ baseExperience: z.number().int().min(1).max(1000000), experiencePerLevel: z.number().int().min(0).max(1000000), startingSkillPoints: z.number().int().min(0).max(1000), skillPointsPerLevel: z.number().int().min(1).max(100), statGrowth: z.object({ maxHp: z.number().int().min(0).max(1000), attack: z.number().int().min(0).max(1000), defense: z.number().int().min(0).max(1000), maxEnergy: z.number().int().min(0).max(1000) }), victoryExperience: z.object({ duel: z.number().int().positive().max(1000000), bot: z.number().int().positive().max(1000000).default(100), team: z.number().int().positive().max(1000000), dungeon: z.number().int().positive().max(1000000) }) });
 export const contentSchema = z.object({
   modifierRulesVersion: z.literal(1).optional(), itemScalingProfiles: z.array(itemScalingProfileSchema).max(64).optional(),
@@ -53,7 +54,7 @@ export const contentSchema = z.object({
   effectsVersion: z.literal(1).optional(),
   statDefinitions: statDefinitionsSchema.optional(),
   characterTemplates: z.array(z.object({ id: contentId, name: z.string().min(1).max(80), description: z.string().max(500), element: z.enum(elements), skillId: contentId })).default([]),
-  skills: z.array(z.object({ matchBonus: z.boolean().optional(), id: contentId, name: z.string().min(1).max(80), description: z.string().max(500), element: z.enum(elements), cost: z.number().int().nonnegative().max(10000), power: z.number().int().nonnegative().max(10000), effect: z.enum(['damage', 'heal', 'modifier', 'dispel']), cooldown: z.number().int().nonnegative().max(100), learning: learningSchema, progression: z.object({ maxLevel: z.number().int().min(1).max(10), pointCost: z.number().int().min(1).max(100), powerPerLevel: z.number().int().min(0).max(10000) }).optional(), targeting: targetingSchema.optional(), effects: z.array(skillEffectSchema).min(1).max(16).optional() })).min(1),
+  skills: z.array(z.object({ icon: z.enum(skillIcons).optional(), matchBonus: z.boolean().optional(), id: contentId, name: z.string().min(1).max(80), description: z.string().max(500), element: z.enum(elements), cost: z.number().int().nonnegative().max(10000), power: z.number().int().nonnegative().max(10000), effect: z.enum(['damage', 'heal', 'modifier', 'dispel']), cooldown: z.number().int().nonnegative().max(100), learning: learningSchema, progression: z.object({ maxLevel: z.number().int().min(1).max(10), pointCost: z.number().int().min(1).max(100), powerPerLevel: z.number().int().min(0).max(10000) }).optional(), targeting: targetingSchema.optional(), effects: z.array(skillEffectSchema).min(1).max(16).optional() })).min(1),
   itemGroups: z.array(itemGroupSchema).default(defaultItemGroups),
   items: z.array(itemDefinitionSchema),
   recipes: z.array(craftingRecipeSchema).default([]),
@@ -120,6 +121,7 @@ export const contentSchema = z.object({
       if (!content.items.some(item => item.id === ingredient.itemId)) fail(`Неизвестный предмет рецепта ${recipe.id}: ${ingredient.itemId}`);
     }
   }
+  try { validateSkillTree(content.skills); } catch (error) { fail((error as Error).message); }
   const skills = new Map(content.skills.map(s => [s.id, s]));
   if (skills.size !== content.skills.length) fail('ID навыков должны быть уникальными');
   if (new Set(content.characterTemplates.map(t => t.id)).size !== content.characterTemplates.length) fail('ID типов персонажей должны быть уникальными');

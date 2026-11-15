@@ -155,6 +155,19 @@ test('learning validates requirements on the server and rolls back failed change
   await assert.rejects(f.skills.learn(winnerId, { skillId: 'fireball' }), /уровень|Сначала/); assert.deepEqual(f.state().characters[winnerId].data, initial);
   await f.skills.learn(winnerId, { skillId: 'ember' }); await assert.rejects(f.skills.learn(winnerId, { skillId: 'ember' }), /уже изучен/); assert.equal(f.state().characters[winnerId].data.skillPoints, 1);
 });
+test('server learning accepts an alternative parent node member and concurrent purchases spend points once', async () => {
+  const f = fixture(), hero = f.state().characters[winnerId].data;
+  hero.level = 2; hero.stats.attack = 10; hero.skillPoints = 3;
+  const before = structuredClone(hero);
+  await assert.rejects(f.skills.learn(winnerId, { skillId: 'fireball' }), /любой навык узла/);
+  assert.deepEqual(f.state().characters[winnerId].data, before);
+  await f.skills.learn(winnerId, { skillId: 'phoenix-warmth' });
+  const results = await Promise.allSettled([f.skills.learn(winnerId, { skillId: 'fireball' }), f.skills.learn(winnerId, { skillId: 'fireball' })]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  const learned = f.state().characters[winnerId].data;
+  assert.equal(learned.skillPoints, 1); assert.ok(learned.learnedSkillIds.includes('fireball'));
+  assert.ok(!learned.learnedSkillIds.includes('ember'));
+});
 test('starting a lobby freezes the latest learned skills and stats, and content rules', async () => {
   const f = fixture(), room = f.state().battles[battleId].data;
   room.status = 'waiting'; room.activeId = null;

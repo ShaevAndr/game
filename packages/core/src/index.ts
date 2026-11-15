@@ -7,6 +7,7 @@ export * from './battle';
 export * from './progression';
 export * from './items';
 export * from './skills';
+export * from './skill-tree';
 export * from './inventory';
 export * from './crafting';
 export * from './attributes';

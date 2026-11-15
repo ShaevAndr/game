@@ -5,8 +5,8 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { allocateAttributes, applyAction, combatStatDefinitions, createBoard, createCharacter, defaultCombatFormulaRules, defaultProfessions,
-  gatheringCatalog, gatheringView, initialGatheringState, joinBattle, learnSkill, newBattle, possibleMove, seedContent, seedEffectSkills,
-  startBattle, type Content, type InventoryState } from '@game/core';
+  gatheringCatalog, gatheringView, gainExperience, initialGatheringState, joinBattle, learnSkill, newBattle, possibleMove, seedContent, seedEffectSkills,
+  startBattle, upgradeSkill, type Content, type InventoryState } from '@game/core';
 
 // Browser fixture stays outside the player's database. Commands still use the actual pure combat rules.
 test('fantasy interface: all screens, responsive battle, target selection and a complete skill choice', { timeout: 120000 }, async t => {
@@ -55,6 +55,8 @@ test('fantasy interface: all screens, responsive battle, target selection and a 
     if (path === '/identity/session') return send(request.method() === 'POST' ? { ...session(), token: 'fantasy-browser' } : session());
     if (path === '/identity/session/character') { selected = body.characterId; return send(session()); }
     if (path === '/characters') return send([hero]);
+    if (path === `/characters/${hero.id}/skills`) { learnSkill(hero, body.skillId, content); return send(hero, 201); }
+    if (path.endsWith('/upgrade')) { upgradeSkill(hero, path.split('/').at(-2)!, content); return send(hero, 201); }
     if (path === '/content') return send(content);
     if (path === '/parties') return send({ party: null, incoming: [], outgoing: [], players: [], capacity: 6, serverTime: Date.now() });
     if (path === '/social') return send({ revision: 1, visibilityRevision: 1, relationships: [] });
@@ -88,6 +90,45 @@ test('fantasy interface: all screens, responsive battle, target selection and a 
       await page.setViewportSize({ width: 390, height: 844 }); await noOverflow(`${hash} mobile`);
       await page.setViewportSize({ width: 1440, height: 1120 });
     }
+    // Learning uses the real rules: choose one root alternative, then one branch member.
+    const learner = createCharacter(hero.id, 'Алира', content, 'pyromancer');
+    gainExperience(learner, 1000, content.balance.progression);
+    hero = allocateAttributes(learner, { intelligence: 10 }, content); hero.accountId = account.id;
+    await page.goto(`${origin}/#skills`); await page.reload();
+    const card = (id: string) => page.locator(`.skill-tree-card[data-skill-id="${id}"]`);
+    await card('phoenix-warmth').waitFor();
+    assert.equal(await page.getByRole('tab').count(), 5);
+    assert.equal(await page.getByRole('tabpanel').count(), 1);
+    assert.ok(await page.locator('.skill-tree-connections path').count() > 0);
+    assert.equal(await card('inferno').getByRole('button').isDisabled(), true);
+    await card('phoenix-warmth').getByRole('button').click();
+    await card('phoenix-warmth').getByText('ИЗУЧЕНО · 1/10', { exact: true }).waitFor();
+    assert.equal(await card('burning-brand').getByRole('button').isEnabled(), true);
+    await card('burning-brand').getByRole('button').click();
+    await card('burning-brand').getByText('ИЗУЧЕНО · 1/10', { exact: true }).waitFor();
+    await card('inferno').getByRole('button').click();
+    await card('inferno').getByText('ИЗУЧЕНО · 1/10', { exact: true }).waitFor();
+    assert.ok(!hero.learnedSkillIds.includes('ember')); assert.ok(!hero.learnedSkillIds.includes('fireball'));
+    assert.equal(await card('phoenix-heart').getByRole('button').isDisabled(), true);
+    await card('burning-brand').getByRole('button').click();
+    await card('burning-brand').getByText('ИЗУЧЕНО · 2/10', { exact: true }).waitFor();
+    assert.equal(await card('phoenix-heart').getByRole('button').isDisabled(), true);
+    await shot('skills-tree-fire.png');
+    await page.getByRole('tab', { name: /Вода/ }).click(); await card('spring').waitFor();
+    assert.equal(await card('ember').count(), 0);
+    await shot('skills-tree-water.png');
+    await page.getByRole('tab', { name: /Вода/ }).press('ArrowRight');
+    assert.equal(await page.getByRole('tab', { name: /Земля/ }).getAttribute('aria-selected'), 'true');
+    await page.getByRole('tab', { name: /Земля/ }).press('Home'); await card('ember').waitFor();
+    await card('healing-flame').getByRole('button').click();
+    await card('healing-flame').getByText('ИЗУЧЕНО · 1/10', { exact: true }).waitFor();
+    await card('phoenix-heart').getByRole('button').click();
+    await card('phoenix-heart').getByText('ИЗУЧЕНО · 1/10', { exact: true }).waitFor();
+    assert.equal(hero.skillPoints, 0);
+    await page.setViewportSize({ width: 390, height: 844 }); await noOverflow('skill tree mobile');
+    await card('burning-brand').getByText('Требования и действие').click();
+    await shot('skills-tree-mobile.png');
+    await page.setViewportSize({ width: 1440, height: 1120 });
     await page.goto(`${origin}/#${battle.id}`); await page.locator('.battle-arena').waitFor();
     assert.equal(await page.locator('.tile').count(), 64);
     const target = page.getByRole('button', { name: `Выбрать цель: ${enemy.name}` });

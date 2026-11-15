@@ -1,3 +1,4 @@
+import { withSeedSkillTree } from '../skill-tree-content';
 import type { Skill } from '../types';
 import type { StatModifierEffect } from './types';
 
@@ -9,7 +10,7 @@ const modifier = (id: string, statId: string, weightBps: number, polarity: 'buff
 const base = { power: 0, cooldown: 2, learning: { pointCost: 1, level: 1, prerequisites: [], stats: {}, starter: false }, progression: { maxLevel: 10, pointCost: 1, powerPerLevel: 0 } };
 
 /** Seeded separately from the historical catalog so saved legacy fixtures remain reproducible. */
-export const seedEffectSkills: Skill[] = [
+const rawEffectSkills: Skill[] = [
   { ...base, id: 'battle-cry', matchBonus: false, name: 'Боевой клич', description: 'Усиливает силу себя или союзника на два его следующих хода. При силе 10: +20%.', element: 'physical', cost: 8, effect: 'modifier', cooldown: 3,
     targeting: { kind: 'ally_single', includeSelf: true }, effects: [modifier('battle-cry-strength', 'strength', 2000000, 'buff', 'strength', 0, 3500)] },
   { ...base, id: 'weakening', matchBonus: false, name: 'Ослабление', description: 'Снижает физическую мощь противника на два его хода. При силе 10: −20%.', element: 'physical', cost: 8, effect: 'modifier',
@@ -37,7 +38,7 @@ const stun = (chance: number, growth = 0, cap = chance): import('./types').StunE
   id: 'stun', name: 'Оглушение', recipient: 'selected', kind: 'stun', durationTurns: 1,
   activationChanceBps: chance, ...(growth ? { chancePerSkillRankBps: growth } : {}), maxChanceBps: cap, dispellable: true, tags: ['control'],
 });
-seedEffectSkills.push(
+rawEffectSkills.push(
   { ...base, id: 'concussive-blow', name: 'Оглушающий удар', description: 'Умеренный физический урон и фиксированный шанс 50% пропустить следующий ход. Растёт только урон.',
     element: 'physical', cost: 25, effect: 'damage', cooldown: 3, learning: { ...base.learning, level: 2, pointCost: 2, prerequisites: ['lunge'] },
     targeting: { kind: 'enemy_single' }, effects: [hit('physical', 14000, 600), stun(5000)] },
@@ -63,7 +64,7 @@ seedEffectSkills.push(
 const hp = (statId: string, weightBps: number, weightPerRankBps = 300): import('./types').EffectExpression => ({
   unit: 'hp', terms: [{ scope: 'caster', statId, weightBps, weightPerRankBps }], min: 0, max: 1000000,
 });
-seedEffectSkills.push(
+rawEffectSkills.push(
   { ...base, id: 'flying-blade', name: 'Летящий клинок', description: 'Воздух направляет клинок: физический урон от физической мощи. Даёт бойцу второй тип полезных совпадений за очко навыка.',
     element: 'air', cost: 3, effect: 'damage', cooldown: 0, targeting: { kind: 'enemy_single' },
     effects: [{ id: 'blade', kind: 'damage', recipient: 'selected', damageType: 'physical', magnitude: hp('physicalPower', 18000, 500) }] },
@@ -96,7 +97,7 @@ export const seedEnemySkillSets: Record<string, string[]> = {
 };
 
 // Universal physical techniques: their strength is independent of tile colors and match size.
-seedEffectSkills.push(
+rawEffectSkills.push(
   { ...base, id: 'brace', name: 'Собраться', description: 'Щит от выносливости и физической защиты. Любой тип поля, без бонуса совпадения.',
     element: 'physical', matchBonus: false, cost: 8, effect: 'modifier', cooldown: 2, targeting: { kind: 'self' },
     effects: [{ id: 'brace', kind: 'shield', recipient: 'caster', magnitude: { unit: 'hp', terms: [
@@ -117,7 +118,7 @@ seedEffectSkills.push(
       magnitude: { unit: 'basis_points', constant: 400, terms: [{ scope: 'caster', statId: 'dexterity', weightBps: 10000, weightPerRankBps: 10000 }], min: 0, max: 1500 }, durationTurns: 2 }] },
 );
 
-seedEffectSkills.push({ ...base, id: 'precise-thrust', name: 'Точный выпад',
+rawEffectSkills.push({ ...base, id: 'precise-thrust', name: 'Точный выпад',
   description: 'Базовая атака ловкого бойца: физическая мощь и ловкость определяют урон, ловкость — крит и точность.',
   element: 'physical', cost: 3, effect: 'damage', cooldown: 0,
   learning: { ...base.learning, requirements: { dexterity: 12 } }, targeting: { kind: 'enemy_single' },
@@ -125,3 +126,5 @@ seedEffectSkills.push({ ...base, id: 'precise-thrust', name: 'Точный вы�
     terms: [{ scope: 'caster', statId: 'physicalPower', weightBps: 10000 },
       { scope: 'caster', statId: 'dexterity', weightBps: 11000, weightPerRankBps: 1000 }] } }],
 });
+
+export const seedEffectSkills: Skill[] = withSeedSkillTree(rawEffectSkills);

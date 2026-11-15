@@ -1,3 +1,4 @@
+import { withSeedSkillTree } from './skill-tree-content';
 import { Content, SkillLearning } from './types';
 import { defaultItemGroups } from './items';
 import { gatheringItems, gatheringRecipes } from './gathering/materials';
@@ -90,3 +91,5 @@ export const seedContent: Content = {
     { id: 'warden', name: 'Хранитель глубин', stats: { maxHp: 150, attack: 9, defense: 4, maxEnergy: 200 }, skillIds: ['strike', 'cleave', 'fireball'] },
   ],
 };
+
+seedContent.skills = withSeedSkillTree(seedContent.skills);

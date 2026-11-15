@@ -1,47 +1,95 @@
-import { Character, Content, Skill, elementNames, elements, learningBlockers, learningStatRequirements, skillLevel, skillPower, skillProgression, upgradeBlockers } from '@game/core';
-import { symbols } from '../../../shared/ui/game-labels';
-import { targetingLabels } from '../../../shared/ui/effect-labels';
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { elements, elementNames, skillTreeNodes, type Character, type Content, type Element, type SkillTreeNode } from '@game/core';
+import { SkillEmblem } from './SkillEmblem';
+import { SkillCard } from './SkillCard';
+import { useSkillConnections } from '../model/useSkillConnections';
 import '../../battles/effects.css';
+import '../skill-tree.css';
 
 interface Props { character?: Character; content: Content | null; busy: boolean; onLearn: (id: string) => void; onUpgrade: (id: string, expectedLevel: number) => void }
+const schools: Record<Element, { title: string; motto: string; icon: Parameters<typeof SkillEmblem>[0]['icon'] }> = {
+  fire: { title: 'Огонь', motto: 'Покори пламя. Выбери разрушение или силу феникса.', icon: 'flame' },
+  water: { title: 'Вода', motto: 'Сковывай врагов льдом или возвращай союзникам силы.', icon: 'drop' },
+  earth: { title: 'Земля', motto: 'Пробуди гнев гор и несокрушимую силу живых корней.', icon: 'mountain' },
+  air: { title: 'Воздух', motto: 'Призови бурю или обрати ветер в защиту союзников.', icon: 'wind' },
+  physical: { title: 'Физические', motto: 'От основ оружия — к натиску, стойкости и хитрости.', icon: 'sword' },
+};
+
 export function SkillTree({ character, content, busy, onLearn, onUpgrade }: Props) {
+  const [element, setElement] = useState<Element>('fire');
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+  const learnedIds = useMemo(() => character?.learnedSkillIds ?? [], [character?.learnedSkillIds]);
+  const nodes = useMemo(() => {
+    if (!content) return [];
+    const grouped = skillTreeNodes(content.skills).filter(node => node.element === element);
+    // Custom skills without group metadata still show their actual mandatory dependencies.
+    const ungrouped = content.skills.filter(skill => skill.element === element && !skill.learning.branch).map((skill, i): SkillTreeNode => ({
+      id: `single-${skill.id}`, name: skill.name, element, order: 100 + i, skills: [skill],
+      parents: skill.learning.prerequisites.map(id => content.skills.find(skill => skill.id === id)?.learning.branch?.id ?? `single-${id}`),
+    }));
+    return [...grouped, ...ungrouped];
+  }, [content, element]);
+  const { ref: graph, drawing } = useSkillConnections(nodes, learnedIds, element);
+  const { rows, lanes } = useMemo(() => {
+    const depths = new Map<string, number>();
+    const depth = (node: SkillTreeNode): number => {
+      if (depths.has(node.id)) return depths.get(node.id)!;
+      const parents = nodes.filter(parent => node.parents.includes(parent.id));
+      const result = parents.length ? 1 + Math.max(...parents.map(depth)) : 0;
+      depths.set(node.id, result); return result;
+    };
+    for (const node of nodes) depth(node);
+    const forks = nodes.filter(node => depths.get(node.id) === 1);
+    const lane = (node: SkillTreeNode): number => {
+      if (forks.some(fork => fork.id === node.id)) return forks.findIndex(fork => fork.id === node.id) + 1;
+      const parent = nodes.find(parent => node.parents.includes(parent.id));
+      return parent ? lane(parent) : 0;
+    };
+    return { rows: [...new Set(depths.values())].sort((a, b) => a - b).map(value => nodes.filter(node => depths.get(node.id) === value)), lanes: new Map(nodes.map(node => [node.id, lane(node)])) };
+  }, [nodes]);
   if (!content) return <section className="panel"><h2>Дерево навыков</h2><p>Загрузка каталога навыков…</p></section>;
-  const skills = content.skills;
-  const depth = (skill: Skill): number => skill.learning.prerequisites.length ? 1 + Math.max(...skill.learning.prerequisites.map(id => { const parent = skills.find(s => s.id === id); return parent ? depth(parent) : -1; })) : 0;
-  return <section className="panel skill-tree-screen">
-    <div className="section-label">РАЗВИТИЕ ПЕРСОНАЖА</div>
-    <div className="section-heading"><div><h2>Пять путей мастерства</h2><p>{character ? `${character.name} · уровень ${character.level}` : 'Выбери персонажа, чтобы изучать навыки.'}</p></div><div className="points-badge"><strong>{character?.skillPoints ?? '—'}</strong><span>ОЧКОВ НАВЫКОВ</span></div></div>
-    <p className="tree-help">Изучи предыдущие навыки ветки, достигни нужного уровня и характеристик. Каждое повышение уровня даёт очки навыков: {content.balance.progression.skillPointsPerLevel}. Новые навыки и характеристики применяются при старте боя. Уже начатые бои сохраняют свой набор.</p>
-    {character && character.learnedSkillIds.length === 0 && <p className="hint">Навыки ещё не выбраны. Перед первым боем изучите базовую атаку любой ветки. «Удар» также изучается за очко навыка.</p>}
-    <div className="skill-branches">{elements.map(element => <section className="skill-branch" key={element} aria-label={`Ветка: ${elementNames[element]}`}>
-      <div className="branch-title"><span className={`element-icon ${element}`}>{symbols[element]}</span><h3>{elementNames[element]}</h3></div>
-      <div className="branch-heroes"><div className="section-label">ГЕРОИ ВЕТКИ</div>{content.characterTemplates.filter(t => t.element === element).map(template => <p key={template.id}><strong>{template.name}</strong><span>Рекомендуемый навык: {skills.find(s => s.id === template.skillId)?.name}</span></p>)}</div>
-      {skills.filter(s => s.element === element).sort((a, b) => depth(a) - depth(b) || a.learning.level - b.learning.level || a.id.localeCompare(b.id)).map(skill => {
-        const level = character ? skillLevel(character, skill.id) : 0;
-        const learned = level > 0;
-        const progression = skillProgression(skill);
-        const upgradeReasons = character ? upgradeBlockers(character, skill) : ['Выберите персонажа'];
-        const blockers = character ? learningBlockers(character, skill, skills, content?.statDefinitions) : ['Выберите персонажа'];
-        const available = !!character && !learned && blockers.length === 0;
-        const r = skill.learning;
-        return <article key={skill.id} className={`skill-node ${learned ? 'learned' : available ? 'available' : 'locked'}`}>
-          <div className="node-status">{learned ? `✓ УРОВЕНЬ ${level} / ${progression.maxLevel}` : available ? 'МОЖНО ИЗУЧИТЬ' : 'ЗАКРЫТ'}</div>
-          <h4>{skill.name}</h4><p className="node-description">{skill.description}</p>
-          {skill.effects?.length ? <><div className="node-effect">{targetingLabels[skill.targeting!.kind]} · Энергия: {skill.cost}<br/>Перезарядка: {skill.cooldown} ход.</div>
-            <ul className="skill-effects-list">{skill.effects.map(effect => <li key={effect.id}>{effect.kind === 'stat_modifier' ? `${effect.polarity === 'buff' ? 'Усиление' : 'Ослабление'}: ${content.statDefinitions?.find(definition => definition.id === effect.statId)?.name ?? effect.statId} · ${typeof effect.durationTurns === 'number' ? `${effect.durationTurns} ход.` : 'срок от характеристик'}` : effect.kind === 'stun' ? `Пропуск ${effect.durationTurns} собственного хода` : effect.kind === 'dispel' ? `Снять ${effect.maxCount} ${effect.polarityToRemove === 'debuff' ? 'дебаф' : 'баф'}` : effect.kind === 'shield' ? `Щит · ${effect.durationTurns} ход.` : effect.kind === 'periodic_damage' ? `Периодический урон · ${effect.durationTurns} ход.` : effect.kind === 'periodic_heal' ? `Периодическое лечение · ${effect.durationTurns} ход.` : effect.kind === 'damage' ? 'Урон от характеристик' : 'Лечение от характеристик'}</li>)}</ul></>
-            : <div className="node-effect">{skill.effect === 'heal' ? 'Лечение' : 'Урон'}: {content.statDefinitions ? `×${((skillPower(skill, level || 1) + (skill.effect === 'damage' ? content.balance.attributes?.skillReferencePower ?? 8 : 0)) / (content.balance.attributes?.skillReferencePower ?? 8)).toFixed(3)} ${skill.effect === 'heal' ? 'силы лечения' : skill.element === 'physical' ? 'физической мощи' : 'магической мощи'}` : skillPower(skill, level || 1)} · Энергия: {skill.cost}<br/>Перезарядка: {skill.cooldown} ход.</div>}
-          {r.starter ? <p className="starter-note">Бесплатный стартовый навык</p> : <ul className="skill-requirements">
-            <li className={character && character.skillPoints >= r.pointCost ? 'met' : ''}>{r.pointCost} очк. навыков{character ? ` · есть ${character.skillPoints}` : ''}</li>
-            <li className={character && character.level >= r.level ? 'met' : ''}>Уровень {r.level}</li>
-            {r.prerequisites.map(id => <li key={id} className={character?.learnedSkillIds.includes(id) ? 'met' : ''}>Навык «{skills.find(s => s.id === id)?.name ?? id}»</li>)}
-            {character && learningStatRequirements(character, skill, content?.statDefinitions).map((requirement, index) => <li key={`${requirement.id}:${index}`} className={requirement.actual >= requirement.required ? 'met' : ''}>{requirement.name} ≥ {requirement.required} · есть {requirement.actual}</li>)}
-          </ul>}
-          {learned ? <>
-            <p className="hint">{skill.effects?.length ? `Улучшение коэффициентов эффектов за ${progression.pointCost} ОН.` : `Улучшение: +${progression.powerPerLevel} силы за ${progression.pointCost} ОН.`}</p>
-            <button className={upgradeReasons.length ? 'ghost' : 'primary'} disabled={busy || upgradeReasons.length > 0} title={upgradeReasons.join('; ')} onClick={() => onUpgrade(skill.id, level)}>{level >= progression.maxLevel ? 'Максимальный уровень' : `Улучшить до ${level + 1} · ${progression.pointCost} ОН`}</button>
-          </> : <button className={available ? 'primary' : 'ghost'} disabled={!available || busy} title={blockers.join('; ')} onClick={() => onLearn(skill.id)}>{available ? `Изучить · ${r.pointCost} ОН` : 'Недоступен'}</button>}
-        </article>;
-      })}
-    </section>)}</div>
+  const current = schools[element], skills = content.skills.filter(skill => skill.element === element);
+  const learned = skills.filter(skill => learnedIds.includes(skill.id)).length;
+  const keyboard = (event: KeyboardEvent, index: number) => {
+    const next = event.key === 'ArrowRight' ? (index + 1) % elements.length : event.key === 'ArrowLeft' ? (index + elements.length - 1) % elements.length
+      : event.key === 'Home' ? 0 : event.key === 'End' ? elements.length - 1 : undefined;
+    if (next === undefined) return;
+    event.preventDefault(); setElement(elements[next]); tabs.current[next]?.focus();
+  };
+  return <section className="panel skill-tree-screen skill-grimoire">
+    <header className="grimoire-heading"><div><div className="section-label">ГРИМУАР МАСТЕРСТВА</div><h2>Выбери свой путь</h2><p>{character ? `${character.name} · уровень ${character.level}` : 'Выбери персонажа, чтобы изучать навыки.'}</p></div>
+      <div className="points-badge" role="status"><strong>{character?.skillPoints ?? '—'}</strong><span>ОЧКОВ НАВЫКОВ</span></div>
+    </header>
+    <div className="skill-school-tabs" role="tablist" aria-label="Школы навыков">{elements.map((school, index) => {
+      const list = content.skills.filter(skill => skill.element === school);
+      return <button key={school} ref={node => { tabs.current[index] = node; }} role="tab" id={`school-tab-${school}`} aria-selected={element === school}
+        aria-controls={`school-panel-${school}`} tabIndex={element === school ? 0 : -1} className={`school-tab school-${school}`} onClick={() => setElement(school)} onKeyDown={event => keyboard(event, index)}>
+        <SkillEmblem element={school} icon={schools[school].icon} small/><span>{schools[school].title}<small>{list.filter(skill => learnedIds.includes(skill.id)).length} / {list.length}</small></span>
+      </button>;
+    })}</div>
+    <section role="tabpanel" id={`school-panel-${element}`} aria-labelledby={`school-tab-${element}`} tabIndex={0} className={`skill-school-panel school-${element}`}>
+      <div className="school-introduction"><SkillEmblem element={element} icon={current.icon}/><div><span className="section-label">ПУТЬ {element === 'physical' ? 'МАСТЕРА ОРУЖИЯ' : elementNames[element].toUpperCase()}</span><h3>{current.title}</h3><p>{current.motto}</p></div><div className="school-mastery"><b>{learned}<span> / {skills.length}</span></b><small>навыков изучено</small></div></div>
+      <div className="tree-rule"><span aria-hidden="true">◇</span><p>Изучи <strong>любой один навык</strong> предыдущего узла, чтобы открыть следующий. Соседние навыки можно выбирать независимо. Уровень героя, характеристики и очки также учитываются.</p></div>
+      {character && learnedIds.length === 0 && <p className="grimoire-empty-note">Начни с верхнего узла. Все пять школ открыты для изучения; выбирать только одну не обязательно.</p>}
+      <div className="tree-state-key"><span><i className="key-learned"/>Изучено</span><span><i className="key-available"/>Можно изучить</span><span><i className="key-locked"/>Нужны требования</span></div>
+      <div className="skill-graph skill-branches" ref={graph}>
+        <svg className="skill-tree-connections" width={drawing.width} height={drawing.height} aria-hidden="true">
+          {drawing.edges.map(edge => <path key={edge.id} d={edge.path} className={edge.open ? 'connection-open' : ''}/>)}
+        </svg>
+        {rows.map((row, index) => <div className={`skill-tree-stage${index === 0 ? ' tree-roots' : ''}`} key={index}>
+          {row.map(node => {
+            const mastered = node.skills.some(skill => learnedIds.includes(skill.id));
+            const open = node.parents.every(id => nodes.find(parent => parent.id === id)?.skills.some(skill => learnedIds.includes(skill.id)));
+            return <section className={`skill-tree-node ${mastered ? 'node-mastered' : open ? 'node-open' : 'node-locked'}`} key={node.id} data-branch-id={node.id} data-lane={lanes.get(node.id) || undefined} aria-labelledby={`branch-${node.id}`}>
+              <header className="branch-node-heading"><div><span className="branch-step">{index === 0 ? 'ИСТОК' : `СТУПЕНЬ ${index + 1}`}</span><h4 id={`branch-${node.id}`}>{node.name}</h4></div><span className="branch-node-state">{mastered ? '✓ Освоен' : open ? '◇ Открыт' : '◈ Закрыт'}</span></header>
+              <p className="branch-node-requirement">{!node.parents.length ? 'Начни с любого навыка этого узла' : `Любой навык: ${node.parents.map(id => nodes.find(parent => parent.id === id)?.name ?? id).join(' + ')}`}</p>
+              <div className="branch-skill-cards">{node.skills.map(skill => <SkillCard key={skill.id} skill={skill} content={content} character={character} busy={busy} onLearn={onLearn} onUpgrade={onUpgrade}/>)}</div>
+            </section>;
+          })}
+        </div>)}
+      </div>
+      {!nodes.length && <p className="empty">В этой школе пока нет навыков.</p>}
+      <p className="grimoire-footnote">Изучение и улучшение тратят очки навыков. Энергия расходуется только в бою. Уже начатый бой сохраняет свой набор умений.</p>
+    </section>
   </section>;
 }

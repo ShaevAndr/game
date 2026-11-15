@@ -3,6 +3,7 @@ import { grantSkill } from './skills';
 import { projectCharacterAttributes } from './attributes/character';
 import { ATTRIBUTE_POINTS_PER_LEVEL } from './attributes/defaults';
 import type { StatDefinition } from './attributes/types';
+import { branchLearningRequirements } from './skill-tree';
 
 export function learningStatRequirements(character: Character, skill: Skill, definitions: StatDefinition[] = []) {
   const legacy = Object.entries(skill.learning.stats).map(([key, required]) => {
@@ -46,6 +47,7 @@ export function learningBlockers(character: Character, skill: Skill, skills: Ski
   if (character.skillPoints < requirements.pointCost) reasons.push(`Нужно очков навыков: ${requirements.pointCost}`);
   if (character.level < requirements.level) reasons.push(`Нужен уровень ${requirements.level}`);
   for (const id of requirements.prerequisites) if (!character.learnedSkillIds.includes(id)) reasons.push(`Сначала изучите «${skills.find(s => s.id === id)?.name ?? id}»`);
+  for (const branch of branchLearningRequirements(character.learnedSkillIds, skill, skills)) if (!branch.met) reasons.push(`Сначала изучите любой навык узла «${branch.name}»`);
   for (const requirement of learningStatRequirements(character, skill, definitions)) if (requirement.actual < requirement.required) reasons.push(`${requirement.name}: требуется ${requirement.required}`);
   return reasons;
 }

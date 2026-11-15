@@ -114,6 +114,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     assert.equal(character.skillPoints, 3); assert.deepEqual(character.learnedSkillIds, []);
     assert.equal(character.attributePoints, 5); assert.equal(character.stats.maxHp, 240);
     await verifyCharacterCreation(character, request, app);
+    await verifySkillTree(request, app);
     await verifyCharacterAttributes(request, app, catalog);
     await verifyDexterityWeapon(request, app);
     await verifyRankedCrafting(request, app);
@@ -565,11 +566,33 @@ async function verifyDexterityWeapon(request: TestRequest, app: INestApplication
   assert.ok(equipped.attributes!.effective.physicalPower > grown.attributes!.effective.physicalPower);
 }
 
+async function verifySkillTree(request: TestRequest, app: INestApplication) {
+  const catalog = await app.get(ContentService).get(true);
+  const hero = await request<Character>('/characters', { name: 'Исследователь ветвей' });
+  assert.equal(hero.skillPoints, 3); assert.deepEqual(hero.learnedSkillIds, []);
+  await app.get(UnitOfWork).run(tx => app.get(CharactersService).update(hero.id, catalog, character => {
+    gainExperience(character, 700, catalog.balance.progression);
+  }, tx));
+  const grown = await request<Character>(`/characters/${hero.id}`);
+  await request(`/characters/${hero.id}/attributes`, { allocations: { intelligence: 10 }, expectedRevision: grown.attributeRevision });
+  const blocked = await request<{ message: string }>(`/characters/${hero.id}/skills`, { skillId: 'inferno' }, 400);
+  assert.match(blocked.message, /любой навык узла/);
+  for (const skillId of ['phoenix-warmth', 'burning-brand', 'inferno']) await request(`/characters/${hero.id}/skills`, { skillId });
+  let state = await request<Character>(`/characters/${hero.id}`);
+  assert.ok(!state.learnedSkillIds.includes('ember')); assert.ok(!state.learnedSkillIds.includes('fireball'));
+  const otherPath = await request<{ message: string }>(`/characters/${hero.id}/skills`, { skillId: 'phoenix-heart' }, 400);
+  assert.match(otherPath.message, /Путь феникса/);
+  for (const skillId of ['healing-flame', 'phoenix-heart']) await request(`/characters/${hero.id}/skills`, { skillId });
+  state = await request<Character>(`/characters/${hero.id}`);
+  assert.equal(state.skillPoints, 0); assert.equal(state.skillLevels!.inferno, 1); assert.equal(state.skillLevels!['phoenix-heart'], 1);
+}
+
 async function verifyBattleEffects(request: TestRequest, app: INestApplication) {
   const first = await request<Character>('/characters', { name: 'Маг усилений' });
   const second = await request<Character>('/characters', { name: 'Маг ослаблений' });
-  await app.get(UnitOfWork).run(context => app.get(CharactersService).update(first.id, seedContent, character => { character.skillPoints = 3; }, context));
-  for (const id of ['battle-cry', 'weakening', 'purify']) await request(`/characters/${first.id}/skills`, { skillId: id });
+  await app.get(UnitOfWork).run(context => app.get(CharactersService).update(first.id, seedContent, character => { character.skillPoints = 4; }, context));
+  for (const id of ['strike', 'battle-cry', 'weakening', 'purify']) await request(`/characters/${first.id}/skills`, { skillId: id });
+  await request(`/characters/${second.id}/skills`, { skillId: 'strike' });
   await request(`/characters/${second.id}/skills`, { skillId: 'weakening' });
   const created = await request<Battle>('/battles', { name: 'Проверка бафов', characterId: first.id, kind: 'duel' });
   const joined = await request<Battle>(`/battles/${created.id}/join`, { characterId: second.id, team: 1 });
@@ -754,6 +777,7 @@ async function verifyModifierModel(request: TestRequest, app: INestApplication) 
   await mongo.collection('skills').insertOne(skill); await content.get(true);
   const first = await request<Character>('/characters', { name: 'Проверка шансов' });
   const second = await request<Character>('/characters', { name: 'Вторая цель' });
+  await request(`/characters/${first.id}/skills`, { skillId: 'strike' });
   await request(`/characters/${first.id}/skills`, { skillId: skill.id });
   const room = await request<Battle>('/battles', { name: 'Проверка допов', characterId: first.id, kind: 'duel' });
   await request(`/battles/${room.id}/join`, { characterId: second.id, team: 1 });
