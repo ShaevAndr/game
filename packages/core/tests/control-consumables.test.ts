@@ -32,9 +32,9 @@ function ready(battle: Battle, skill: Skill) {
   battle.fighters.find(fighter => fighter.id === battle.activeId)!.skillEnergy = 200;
 }
 
-test('v1 catalog validates control and consumable effects and keeps cheap damage at thirty energy', () => {
+test('v1 catalog validates control and consumable effects and keeps basic attacks at one to three energy', () => {
   assert.ok(contentSchema.safeParse(catalog()).success);
-  for (const skill of seedContent.skills.filter(skill => skill.effect === 'damage')) assert.ok(skill.cost >= 30);
+  for (const skill of seedContent.skills.filter(skill => skill.effect === 'damage' && skill.learning.level === 1)) assert.ok(skill.cost >= 1 && skill.cost <= 3);
   const invalid = catalog(); (invalid.skills.find(skill => skill.id === 'frost-lock')!.effects![0] as StunEffect).durationTurns = 0;
   assert.equal(contentSchema.safeParse(invalid).success, false);
   const invalidPotion = catalog(); invalidPotion.items.find(item => item.id === 'potion')!.effects = [{ ...guaranteed(fixture()).effects![0]!, recipient: 'caster' }];
@@ -78,7 +78,7 @@ test('damage, stun chance and duration progress independently; match size never 
   const battle = fixture(), actor = battle.fighters[0];
   const hit = battle.content.skills.find(skill => skill.id === 'concussive-blow')!;
   const first = previewSkillEffects(battle, actor, hit);
-  actor.skillLevels![hit.id] = 10; battle.matchPowerBps = 19000;
+  actor.skillLevels![hit.id] = 10; battle.directMatches = { physical: 6, fire: 6, water: 6, earth: 6, air: 6 };
   const last = previewSkillEffects(battle, actor, hit);
   assert.ok(last.find(effect => effect.kind === 'damage')!.magnitude! > first.find(effect => effect.kind === 'damage')!.magnitude!);
   assert.equal(last.find(effect => effect.kind === 'stun')!.activationChanceBps, 5000);
@@ -93,7 +93,7 @@ test('zero-chance stun consumes the skill normally and lets the opponent act', (
   const battle = fixture(), skill = guaranteed(battle);
   Object.assign(skill.effects![0], { activationChanceBps: 0, maxChanceBps: 0 }); ready(battle, skill);
   applyAction(battle, 'hero', { type: 'skill', skillId: skill.id, targetId: 'enemy' });
-  assert.equal(battle.activeId, 'enemy'); assert.equal(battle.fighters[0].skillEnergy, 150);
+  assert.equal(battle.activeId, 'enemy'); assert.equal(battle.fighters[0].skillEnergy, 180);
   assert.equal(battle.effectResults![0].outcome, 'chance_failed');
 });
 
@@ -126,7 +126,7 @@ test('cleansing potion and an ally can dispel stun before its next eligible turn
   applySkillEffects(battle, enemy, debuff, hero.id);
   applyAction(battle, hero.id, { type: 'item', itemId: 'cleansing-potion' });
   assert.equal(battle.fighters[0].activeEffects!.length, 0);
-  assert.equal(battle.fighters[0].hp, 120);
+  assert.equal(battle.fighters[0].hp, 240);
 });
 
 
@@ -145,7 +145,7 @@ test('group abilities trade single-target efficiency for useful totals on three 
 });
 
 test('a full-health buff potion uses the same effect executor with an item source and no tile multiplier', () => {
-  const battle = fixture(); battle.matchPowerBps = 19000;
+  const battle = fixture(); battle.directMatches = { physical: 6, fire: 6, water: 6, earth: 6, air: 6 };
   const effects: NonNullable<Content['items'][number]['effects']> = [{ id: 'power', recipient: 'caster', kind: 'stat_modifier', polarity: 'buff',
     statId: 'physicalPower', operation: 'add_flat', magnitude: { unit: 'points', constant: 5 }, durationTurns: 2 }];
   battle.content.items.push({ id: 'tonic-test', name: 'Настой', description: '', groupId: 'potions', stackLimit: 99, effects });

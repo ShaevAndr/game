@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   applyAction, applySkillEffects, calculateAttributes, characterFighter, combatStatDefinitions, contentSchema, createCharacter,
-  damageChances, defaultCombatFormulaRules, defaultStatDefinitions, fillBaseAttributes, joinBattle, newBattle,
+  damageChances, defaultCombatFormulaRules, defaultStatDefinitions, fillBaseAttributes, learnSkill, joinBattle, newBattle,
   previewSkillEffects, replaceFighterModifiers, seedContent, skillChoices, startBattle,
   type Battle, type Content, type Skill, type StatModifier,
 } from '../src';
@@ -15,6 +15,7 @@ function catalog(): Content {
 }
 function fixture() {
   const content = catalog(), hero = createCharacter('hero', 'Герой', content), enemy = createCharacter('enemy', 'Цель', content);
+  learnSkill(hero, 'strike', content);
   const battle = newBattle('formulas', 'Бой', 'duel', 'on-match', hero, content);
   joinBattle(battle, enemy, 1); startBattle(battle, () => 0); battle.attributeRngState = 0;
   return { battle, actor: battle.fighters[0], target: battle.fighters[1] };
@@ -31,52 +32,52 @@ const modifier = (statId: string, value: number): StatModifier => ({ id: statId,
 test('new profile preserves starting HP/power, grows with level and separates critical severity from luck', () => {
   const content = catalog(); assert.ok(contentSchema.safeParse(content).success);
   const hero = createCharacter('hero', 'Герой', content), first = characterFighter(hero, 0, content);
-  assert.equal(first.stats.maxHp, 120); assert.equal(first.stats.attack, 8);
+  assert.equal(first.stats.maxHp, 240); assert.equal(first.stats.attack, 8);
   assert.equal(first.attributes!.effective.accuracy, 120); assert.equal(first.attributes!.effective.evasion, 20);
   hero.level = 10;
   const grown = characterFighter(hero, 0, content);
-  assert.equal(grown.combatLevel, 10); assert.equal(grown.stats.maxHp, 174); assert.equal(grown.stats.attack, 17);
+  assert.equal(grown.combatLevel, 10); assert.equal(grown.stats.maxHp, 294); assert.equal(grown.stats.attack, 17);
   replaceFighterModifiers(grown, [modifier('luck', 90)], content.statDefinitions!);
   assert.equal(grown.attributes!.effective.criticalChanceBps, 5000);
   assert.equal(grown.attributes!.effective.criticalBonusBps, 5000);
   replaceFighterModifiers(grown, [], content.statDefinitions!);
-  assert.equal(grown.stats.maxHp, 174); assert.equal(grown.stats.attack, 17);
+  assert.equal(grown.stats.maxHp, 294); assert.equal(grown.stats.attack, 17);
 });
 
 test('primary defense amplification includes equipment and recalculates without accumulation', () => {
   const input = { definitions: combatStatDefinitions, baseAttributes: fillBaseAttributes({}, 1, combatStatDefinitions),
     equipmentModifiers: [modifier('physicalResistance', 100)] };
   assert.equal(calculateAttributes(input).effective.physicalResistance, 105);
-  const stronger = { ...input, temporaryModifiers: [modifier('strength', 100)] };
-  assert.equal(calculateAttributes(stronger).effective.physicalResistance, 128);
+  const stronger = { ...input, temporaryModifiers: [modifier('vitality', 100)] };
+  assert.equal(calculateAttributes(stronger).effective.physicalResistance, 162);
   assert.deepEqual(calculateAttributes(input), calculateAttributes(input));
   const cyclic = structuredClone(combatStatDefinitions), power = cyclic.find(stat => stat.id === 'physicalPower')!;
   if (power.kind === 'derived') power.formula.terms = [{ statId: 'physicalPower', coefficientBps: 1 }];
   assert.throws(() => calculateAttributes({ ...input, definitions: cyclic }), /цикл/);
 });
 
-test('physical misses are small, accuracy helps, magic does not roll a physical miss', () => {
+test('accuracy helps both attack types and magic is easier to land', () => {
   const { battle, actor, target } = fixture();
-  assert.equal(damageChances(battle, actor, target, 'physical').hitChanceBps, 9885);
+  assert.equal(damageChances(battle, actor, target, 'physical').hitChanceBps, 9231);
   target.attributes!.effective.evasion = 1000000;
-  assert.equal(damageChances(battle, actor, target, 'physical').hitChanceBps, 9500);
+  assert.equal(damageChances(battle, actor, target, 'physical').hitChanceBps, 6500);
   actor.attributes!.effective.accuracy = 1000000; target.attributes!.effective.evasion = 100000;
-  assert.ok(damageChances(battle, actor, target, 'physical').hitChanceBps > 9500);
-  assert.equal(damageChances(battle, actor, target, 'fire').hitChanceBps, 10000);
+  assert.ok(damageChances(battle, actor, target, 'physical').hitChanceBps > 6500);
+  assert.equal(damageChances(battle, actor, target, 'fire').hitChanceBps, 8000);
   actor.attributes!.effective.accuracy = 0; target.attributes!.effective.evasion = 0;
   assert.equal(damageChances(battle, actor, target, 'physical').hitChanceBps, 9900);
 });
 
-test('a magical skill never misses even when one damage component is physical', () => {
+test('a magical skill uses magic accuracy even when its damage is physical', () => {
   const { battle, actor, target } = fixture();
   const skill: Skill = { ...battle.content.skills.find(skill => skill.id === 'ember')!, effects: [{
     id: 'impact', recipient: 'selected', kind: 'damage', damageType: 'physical', canCrit: false,
     magnitude: { unit: 'hp', constant: 20 },
   }] };
-  battle.attributeRngState = seedFor(9900, 10000);
-  assert.equal(previewSkillEffects(battle, actor, skill)[0].hitChanceBps, 10000);
+  battle.attributeRngState = seedFor(9400, 9700);
+  assert.equal(previewSkillEffects(battle, actor, skill)[0].hitChanceBps, 9765);
   applySkillEffects(battle, actor, skill, target.id);
-  assert.equal(target.hp, 102); assert.equal(battle.damageResults![0].outcome, 'hit');
+  assert.equal(target.hp, 222); assert.equal(battle.damageResults![0].outcome, 'hit');
 });
 
 test('luck avoidance depends on positive difference, is bounded and applies to magic separately', () => {
@@ -113,13 +114,19 @@ test('a physical miss and a lucky accident cause zero HP loss and skip the criti
   assert.equal(battle.damageResults![0].outcome, 'miss');
   assert.equal(battle.attributeRngState, probe.attributeRngState);
   target.attributes!.effective.luck = 110;
-  battle.attributeRngState = seedFor(0, 500);
-  const luckyProbe = structuredClone(battle); battleRandomBps(luckyProbe);
+  let luckySeed = 0;
+  for (; luckySeed < 100000; luckySeed++) {
+    const probe = { attributeRngState: luckySeed } as Battle;
+    if (battleRandomBps(probe) >= 9765 || battleRandomBps(probe) >= 500) continue;
+    break;
+  }
+  battle.attributeRngState = luckySeed;
+  const luckyProbe = structuredClone(battle); battleRandomBps(luckyProbe); battleRandomBps(luckyProbe);
   assert.equal(applyResolvedDamage(battle, actor, target, 100, 'fire'), 0);
   assert.equal(battle.damageResults!.at(-1)!.outcome, 'luck_avoided');
-  assert.equal(battle.damageResults!.at(-1)!.hitChanceBps, 10000);
+  assert.equal(battle.damageResults!.at(-1)!.hitChanceBps, 9765);
   assert.equal(battle.attributeRngState, luckyProbe.attributeRngState);
-  assert.equal(target.hp, 120);
+  assert.equal(target.hp, 240);
 });
 
 test('zero raw does not roll; overkill reports actual loss; a critical has the declared multiplier before rounding', () => {
@@ -129,7 +136,7 @@ test('zero raw does not roll; overkill reports actual loss; a critical has the d
   target.attributes!.effective.fireResistance = 30;
   actor.attributes!.effective.criticalChanceBps = 10000;
   assert.equal(applyResolvedDamage(battle, actor, target, 40, 'fire'), 30);
-  assert.equal(battle.attributeRngState, 0);
+  assert.equal(battle.attributeRngState, 1013904223);
   target.hp = 1;
   assert.equal(applyResolvedDamage(battle, actor, target, 100, 'fire'), 1);
   assert.equal(battle.damageResults!.at(-1)!.amount, 75);
@@ -147,40 +154,40 @@ test('simple and composed damage keep the same fraction through critical and arm
     id: 'fraction', recipient: 'selected', kind: 'damage', damageType: 'fire', magnitude: { unit: 'hp', terms: [{ scope: 'caster', statId: 'magicPower', weightBps: 12500 }] },
   }] };
   applySkillEffects(second.battle, second.actor, skill, second.target.id);
-  assert.equal(first.target.hp, 106); assert.equal(second.target.hp, 106);
+  assert.equal(first.target.hp, 226); assert.equal(second.target.hp, 226);
   assert.equal(second.battle.damageResults![0].raw, 18.75);
 });
 
 test('direct-match power scales simple previews and precise composed damage before armor', () => {
   const { battle, actor, target } = fixture();
-  battle.matchPowerBps = 13000;
+  battle.directMatches = { physical: 3, fire: 3, water: 3 };
   battle.phase = 'choose'; battle.matchedElements = ['physical']; actor.skillEnergy = 200;
   actor.attributes!.effective.physicalPower = 9;
-  assert.equal(skillChoices(battle, actor)[0].magnitude, 19); // floor(9 × 13/8 × 1.3), no early rounding.
+  assert.equal(skillChoices(battle, actor)[0].magnitude, 21); // floor(9 × 13/8 × 1.3), no early rounding.
   actor.attributes!.effective.criticalChanceBps = 0;
   target.attributes!.effective.fireResistance = 0;
   const skill: Skill = { ...battle.content.skills.find(skill => skill.id === 'ember')!, effects: [{
     id: 'fraction', kind: 'damage', damageType: 'fire', recipient: 'selected',
     magnitude: { unit: 'hp', terms: [{ scope: 'caster', statId: 'physicalPower', weightBps: 12500 }] },
   }] };
-  assert.equal(previewSkillEffects(battle, actor, skill)[0].magnitude, 14);
+  assert.equal(previewSkillEffects(battle, actor, skill)[0].magnitude, 16);
   applySkillEffects(battle, actor, skill, target.id);
-  assert.equal(battle.damageResults![0].raw, 14.625);
-  assert.equal(target.hp, 106);
+  assert.equal(battle.damageResults![0].raw, 16.875);
+  assert.equal(target.hp, 224);
 });
 
 test('previews are per target, never consume RNG, and a miss still consumes the action and energy', () => {
   const { battle, actor, target } = fixture();
   battle.phase = 'choose'; battle.matchedElements = ['physical']; actor.skillEnergy = 200;
   const choices = skillChoices(battle, actor);
-  assert.equal(choices[0].damagePreviews![0].hitChanceBps, 9885);
+  assert.equal(choices[0].damagePreviews![0].hitChanceBps, 9231);
   const skill = { ...battle.content.skills.find(skill => skill.id === 'strike')!, effects: [{ id: 'fire', kind: 'damage' as const,
     damageType: 'fire' as const, recipient: 'selected' as const, magnitude: { unit: 'hp' as const, constant: 20 } }] };
-  assert.equal(previewSkillEffects(battle, actor, skill)[0].hitChanceBps, 9885);
+  assert.equal(previewSkillEffects(battle, actor, skill)[0].hitChanceBps, 9231);
   assert.equal(battle.attributeRngState, 0);
   battle.attributeRngState = seedFor(9900, 10000);
   applyAction(battle, actor.id, { type: 'skill', skillId: 'strike', targetId: target.id });
-  assert.equal(actor.skillEnergy, 170); assert.equal(battle.activeId, target.id); assert.equal(target.hp, 120);
+  assert.equal(actor.skillEnergy, 199); assert.equal(battle.activeId, target.id); assert.equal(target.hp, 240);
 });
 
 test('saved RNG and snapshots replay identically, while legacy formulas remain unchanged', () => {
@@ -200,10 +207,10 @@ test('saved RNG and snapshots replay identically, while legacy formulas remain u
 });
 
 test('invalid probability bounds, missing secondary ratings and invalid factor dependencies fail validation', () => {
-  const content = catalog(); content.balance.formulas!.physicalMissMinBps = 501;
+  const content = catalog(); content.balance.formulas!.physicalMissMinBps = 3501;
   assert.equal(contentSchema.safeParse(content).success, false);
   content.balance.formulas!.physicalMissMinBps = 100; content.balance.formulas!.armorK = 0;
   assert.equal(contentSchema.safeParse(content).success, false);
-  content.balance.formulas!.armorK = 30; content.statDefinitions = defaultStatDefinitions;
+  content.balance.formulas!.armorK = 30; content.statDefinitions = combatStatDefinitions.filter(stat => stat.id !== 'magicAccuracy');
   assert.equal(contentSchema.safeParse(content).success, false);
 });

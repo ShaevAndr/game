@@ -8,13 +8,17 @@ export function BattleSkills({ battle, me, myTurn, busy, targetId, healTarget, o
   const consumables = battle.content.items.filter(item => isBattleConsumable(item, battle.content.itemGroups));
   const visible = battle.content.skills.filter(skill => choiceOnly
     ? me?.id === battle.activeId && battle.skillChoices?.some(choice => choice.skillId === skill.id)
-    : me?.skillIds.includes(skill.id));
+    : me?.skillIds.includes(skill.id)).sort((a, b) => {
+    if (!choiceOnly) return 0;
+    const left = battle.skillChoices?.find(choice => choice.skillId === a.id), right = battle.skillChoices?.find(choice => choice.skillId === b.id);
+    return Number(!!right?.enabled) - Number(!!left?.enabled) || (right?.matchPowerBps ?? 10000) - (left?.matchPowerBps ?? 10000) || a.cost - b.cost;
+  });
   const endEnabled = battle.phase === 'choose';
   return <section className="panel skill-panel">
     <div className="section-label">{choiceOnly ? 'ПОСЛЕ ХОДА' : 'АРСЕНАЛ'}</div><h2 id={choiceOnly ? 'battle-skills-title' : undefined}>{choiceOnly ? 'Выберите умение' : 'Умения и предметы'}</h2>
     <p className="hint">{!myTurn ? 'Сейчас ход другого участника.' : battle.phase === 'before'
-      ? 'Совместите клетки. После прямого сокращения выберите навык и цель, затем пройдут каскады.'
-      : `Начислена энергия прямого сокращения. Сила навыка ×${((battle.matchPowerBps ?? 10000) / 10000).toLocaleString('ru-RU')}. После навыка или пропуска каскады дадут оставшуюся энергию.`}</p>
+      ? 'Выполните перестановку, затем выберите любой изученный навык. Прямое совпадение его школы усиливает действие.'
+      : 'Можно применить любой изученный навык. Усиление указано у каждого отдельно; каскадная энергия придёт после навыка или пропуска.'}</p>
     {battle.effectsVersion !== 1 && choiceOnly && me && visible.some(skill => skill.effect === 'damage') && <label className="heal-target">Цель атаки<select value={targetId} onChange={event => onEnemy?.(event.target.value)}>
       {battle.fighters.filter(fighter => fighter.hp > 0 && fighter.team !== me.team).map(fighter => <option key={fighter.id} value={fighter.id}>{fighter.name} · {fighter.hp} HP</option>)}
     </select></label>}
@@ -28,7 +32,7 @@ export function BattleSkills({ battle, me, myTurn, busy, targetId, healTarget, o
       if (!choiceOnly) return <div key={skill.id} className="skill arsenal-skill">
         <span className={`element-icon ${skill.element}`}>{symbols[skill.element]}</span>
         <span><strong>{skill.name} · ур. {level}</strong><small>{skill.description}</small>
-          <small>{!skill.effects?.length && <>Сила {skillPower(skill, level)} · </>}Энергия {skill.cost} · Перезарядка {skill.cooldown} ход.</small>
+          <small>{!skill.effects?.length && <>Сила {skillPower(skill, level)} · </>}Энергия {skill.cost} · Перезарядка {skill.cooldown} ход.{skill.matchBonus === false ? ' · Без зависимости от клеток' : ' · Усиление своей школой'}</small>
           {cooldown > 0 && <small>Осталось собственных ходов: {cooldown}</small>}
         </span>
       </div>;

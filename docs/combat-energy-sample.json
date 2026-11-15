@@ -1,0 +1,150 @@
+{
+  "method": "Sequential settled boards, random matching swap among all visible matching swaps, six tile types, seeded RNG. All direct and generated cells give one energy, including defense. No character stats or skill decisions.",
+  "seed": 27644437,
+  "samples": [
+    {
+      "size": 8,
+      "count": 10000,
+      "policy": "random matching swap",
+      "totalEnergy": {
+        "mean": 4.7416,
+        "median": 3,
+        "p90": 9,
+        "p99": 18,
+        "max": 42
+      },
+      "directCells": {
+        "mean": 3.1653,
+        "median": 3,
+        "p90": 3,
+        "p99": 6,
+        "max": 8
+      },
+      "energyAtLeast": {
+        "20": 0.0057,
+        "30": 0.0005,
+        "40": 0.0001,
+        "60": 0,
+        "80": 0,
+        "120": 0
+      },
+      "colorEnergy": {
+        "fire": {
+          "mean": 0.7893,
+          "median": 0,
+          "p90": 3,
+          "p99": 6,
+          "max": 12
+        },
+        "water": {
+          "mean": 0.7751,
+          "median": 0,
+          "p90": 3,
+          "p99": 6,
+          "max": 12
+        },
+        "earth": {
+          "mean": 0.7974,
+          "median": 0,
+          "p90": 3,
+          "p99": 6,
+          "max": 12
+        },
+        "air": {
+          "mean": 0.7951,
+          "median": 0,
+          "p90": 3,
+          "p99": 6,
+          "max": 11
+        },
+        "physical": {
+          "mean": 0.7926,
+          "median": 0,
+          "p90": 3,
+          "p99": 6,
+          "max": 10
+        }
+      },
+      "directChance": {
+        "fire": 0.1715,
+        "water": 0.1678,
+        "earth": 0.1716,
+        "air": 0.1721,
+        "physical": 0.1759
+      },
+      "noMatching": 0
+    },
+    {
+      "size": 12,
+      "count": 2000,
+      "policy": "random matching swap",
+      "totalEnergy": {
+        "mean": 5.6535,
+        "median": 3,
+        "p90": 12,
+        "p99": 23,
+        "max": 49
+      },
+      "directCells": {
+        "mean": 3.1935,
+        "median": 3,
+        "p90": 3,
+        "p99": 6,
+        "max": 8
+      },
+      "energyAtLeast": {
+        "20": 0.0215,
+        "30": 0.004,
+        "40": 0.001,
+        "60": 0,
+        "80": 0,
+        "120": 0
+      },
+      "colorEnergy": {
+        "fire": {
+          "mean": 0.912,
+          "median": 0,
+          "p90": 3,
+          "p99": 6,
+          "max": 12
+        },
+        "water": {
+          "mean": 0.9825,
+          "median": 0,
+          "p90": 3,
+          "p99": 6,
+          "max": 11
+        },
+        "earth": {
+          "mean": 0.9375,
+          "median": 0,
+          "p90": 3,
+          "p99": 6,
+          "max": 15
+        },
+        "air": {
+          "mean": 0.9595,
+          "median": 0,
+          "p90": 3,
+          "p99": 6,
+          "max": 13
+        },
+        "physical": {
+          "mean": 0.9195,
+          "median": 0,
+          "p90": 3,
+          "p99": 6,
+          "max": 14
+        }
+      },
+      "directChance": {
+        "fire": 0.171,
+        "water": 0.185,
+        "earth": 0.161,
+        "air": 0.177,
+        "physical": 0.172
+      },
+      "noMatching": 0
+    }
+  ]
+}

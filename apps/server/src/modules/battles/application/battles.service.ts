@@ -68,8 +68,8 @@ export class BattlesService {
       const frames: BattleFrame[] = [];
       let recordedMoves = 0;
       const checkpoint = (source = state) => {
-        const { board, fighters, activeId, turn, phase, status, usedSkill, pendingMatch, matchPowerBps, matchedElements, skillChoices, boardMoves, log, wave, winner } = source;
-        frames.push(structuredClone({ board, fighters, activeId, turn, phase, status, usedSkill, pendingMatch, ...(matchPowerBps !== undefined ? { matchPowerBps } : {}), matchedElements, skillChoices, boardMoves: boardMoves?.slice(recordedMoves), log, wave, winner }));
+        const { board, fighters, activeId, turn, phase, status, usedSkill, pendingMatch, directMatches, matchedElements, skillChoices, boardMoves, log, wave, winner } = source;
+        frames.push(structuredClone({ board, fighters, activeId, turn, phase, status, usedSkill, pendingMatch, ...(directMatches ? { directMatches } : {}), matchedElements, skillChoices, boardMoves: boardMoves?.slice(recordedMoves), log, wave, winner }));
         recordedMoves = boardMoves?.length ?? 0;
       };
       await change(state, context, checkpoint);

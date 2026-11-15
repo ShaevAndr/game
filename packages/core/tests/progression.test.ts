@@ -7,7 +7,7 @@ function hero(): Character { return { id: 'hero', name: 'Hero', level: 1, experi
 test('victory experience carries over, awards points and grows stats at level up', () => {
   const c = hero(); assert.equal(gainExperience(c, 99, config), 0); assert.equal(c.level, 1); assert.equal(c.skillPoints, 2);
   assert.equal(gainExperience(c, 26, config), 1); assert.equal(c.experience, 25); assert.equal(c.level, 2); assert.equal(c.skillPoints, 3);
-  assert.deepEqual(c.stats, { maxHp: 132, attack: 10, defense: 4, maxEnergy: 200 }); assert.equal(experienceToNextLevel(c.level, config), 150);
+  assert.deepEqual(c.stats, { maxHp: 252, attack: 10, defense: 4, maxEnergy: 200 }); assert.equal(experienceToNextLevel(c.level, config), 150);
 });
 test('one reward can advance several levels and preserves excess experience', () => {
   const c = hero(); assert.equal(gainExperience(c, 460, config), 3); assert.equal(c.level, 4); assert.equal(c.experience, 10); assert.equal(c.skillPoints, 5); assert.equal(c.stats.attack, 14);
@@ -38,8 +38,8 @@ test('battle fighters receive only learned skills, and keep a snapshot', () => {
 });
 test('legacy normalization preserves level, stats and existing progress including zero points', () => {
   const old = hero() as Partial<Character>; delete old.experience; delete old.skillPoints; delete old.learnedSkillIds;
-  const c = normalizeCharacter(old as Character, seedContent); assert.equal(c.level, 1); assert.equal(c.experience, 0); assert.equal(c.skillPoints, 2); assert.deepEqual(c.learnedSkillIds, ['strike']); assert.deepEqual(c.stats, old.stats);
-  c.skillPoints = 0; c.experience = 37; c.learnedSkillIds.push('ember'); c.skillLevels = { strike: 1, ember: 1 }; assert.deepEqual(normalizeCharacter(c, seedContent), c);
+  const c = normalizeCharacter(old as Character, seedContent); assert.equal(c.level, 1); assert.equal(c.experience, 0); assert.equal(c.skillPoints, 3); assert.deepEqual(c.learnedSkillIds, []); assert.deepEqual(c.stats, old.stats);
+  c.skillPoints = 0; c.experience = 37; c.learnedSkillIds = ['ember']; c.skillLevels = { ember: 1 }; assert.deepEqual(normalizeCharacter(c, seedContent), c);
 });
 test('victory recipients include fallen allies, exclude losers and NPCs', () => {
   const c = hero(), b = newBattle('battle', 'test', 'team', 'on-match', c, seedContent); b.status = 'finished'; b.winner = 0;
@@ -49,5 +49,5 @@ test('victory recipients include fallen allies, exclude losers and NPCs', () => 
 test('content rejects missing predecessors, cyclic branches and inaccessible starter attacks', () => {
   const missing = structuredClone(seedContent); missing.skills.find(s => s.id === 'ember')!.learning.prerequisites = ['unknown']; assert.equal(contentSchema.safeParse(missing).success, false);
   const cycle = structuredClone(seedContent); cycle.skills.find(s => s.id === 'ember')!.learning.prerequisites = ['fireball']; assert.equal(contentSchema.safeParse(cycle).success, false);
-  const starter = structuredClone(seedContent); starter.skills[0].learning.level = 2; assert.equal(contentSchema.safeParse(starter).success, false);
+  const starter = structuredClone(seedContent); for (const skill of starter.skills.filter(skill => skill.element === 'physical')) skill.learning.level = 2; assert.equal(contentSchema.safeParse(starter).success, false);
 });

@@ -33,3 +33,5 @@ export * from './social';
 export * from './gathering';
 export * from './parties';
 export * from './world';
+
+export { matchPowerBps } from './combat/match-power';

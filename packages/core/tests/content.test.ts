@@ -12,10 +12,10 @@ test('each branch has six skills and two distinct playable templates', () => {
     for (const template of templates) {
       const hero = createCharacter(template.id, template.name, seedContent, template.id);
       assert.equal(hero.templateId, template.id);
-      assert.deepEqual(hero.learnedSkillIds, ['strike']);
-      assert.equal(hero.skillPoints, 2);
+      assert.deepEqual(hero.learnedSkillIds, []);
+      assert.equal(hero.skillPoints, 3);
       assert.equal(hero.level, 1);
-      assert.equal(characterFighter(hero, 0, seedContent).skillIds.length, 1);
+      assert.equal(characterFighter(hero, 0, seedContent).skillIds.length, 0);
     }
   }
 });
@@ -24,7 +24,7 @@ test('template creation preserves defaults, rejects unknown types and isolates c
   const before = structuredClone(seedContent);
   const first = createCharacter('first', 'Первый', seedContent, 'druid');
   const second = createCharacter('second', 'Второй', seedContent);
-  assert.deepEqual(second.learnedSkillIds, ['strike']); assert.equal(second.skillPoints, 2);
+  assert.deepEqual(second.learnedSkillIds, []); assert.equal(second.skillPoints, 3);
   assert.equal(second.templateId, undefined);
   first.stats.attack++; first.inventory[0].quantity--; first.energy.earth++;
   assert.deepEqual(seedContent, before);

@@ -1,301 +1,155 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Battle, BattlefieldEngine, BattlefieldMoveResult, Content, TileType, applyAction, createBattlefield, createCharacter, defaultBattlefieldEngine, emptyEnergy, grantSkill, joinBattle, newBattle, runNpcTurns, seedContent, startBattle, tileTypes, skillEnergy } from '../src';
+import { applyAction, createCharacter, defaultBattlefieldEngine, grantSkill, joinBattle, matchPowerBps, newBattle, runNpcTurns, seedContent, skillChoices, startBattle, tileTypes,
+  type Battle, type BattlefieldEngine, type TileType } from '../src';
 
-function duel(skills: string[] = []): Battle {
-  const hero = createCharacter('hero', 'Герой', seedContent), enemy = createCharacter('enemy', 'Противник', seedContent);
-  for (const id of skills) grantSkill(hero, id, seedContent);
-  const battle = newBattle('battle', 'Новый бой', 'duel', 'on-match', hero, seedContent);
+function duel(ids: string[] = []) {
+  const hero = createCharacter('hero', 'Герой', seedContent);
+  for (const id of ['strike', ...ids]) grantSkill(hero, id, seedContent);
+  const battle = newBattle('battle', 'Свободный выбор', 'duel', 'on-match', hero, seedContent);
+  const enemy = createCharacter('enemy', 'Враг', seedContent); grantSkill(enemy, 'strike', seedContent);
   joinBattle(battle, enemy, 1); startBattle(battle, () => 0);
   return battle;
 }
 function engine(direct: Partial<Record<TileType, number>>, generated: Partial<Record<TileType, number>> = {}): BattlefieldEngine {
-  const counts = (value: Partial<Record<TileType, number>>) => ({ count: Object.values(value).reduce<number>((sum, value) => sum + (value ?? 0), 0), byType: Object.fromEntries(tileTypes.map(type => [type, value[type] ?? 0])) });
+  const counts = (value: Partial<Record<TileType, number>>) => ({ count: Object.values(value).reduce((sum, value) => sum + (value ?? 0), 0), byType: { ...value } });
   return { ...defaultBattlefieldEngine, move: field => {
     const first = counts(direct), secondary = counts(generated);
-    const total = counts(Object.fromEntries(tileTypes.map(type => [type, (direct[type] ?? 0) + (generated[type] ?? 0)])));
-    return { board: field.board.map(row => [...row]), config: structuredClone(field.config), direct: first, generated: secondary, total, cascades: secondary.count ? 1 : 0, steps: [{ source: 'direct', removed: first }, ...(secondary.count ? [{ source: 'generated' as const, removed: secondary }] : [])], shuffled: false, regeneration: null };
+    return { ...structuredClone(field), direct: first, generated: secondary, total: { count: first.count + secondary.count, byType: {} }, cascades: secondary.count ? 1 : 0,
+      steps: [...(first.count ? [{ source: 'direct' as const, removed: first }] : []), ...(secondary.count ? [{ source: 'generated' as const, removed: secondary }] : [])], shuffled: false, regeneration: null };
   } };
 }
-function swap(battle: Battle, direct: Partial<Record<TileType, number>>, generated: Partial<Record<TileType, number>> = {}) {
-  applyAction(battle, battle.activeId!, { type: 'swap', from: { row: 0, col: 0 }, to: { row: 0, col: 1 }, targetId: '' }, Math.random, engine(direct, generated));
+function swap(battle: Battle, direct: Partial<Record<TileType, number>> = {}, generated: Partial<Record<TileType, number>> = {}) {
+  applyAction(battle, battle.activeId!, { type: 'swap', from: { row: 0, col: 0 }, to: { row: 0, col: 1 }, targetId: '' }, () => 0, engine(direct, generated));
 }
-function cast(battle: Battle, id = 'strike', targetId = 'enemy') {
-  applyAction(battle, battle.activeId!, { type: 'skill', skillId: id, targetId });
-}
+function cast(battle: Battle, skillId = 'strike', targetId = 'enemy') { applyAction(battle, battle.activeId!, { type: 'skill', skillId, targetId }); }
+function pass(battle: Battle) { swap(battle); applyAction(battle, battle.activeId!, { type: 'end' }); }
 
-test('a nonmatching swap spends exactly one turn without energy, guard, damage or skill choice', () => {
-  const battle = duel(['ember']);
-  battle.battlefield = { size: { rows: 3, cols: 3 }, elementTypes: ['fire', 'water', 'earth'] };
-  battle.board = [['water', 'earth', 'water'], ['earth', 'fire', 'earth'], ['fire', 'water', 'fire']];
-  battle.fighters[0].skillEnergy = 90;
-  const before = structuredClone(battle);
-  applyAction(battle, 'hero', { type: 'swap', from: { row: 0, col: 0 }, to: { row: 0, col: 1 }, targetId: 'enemy' });
-  assert.deepEqual(battle.board, [['earth', 'water', 'water'], ['earth', 'fire', 'earth'], ['fire', 'water', 'fire']]);
-  assert.equal(battle.turn, before.turn + 1); assert.equal(battle.activeId, 'enemy');
-  assert.equal(battle.phase, 'before'); assert.deepEqual(battle.skillChoices, []);
-  assert.equal(skillEnergy(battle.fighters[0]), 90);
-  assert.equal(battle.fighters[0].guardDefense ?? 0, before.fighters[0].guardDefense ?? 0);
-  assert.deepEqual(battle.fighters.map(fighter => fighter.hp), before.fighters.map(fighter => fighter.hp));
-  assert.equal(battle.pendingBattlefield, undefined); assert.equal(battle.matchPowerBps, undefined);
-  assert.equal(battle.boardMoves?.length, 1); assert.equal(battle.boardMoves[0].total.count, 0);
-  assert.deepEqual(battle.boardMoves[0].steps, []);
-  assert.throws(() => applyAction(battle, 'hero', { type: 'skill', skillId: 'ember', targetId: 'enemy' }), /другого участника/);
-});
-
-test('an NPC can end its turn by rearranging a board with no matching moves', () => {
-  const battle = duel();
-  battle.activeId = 'enemy'; battle.fighters[1].npc = true;
-  battle.battlefield = { size: { rows: 1, cols: 4 }, elementTypes: [...tileTypes] };
-  battle.board = [['fire', 'water', 'earth', 'air']];
-  runNpcTurns(battle);
-  assert.equal(battle.activeId, 'hero'); assert.equal(battle.turn, 2);
-  assert.deepEqual(battle.board, [['water', 'fire', 'earth', 'air']]);
-  assert.equal(skillEnergy(battle.fighters[1]), 0); assert.equal(battle.boardMoves?.[0].total.count, 0);
-});
-
-test('all new templates start with only one physical skill, two unspent points and six field types', () => {
-  for (const templateId of [undefined, ...seedContent.characterTemplates.map(template => template.id)]) {
-    const character = createCharacter('hero', 'Герой', seedContent, templateId);
-    assert.deepEqual(character.learnedSkillIds, ['strike']); assert.equal(character.skillPoints, 2);
-    assert.deepEqual(character.skillLevels, { strike: 1 });
+test('every ordinary or defense match supplies one energy per cell and pays for the basic attack', () => {
+  for (const type of tileTypes) {
+    const battle = duel(); swap(battle, { [type]: 3 });
+    assert.equal(battle.fighters[0].skillEnergy, 3);
+    assert.ok(battle.skillChoices!.find(choice => choice.skillId === 'strike')!.enabled);
+    assert.equal(battle.fighters[0].guardDefense, type === 'defense' ? 30 : 0);
+    cast(battle); assert.equal(battle.fighters[0].skillEnergy, 2);
   }
-  assert.deepEqual(createBattlefield().config.elementTypes, tileTypes);
-  assert.equal(tileTypes.length, 6);
 });
 
-test('only direct energy is available when skills are chosen; cascades are awarded after casting', () => {
-  const battle = duel(['ember', 'fireball', 'spring']);
-  swap(battle, { fire: 3 }, { fire: 2, water: 3, physical: 4 });
+test('all learned skills are visible after any swap, with separate bonuses and resource blockers', () => {
+  const battle = duel(['ember', 'fireball', 'spring']); swap(battle, { water: 3 });
+  assert.deepEqual(battle.skillChoices!.map(choice => choice.skillId), ['strike', 'ember', 'fireball', 'spring']);
+  assert.equal(battle.skillChoices!.find(choice => choice.skillId === 'ember')!.matchPowerBps, 10000);
+  assert.equal(battle.skillChoices!.find(choice => choice.skillId === 'spring')!.matchPowerBps, 15000);
+  assert.equal(battle.skillChoices!.find(choice => choice.skillId === 'spring')!.reason, 'Недостаточно энергии');
+  cast(battle, 'ember'); assert.equal(battle.fighters[0].skillEnergy, 0); assert.equal(battle.fighters[1].hp, 226);
+});
+
+test('a nonmatching swap keeps positions and allows a saved-energy skill without resonance', () => {
+  const battle = duel(); battle.fighters[0].skillEnergy = 1;
+  battle.board = [['fire', 'water', 'earth', 'air']]; battle.battlefield = { size: { rows: 1, cols: 4 }, elementTypes: [...tileTypes] };
+  applyAction(battle, 'hero', { type: 'swap', from: { row: 0, col: 0 }, to: { row: 0, col: 1 }, targetId: '' });
+  assert.deepEqual(battle.board, [['water', 'fire', 'earth', 'air']]);
   assert.equal(battle.phase, 'choose'); assert.equal(battle.activeId, 'hero');
-  assert.equal(skillEnergy(battle.fighters[0]), 30);
-  assert.deepEqual(battle.skillChoices?.map(choice => choice.skillId), ['ember', 'fireball']);
-  assert.equal(battle.skillChoices?.find(choice => choice.skillId === 'fireball')?.enabled, false);
-  assert.equal(battle.boardMoves?.[0].generated.count, 0);
-  assert.ok(battle.pendingBattlefield);
-  assert.equal(battle.fighters[1].hp, 120); // Neither direct nor secondary matches deal damage.
-  cast(battle, 'ember');
-  assert.equal(skillEnergy(battle.fighters[0]), 90);
-  assert.equal(battle.fighters[1].hp, 106); // Base skill power + attack - defense.
-  assert.equal(battle.pendingBattlefield, undefined);
-  assert.equal(battle.boardMoves?.at(-1)?.continuation, true);
-  assert.equal(battle.activeId, 'enemy');
+  assert.equal(battle.skillChoices![0].matchPowerBps, 10000);
+  cast(battle); assert.equal(battle.fighters[0].skillEnergy, 0); assert.equal(battle.fighters[1].hp, 230);
 });
 
-test('unaffordable matching skills remain visible and energy can be preserved for a later turn', () => {
-  const battle = duel(['fireball']);
-  swap(battle, { fire: 3 });
-  assert.deepEqual(battle.skillChoices, [{ skillId: 'fireball', enabled: false, reason: 'Недостаточно энергии' }]);
+test('an empty-energy nonmatching turn can be skipped without altering HP or resources', () => {
+  const battle = duel(); const hp = battle.fighters.map(f => f.hp);
+  swap(battle); assert.equal(battle.skillChoices![0].enabled, false);
+  applyAction(battle, 'hero', { type: 'end' });
+  assert.equal(battle.activeId, 'enemy'); assert.deepEqual(battle.fighters.map(f => f.hp), hp);
+});
+
+test('resonance is per school, starts at 1.5, caps at 2.5 and ignores unrelated and generated cells', () => {
+  for (const [count, expected] of [[0, 10000], [2, 10000], [3, 15000], [4, 17500], [5, 20000], [6, 22500], [7, 25000], [32, 25000]]) {
+    const battle = duel(['ember']); swap(battle, { fire: count, water: 3, defense: 3 }, { fire: 20 });
+    assert.equal(matchPowerBps(battle, battle.content.skills.find(skill => skill.id === 'ember')!), expected);
+    assert.equal(battle.skillChoices!.find(choice => choice.skillId === 'strike')!.matchPowerBps, 10000);
+  }
+  const battle = duel(['ember', 'spring']); swap(battle, { fire: 3, water: 3 });
+  assert.equal(battle.skillChoices!.find(choice => choice.skillId === 'ember')!.matchPowerBps, 15000);
+  assert.equal(battle.skillChoices!.find(choice => choice.skillId === 'spring')!.matchPowerBps, 15000);
+});
+
+test('only direct energy can fund this cast; secondary energy arrives once after spending', () => {
+  const battle = duel(['fireball']); swap(battle, { air: 3 }, { fire: 40 });
+  assert.equal(battle.fighters[0].skillEnergy, 3);
   const before = structuredClone(battle);
   assert.throws(() => cast(battle, 'fireball'), /энергии/); assert.deepEqual(battle, before);
-  applyAction(battle, 'hero', { type: 'end' }); assert.equal(skillEnergy(battle.fighters[0]), 30);
-  swap(battle, { water: 3 }); // Enemy has no water skill; its turn automatically ends.
-  assert.equal(battle.activeId, 'hero');
-  swap(battle, { fire: 3 });
-  assert.equal(skillEnergy(battle.fighters[0]), 60); assert.equal(battle.skillChoices?.[0].enabled, true);
-  cast(battle, 'fireball'); assert.equal(skillEnergy(battle.fighters[0]), 10);
+  cast(battle); assert.equal(battle.fighters[0].skillEnergy, 42);
+  assert.equal(battle.pendingBattlefield, undefined); assert.deepEqual(battle.directMatches, {});
+  assert.throws(() => cast(battle), /не изучен|другого участника|перестановку/);
 });
 
-test('unknown primary types and all secondary types only award energy, never unrelated skill choices', () => {
-  const battle = duel();
-  swap(battle, { water: 3 }, { physical: 5, defense: 4 });
-  assert.equal(battle.activeId, 'enemy'); assert.equal(battle.phase, 'before');
-  assert.deepEqual(battle.skillChoices, []);
-  assert.equal(skillEnergy(battle.fighters[0]), 120);
-  assert.equal(battle.fighters[0].guardDefense, 0); assert.equal(battle.fighters[1].hp, 120);
+test('capacity is freed before cascades, and the shared pool never exceeds 200', () => {
+  const battle = duel(['fireball']); battle.fighters[0].skillEnergy = 199;
+  swap(battle, { air: 3 }, { water: 3 });
+  assert.equal(battle.fighters[0].skillEnergy, 200);
+  cast(battle, 'fireball'); assert.equal(battle.fighters[0].skillEnergy, 178);
+  pass(battle); swap(battle, { earth: 3 }, { defense: 100 }); applyAction(battle, 'hero', { type: 'end' });
+  assert.equal(battle.fighters[0].skillEnergy, 200);
 });
 
-test('only matching types are visible even when other learned skills have enough saved energy', () => {
-  const battle = duel(['ember', 'spring']); battle.fighters[0].skillEnergy = 200;
-  swap(battle, { physical: 3, fire: 3 });
-  assert.deepEqual(new Set(battle.skillChoices?.map(choice => choice.skillId)), new Set(['strike', 'ember']));
-  assert.throws(() => cast(battle, 'spring', 'hero'), /Тип навыка/);
+test('healing can use stored energy after another school and is strengthened only by its own direct cells', () => {
+  for (const [type, expected] of [['fire', 70], ['water', 75]] as const) {
+    const battle = duel(['spring']); battle.fighters[0].hp = 60; battle.fighters[0].skillEnergy = 8;
+    swap(battle, { [type]: 3 }, { water: 20 }); cast(battle, 'spring', 'hero');
+    assert.equal(battle.fighters[0].hp, expected); assert.equal(battle.fighters[0].skillEnergy, 23);
+  }
 });
 
-test('the shared energy pool is capped at 200 independently of legacy capacity stats', () => {
-  const battle = duel(['ember']);
-  const hero = battle.fighters[0]; hero.stats.maxEnergy = 100; hero.skillEnergy = 199;
-  swap(battle, { fire: 3 }, { fire: 50, water: 50, air: 40, defense: 40 });
-  assert.equal(skillEnergy(hero), 200);
-  assert.equal(hero.guardDefense, 0);
-  assert.ok(Object.values(hero.energy).every(value => value <= 200));
+test('invalid targets and unknown skills cannot partially spend energy or bypass phases', () => {
+  const battle = duel(['fireball']); battle.fighters[0].skillEnergy = 50;
+  assert.throws(() => cast(battle), /перестановку/);
+  swap(battle, { earth: 3 }); const before = structuredClone(battle);
+  assert.throws(() => cast(battle, 'fireball', 'hero'), /противника/);
+  assert.throws(() => cast(battle, 'missing'), /не изучен/);
+  assert.throws(() => swap(battle), /одна перестановка/);
+  assert.deepEqual(battle, before);
 });
 
-test('direct defense creates a proportional guard, secondary defense gives only energy, guard expires on own turn', () => {
-  const battle = duel(), hero = battle.fighters[0];
-  swap(battle, { defense: 3 }, { defense: 4, physical: 2 });
-  assert.equal(hero.guardDefense, 30); assert.equal(skillEnergy(hero), 60);
-  assert.equal(hero.stats.defense, 3); assert.equal(battle.activeId, 'enemy');
-  swap(battle, { physical: 3 }); cast(battle, 'strike', 'hero');
-  assert.equal(hero.hp, 119); assert.equal(hero.guardDefense, 0); assert.equal(hero.stats.defense, 3);
+test('cooldown 2 still blocks the next two own turns despite free school choice', () => {
+  const battle = duel(['fireball']); battle.fighters[0].skillEnergy = 100;
+  swap(battle, { air: 3 }); cast(battle, 'fireball');
+  for (let turn = 0; turn < 2; turn++) {
+    pass(battle); swap(battle, { fire: 3 });
+    assert.equal(battle.skillChoices!.find(choice => choice.skillId === 'fireball')!.reason, 'Навык перезаряжается');
+    applyAction(battle, 'hero', { type: 'end' });
+  }
+  pass(battle); swap(battle);
+  assert.equal(battle.skillChoices!.find(choice => choice.skillId === 'fireball')!.enabled, true);
 });
 
-test('guard survives all intervening opposing team turns rather than being consumed by the first hit', () => {
-  const hero = createCharacter('hero', 'Герой', seedContent);
-  const battle = newBattle('team', 'Команды', 'team', 'on-match', hero, seedContent);
-  for (const [id, team] of [['ally', 0], ['enemy', 1], ['enemy2', 1]] as const) joinBattle(battle, createCharacter(id, id, seedContent), team);
-  startBattle(battle, () => 0); swap(battle, { defense: 3 });
-  swap(battle, { physical: 3 }); cast(battle, 'strike', 'hero');
-  assert.equal(battle.activeId, 'ally'); assert.equal(battle.fighters[0].guardDefense, 30);
-  swap(battle, { water: 3 });
-  assert.equal(battle.activeId, 'enemy2'); swap(battle, { physical: 3 }); cast(battle, 'strike', 'hero');
-  assert.equal(battle.activeId, 'hero'); assert.equal(battle.fighters[0].hp, 118); assert.equal(battle.fighters[0].guardDefense, 0);
-});
-
-test('a mixed defense/physical match gives guard and a skill choice without converting direct defense to energy', () => {
-  const battle = duel(); swap(battle, { defense: 3, physical: 3 });
-  assert.equal(battle.fighters[0].guardDefense, 30); assert.equal(skillEnergy(battle.fighters[0]), 30);
-  assert.deepEqual(battle.skillChoices, [{ skillId: 'strike', enabled: true }]);
-  cast(battle); assert.equal(battle.fighters[0].guardDefense, 30); assert.equal(skillEnergy(battle.fighters[0]), 0);
-});
-
-test('skills cannot precede a swap, repeat a swap, target an invalid fighter or bypass cooldowns', () => {
-  const battle = duel(['fireball']), hero = battle.fighters[0]; hero.skillEnergy = 200;
-  assert.throws(() => cast(battle, 'fireball'), /Сначала совместите/);
-  assert.throws(() => applyAction(battle, 'hero', { type: 'end' }), /перестановку/);
-  hero.cooldowns.fireball = 2; swap(battle, { fire: 3 });
-  assert.deepEqual(battle.skillChoices, [{ skillId: 'fireball', enabled: false, reason: 'Навык перезаряжается' }]);
-  const before = structuredClone(battle);
-  assert.throws(() => swap(battle, { fire: 3 }), /одна перестановка/);
-  assert.throws(() => cast(battle, 'fireball'), /перезаряжается/); assert.deepEqual(battle, before);
-  hero.cooldowns.fireball = 0;
-  assert.throws(() => cast(battle, 'fireball', 'hero'), /противника/); assert.equal(skillEnergy(hero), 200);
-});
-
-test('healing is restricted to directly matched types, costs energy and receives no cascade power bonus', () => {
-  const battle = duel(['spring']); battle.fighters[0].hp = 60;
-  swap(battle, { water: 3 }, { water: 20 });
-  cast(battle, 'spring', 'hero');
-  assert.equal(battle.fighters[0].hp, 70); assert.equal(skillEnergy(battle.fighters[0]), 200);
-});
-
-test('a potion before the board replaces the skill without replacing the mandatory board move', () => {
+test('a potion consumes the one application but preserves the mandatory swap and all tile energy', () => {
   const battle = duel(); battle.fighters[0].hp = 100;
   applyAction(battle, 'hero', { type: 'item', itemId: 'potion' });
-  assert.equal(battle.fighters[0].hp, 120); assert.equal(battle.activeId, 'hero');
   assert.throws(() => applyAction(battle, 'hero', { type: 'end' }), /перестановку/);
-  swap(battle, { physical: 3 }); assert.equal(battle.activeId, 'enemy'); assert.equal(skillEnergy(battle.fighters[0]), 30);
+  swap(battle, { defense: 3 }, { physical: 4 });
+  assert.equal(battle.activeId, 'enemy'); assert.equal(battle.fighters[0].hp, 135);
+  assert.equal(battle.fighters[0].skillEnergy, 7); assert.equal(battle.fighters[0].guardDefense, 30);
 });
 
-test('NPC follows the same board-first rules and cannot attack from a secondary-only physical match', () => {
-  const battle = newBattle('bot', 'Бот', 'bot', 'on-match', createCharacter('hero', 'Герой', seedContent), seedContent); startBattle(battle, () => 0);
-  swap(battle, { water: 3 }); assert.equal(battle.activeId, 'bot-opponent');
-  runNpcTurns(battle, engine({ water: 3 }, { physical: 5, defense: 2 }));
-  assert.equal(battle.activeId, 'hero'); assert.equal(battle.fighters[0].hp, 120);
-  assert.equal(skillEnergy(battle.fighters[1]), 100);
-  swap(battle, { water: 3 });
-  runNpcTurns(battle, engine({ physical: 3 }));
-  assert.equal(battle.activeId, 'hero'); assert.equal(battle.fighters[0].hp, 110);
-});
-
-test('all thirty learned skills obey direct type selection, energy spending and their own power', () => {
-  for (const skill of seedContent.skills) {
-    const battle = duel(seedContent.skills.filter(skill => !skill.learning.starter).map(skill => skill.id));
-    const hero = battle.fighters[0], enemy = battle.fighters[1];
-    hero.skillEnergy = 200;
-    const victim = skill.effect === 'heal' ? hero : enemy;
-    victim.hp = skill.effect === 'heal' ? 1 : victim.stats.maxHp;
-    const hp = victim.hp;
-    swap(battle, { [skill.element]: 3 }, { [skill.element]: 9, defense: 5 });
-    assert.ok(battle.skillChoices?.some(choice => choice.skillId === skill.id && choice.enabled), skill.id);
-    assert.ok(battle.skillChoices?.every(choice => seedContent.skills.find(skill => skill.id === choice.skillId)?.element === skill.element));
-    cast(battle, skill.id, victim.id);
-    assert.equal(skillEnergy(hero), Math.min(200, 200 - skill.cost + 140), skill.id);
-    assert.equal(victim.hp, skill.effect === 'heal' ? Math.min(victim.stats.maxHp, hp + skill.power) : Math.max(0, hp - Math.max(1, skill.power + hero.stats.attack - victim.stats.defense)), skill.id);
-    assert.equal(battle.activeId, 'enemy', skill.id);
+test('NPC can spend energy after an unrelated or nonmatching swap under the same rules', () => {
+  for (const cells of [{ water: 3 }, {}]) {
+    const battle = duel(); battle.activeId = 'enemy'; battle.fighters[1].npc = true; battle.fighters[1].skillEnergy = 1;
+    runNpcTurns(battle, engine(cells));
+    assert.equal(battle.activeId, 'hero'); assert.ok(battle.fighters[0].hp < 240);
   }
 });
 
-
-test('energy saved from a different type and secondary defense pays for a directly matched skill', () => {
-  const battle = duel(['fireball']);
-  swap(battle, { water: 3 }, { defense: 2 });
-  assert.equal(skillEnergy(battle.fighters[0]), 50);
-  swap(battle, { water: 3 });
-  swap(battle, { fire: 3 });
-  assert.equal(battle.skillChoices?.find(choice => choice.skillId === 'fireball')?.enabled, true);
-  cast(battle, 'fireball');
-  assert.equal(skillEnergy(battle.fighters[0]), 30);
-});
-
-test('typed template reserves initialize a capped shared reserve once', () => {
-  const battle = duel(['fireball']), hero = battle.fighters[0];
-  delete hero.skillEnergy;
-  hero.energy.water = 200; hero.energy.air = 200;
-  assert.equal(skillEnergy(hero), 200);
-  swap(battle, { fire: 3 }); cast(battle, 'fireball');
-  assert.equal(skillEnergy(hero), 150);
-  assert.equal(hero.energy.water, 200); // Legacy data does not refill the explicit reserve.
-});
-
-test('direct cell count scales skill power by 0.3 per cell beyond three, cascades do not', () => {
-  for (const count of [3, 4, 5, 6]) {
-    const battle = duel(), [hero, enemy] = battle.fighters;
-    swap(battle, { physical: count }, { physical: 20 });
-    assert.equal(battle.matchPowerBps, 10000 + (count - 3) * 3000);
-    assert.equal(skillEnergy(hero), count * 10);
-    cast(battle);
-    assert.equal(enemy.hp, 120 - Math.floor(5 * (1 + (count - 3) * 0.3) + 8 - 3));
-    assert.equal(skillEnergy(hero), Math.min(200, count * 10 - 30 + 200));
-    assert.equal(battle.matchPowerBps, undefined);
-  }
-});
-
-test('a saved pending cascade survives reload, invalid casts and is credited only once on skipping', () => {
-  const battle = duel(['fireball']);
-  swap(battle, { fire: 3 }, { defense: 8 });
-  const restored: Battle = JSON.parse(JSON.stringify(battle));
-  assert.equal(skillEnergy(restored.fighters[0]), 30);
-  assert.throws(() => cast(restored, 'fireball'), /энергии/);
-  assert.deepEqual(restored, JSON.parse(JSON.stringify(battle)));
-  applyAction(restored, 'hero', { type: 'end' });
-  assert.equal(skillEnergy(restored.fighters[0]), 110);
-  assert.equal(restored.pendingBattlefield, undefined);
-  assert.throws(() => applyAction(restored, 'hero', { type: 'end' }), /другого участника/);
-  assert.equal(skillEnergy(restored.fighters[0]), 110);
-});
-
-test('casting frees capacity before secondary energy is capped', () => {
-  const battle = duel(['fireball']); battle.fighters[0].skillEnergy = 180;
-  swap(battle, { fire: 3 }, { water: 3 });
-  assert.equal(skillEnergy(battle.fighters[0]), 200);
-  cast(battle, 'fireball');
-  assert.equal(skillEnergy(battle.fighters[0]), 180);
-});
-
-test('the visible board pauses after the direct refill and resumes its saved result without another field call', () => {
-  const battle = duel(), staged = engine({ physical: 4 }, { defense: 3 });
-  const directBoard = battle.board.map(row => [...row]), finalBoard = battle.board.map(row => [...row]);
+test('saved continuations restore without rerolling the board, and publish each skill bonus', () => {
+  const battle = duel(['ember']), field = engine({ fire: 4 }, { defense: 3 });
+  const directBoard = structuredClone(battle.board), finalBoard = structuredClone(battle.board);
   directBoard[0][0] = 'fire'; finalBoard[0][0] = 'water';
   let calls = 0;
-  const field: BattlefieldEngine = { ...staged, move: (...args) => {
-    calls++;
-    const result = staged.move(...args);
-    result.board = finalBoard; result.steps[0].boardAfter = directBoard; result.steps[1].boardAfter = finalBoard;
-    return result;
+  const staged: BattlefieldEngine = { ...field, move: (...args) => {
+    calls++; const result = field.move(...args); result.board = finalBoard;
+    result.steps[0].boardAfter = directBoard; result.steps[1].boardAfter = finalBoard; return result;
   } };
-  applyAction(battle, 'hero', { type: 'swap', from: { row: 0, col: 0 }, to: { row: 0, col: 1 }, targetId: '' }, Math.random, field);
-  assert.deepEqual(battle.board, directBoard);
-  assert.deepEqual(battle.boardMoves?.[0].steps.map(step => step.source), ['direct']);
+  applyAction(battle, 'hero', { type: 'swap', from: { row: 0, col: 0 }, to: { row: 0, col: 1 }, targetId: '' }, () => 0, staged);
   const restored: Battle = JSON.parse(JSON.stringify(battle));
-  let checkpoint = false;
-  applyAction(restored, 'hero', { type: 'skill', skillId: 'strike', targetId: 'enemy' }, () => { throw new Error('RNG must not be repeated'); }, field, frame => {
-    checkpoint = true;
-    assert.deepEqual(frame.board, directBoard);
-    assert.equal(frame.fighters[0].skillEnergy, 10);
-    assert.ok(frame.fighters[1].hp < 120);
-  });
-  assert.ok(checkpoint); assert.equal(calls, 1);
-  assert.deepEqual(restored.board, finalBoard);
-  assert.equal(restored.fighters[0].skillEnergy, 40);
-});
-
-test('NPC cannot spend energy from its pending cascades', () => {
-  const hero = createCharacter('hero', 'Герой', seedContent); grantSkill(hero, 'fireball', seedContent);
-  const battle = newBattle('bot', 'Бот', 'bot', 'on-match', hero, seedContent); startBattle(battle, () => 0);
-  swap(battle, { water: 3 });
-  runNpcTurns(battle, engine({ fire: 3 }, { fire: 10 }));
-  assert.equal(battle.fighters[0].hp, 120);
-  assert.equal(skillEnergy(battle.fighters[1]), 130);
-  assert.equal(battle.pendingBattlefield, undefined);
+  assert.equal(restored.skillChoices!.find(choice => choice.skillId === 'ember')!.matchPowerBps, 17500);
+  applyAction(restored, 'hero', { type: 'skill', skillId: 'ember', targetId: 'enemy' }, () => { throw new Error('must not reroll'); }, staged);
+  assert.equal(calls, 1); assert.deepEqual(restored.board, finalBoard); assert.equal(restored.fighters[0].skillEnergy, 4);
 });

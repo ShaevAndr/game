@@ -12,9 +12,9 @@ test('five primaries produce HP, separate powers, five resistances, luck and gua
   assert.equal(definitions.filter(definition => definition.kind === 'primary').length, 5);
   const result = calculateAttributes({ definitions, baseAttributes });
   assert.deepEqual(Object.fromEntries(Object.entries(result.effective).filter(([id]) => !Object.keys(baseAttributes).includes(id))), {
-    maxHp: 120, physicalPower: 8, physicalDamageFlat: 0, magicPower: 8, healingPower: 8, physicalResistance: 3,
+    maxHp: 240, physicalPower: 8, physicalDamageFlat: 0, magicPower: 8, healingPower: 8, physicalResistance: 3,
     fireResistance: 3, waterResistance: 3, earthResistance: 3, airResistance: 3,
-    criticalChanceBps: 500, criticalBonusBps: 5000, guardPerCell: 10,
+    accuracy: 120, magicAccuracy: 160, evasion: 20, physicalCriticalChanceBps: 500, criticalChanceBps: 500, criticalBonusBps: 5000, guardPerCell: 10,
   });
 });
 
@@ -59,10 +59,10 @@ test('HP changes clamp current health without free healing or resurrection', () 
   const hero = createCharacter('hero', 'Герой', content), fighter = characterFighter(hero, 0, content);
   fighter.hp = 90;
   replaceFighterModifiers(fighter, [modifier('vitality', 'vitality', 'add_flat', 10)], definitions);
-  assert.equal(fighter.stats.maxHp, 240); assert.equal(fighter.hp, 90);
-  fighter.hp = 200;
+  assert.equal(fighter.stats.maxHp, 360); assert.equal(fighter.hp, 90);
+  fighter.hp = 320;
   replaceFighterModifiers(fighter, [], definitions);
-  assert.equal(fighter.hp, 120);
+  assert.equal(fighter.hp, 240);
   fighter.hp = 0;
   replaceFighterModifiers(fighter, [modifier('revive-not-allowed', 'maxHp', 'add_flat', 500)], definitions);
   assert.equal(fighter.hp, 0);
@@ -79,7 +79,7 @@ test('new leveling gives five unspent points and allocation is atomic', () => {
   assert.deepEqual(hero, before);
   hero = allocateAttributes(hero, { strength: 3, vitality: 2 }, content);
   assert.equal(hero.attributePoints, 5); assert.equal(hero.baseAttributes?.strength, 13);
-  assert.equal(hero.attributes?.base.maxHp, 144);
+  assert.equal(hero.attributes?.base.maxHp, 264);
   assert.equal(hero.attributeRevision, 2);
   assert.throws(() => allocateAttributes(hero, { physicalPower: 1 }, content), /первичная/);
 });
@@ -88,7 +88,7 @@ test('old heroes are recalculated with level points and retain their progress; r
   const legacy = createCharacter('legacy', 'Старый герой', seedContent);
   legacy.level = 10; legacy.experience = 34; legacy.stats.maxHp = 999;
   const hero = normalizeCharacter(legacy, content);
-  assert.equal(hero.attributePoints, 50); assert.equal(hero.stats.maxHp, 120);
+  assert.equal(hero.attributePoints, 50); assert.equal(hero.stats.maxHp, 240);
   assert.equal(hero.experience, 34); assert.equal(hero.level, 10);
   assert.deepEqual(hero.inventory, legacy.inventory);
   assert.deepEqual(hero.skillLevels, legacy.skillLevels);
@@ -118,11 +118,11 @@ test('magic uses magic power and its own resistance; battle RNG survives a snaps
   replaceFighterModifiers(actor, [modifier('no-crit', 'criticalChanceBps', 'set', 0), modifier('magic', 'magicPower', 'set', 20)], definitions);
   replaceFighterModifiers(victim, [modifier('fire-protection', 'fireResistance', 'add_flat', 10)], definitions);
   damage(battle, actor, victim, 8, 'fire');
-  assert.equal(victim.hp, 120 - (40 - 13));
+  assert.equal(victim.hp, 240 - (40 - 13));
   const restored = JSON.parse(JSON.stringify(battle));
   damage(battle, actor, victim, 8, 'water');
   damage(restored, restored.fighters[0], restored.fighters[1], 8, 'water');
-  assert.equal(victim.hp, 120 - 27 - 37);
+  assert.equal(victim.hp, 240 - 27 - 37);
   assert.deepEqual(restored, battle);
 });
 

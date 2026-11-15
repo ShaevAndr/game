@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyAction, contentSchema, createBattleSchema, createCharacter, joinBattle, newBattle, runNpcTurns, seedContent, startBattle } from '../src';
+import { applyAction, contentSchema, createBattleSchema, createCharacter, joinBattle, learnSkill, newBattle, runNpcTurns, seedContent, startBattle } from '../src';
 import { fieldWithMatch, match } from './helpers/combat';
 
-const hero = (id: string) => createCharacter(id, id, seedContent);
+const hero = (id: string) => { const character = createCharacter(id, id, seedContent); learnSkill(character, 'strike', seedContent); return character; };
 function duel() {
   const battle = newBattle('battle', 'Бой', 'duel', 'on-match', hero('a'), seedContent);
   joinBattle(battle, hero('b'), 1); startBattle(battle, () => 0); return battle;
@@ -35,7 +35,7 @@ test('team order interleaves teams and skips defeated fighters', () => {
 test('dungeon advances all waves, preserves health and rejects commands after victory', () => {
   const character = hero('a'); character.stats.attack = 1000; character.stats.maxHp = 100000;
   const battle = newBattle('dungeon', 'Подземелье', 'dungeon', 'on-match', character, seedContent); startBattle(battle, () => 0);
-  battle.fighters[0].hp = 80000;
+  battle.fighters[0].hp = 80000; battle.fighters[0].skillEnergy = 200;
   for (let i = 0; i < 20 && battle.status === 'active'; i++) {
     if (battle.activeId !== 'a') { runNpcTurns(battle, fieldWithMatch()); continue; }
     const target = battle.fighters.find(fighter => fighter.npc && fighter.hp > 0)!;

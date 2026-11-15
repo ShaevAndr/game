@@ -6,8 +6,15 @@ import { effectSkillUtility } from '../src/effects/skill-effects';
 // Offline experiment: no database, network or global Math.random. Both sides use one visible-board policy.
 const content: Content = { ...seedContent, effectsVersion: 1, modifierRulesVersion: 1, statDefinitions: combatStatDefinitions,
   balance: { ...seedContent.balance, formulas: defaultCombatFormulaRules }, skills: [...seedContent.skills, ...seedEffectSkills] };
+const startingHp = Number(process.argv[3] ?? content.balance.characterStats.maxHp);
+if (!Number.isInteger(startingHp) || startingHp < 60 || startingHp > 10000) throw new Error('Starting HP must be 60–10000');
+content.statDefinitions = structuredClone(combatStatDefinitions);
+const hp = content.statDefinitions.find(stat => stat.id === 'maxHp')!;
+if (hp.kind === 'derived') hp.formula.constant = startingHp - 60;
+content.balance = { ...content.balance, characterStats: { ...content.balance.characterStats, maxHp: startingHp } };
 const builds = {
-  physical: { weights: { strength: 5, dexterity: 2, vitality: 3 }, skills: ['flying-blade', 'lunge', 'second-wind', 'bleeding-cut', 'cleave', 'concussive-blow', 'execution'] },
+  physical: { weights: { strength: 5, dexterity: 2, vitality: 3 }, skills: ['strike', 'flying-blade', 'lunge', 'brace', 'bleeding-cut', 'trip', 'battle-focus', 'cleave', 'concussive-blow', 'execution'] },
+  dexterity: { weights: { dexterity: 6, strength: 1, vitality: 3 }, skills: ['precise-thrust', 'strike', 'lunge', 'brace', 'bleeding-cut', 'trip', 'battle-focus', 'cleave', 'execution'] },
   fire: { weights: { intelligence: 6, vitality: 3, luck: 1 }, skills: ['ember', 'phoenix-warmth', 'burning-brand', 'fireball', 'purging-flame', 'inferno'] },
   water: { weights: { intelligence: 6, vitality: 3, luck: 1 }, skills: ['ice-shard', 'spring', 'ice-lance', 'mending-stream', 'tide', 'frost-lock', 'glacier'] },
   earth: { weights: { intelligence: 5, vitality: 4, strength: 1 }, skills: ['pebble', 'lifesap', 'earthen-barrier', 'quake', 'earthen-grasp', 'landslide'] },
@@ -17,7 +24,8 @@ type Build = keyof typeof builds;
 function randomStream(seed: number) { let state = seed >>> 0; return () => ((state = (Math.imul(state, 1664525) + 1013904223) >>> 0) / 4294967296); }
 function character(id: string, build: Build, level: number): Character {
   let hero = createCharacter(id, build, content); hero.level = level;
-  hero.skillPoints = 2 + level - 1; hero.attributePoints = 5 + (level - 1) * 5;
+  hero.skillPoints = content.balance.progression.startingSkillPoints + (level - 1) * content.balance.progression.skillPointsPerLevel;
+  hero.attributePoints = 5 + (level - 1) * 5;
   const entries = Object.entries(builds[build].weights), budget = hero.attributePoints;
   const allocations = Object.fromEntries(entries.map(([stat, weight]) => [stat, Math.floor(budget * weight / 10)]));
   allocations[entries[0][0]] += budget - Object.values(allocations).reduce((a, b) => a + b, 0);
@@ -35,7 +43,7 @@ function bestSkill(battle: Battle, actor: Fighter) {
   return skillChoices(battle, actor).filter(choice => choice.enabled).flatMap(choice => {
     const skill = battle.content.skills.find(skill => skill.id === choice.skillId)!;
     return legalSkillTargets(battle, actor, skill).map(target => ({ skill, target,
-      score: effectSkillUtility(battle, actor, skill, target.id) / Math.sqrt(Math.max(1, skill.cost / 30)) }));
+      score: effectSkillUtility(battle, actor, skill, target.id) / Math.sqrt(Math.max(1, skill.cost / 3)) }));
   }).filter(value => value.score > 0).sort((a, b) => b.score - a.score || a.skill.id.localeCompare(b.skill.id) || a.target.id.localeCompare(b.target.id))[0];
 }
 function move(battle: Battle, actor: Fighter) {
@@ -46,11 +54,12 @@ function move(battle: Battle, actor: Fighter) {
     if (to.row >= board.length || to.col >= board[0].length || board[row][col] === board[to.row][to.col]) continue;
     [board[row][col], board[to.row][to.col]] = [board[to.row][to.col], board[row][col]];
     const cells = findBattlefieldMatches(board), types = new Set(cells.map(cell => board[cell.row][cell.col]));
+    const directMatches = Object.fromEntries([...types].map(type => [type, cells.filter(cell => board[cell.row][cell.col] === type).length]));
     const defense = cells.filter(cell => board[cell.row][cell.col] === 'defense').length;
     [board[row][col], board[to.row][to.col]] = [board[to.row][to.col], board[row][col]];
     if (!cells.length) continue;
-    const energy = Math.min(200, (actor.skillEnergy ?? 0) + (cells.length - defense) * 10);
-    const proxy = { ...battle, phase: 'choose' as const, usedSkill: false, matchedElements: [...types].filter(type => type !== 'defense') as Element[], matchPowerBps: 10000 + Math.max(0, cells.length - 3) * 3000 };
+    const energy = Math.min(200, (actor.skillEnergy ?? 0) + cells.length * content.balance.combat!.energyPerTile);
+    const proxy = { ...battle, phase: 'choose' as const, usedSkill: false, matchedElements: [...types].filter(type => type !== 'defense') as Element[], directMatches };
     const score = (bestSkill(proxy, { ...actor, skillEnergy: energy })?.score ?? 0) + (energy - (actor.skillEnergy ?? 0)) * 0.02 + defense * 0.6;
     if (!best || score > best.score) best = { from, to, score };
   }
@@ -87,4 +96,4 @@ for (const level of [1, 10, 30]) for (let i = 0; i < names.length; i++) for (let
   report.push({ level, first: names[i], second: names[j], battles: samples, firstBuildWinRate: wins / samples,
     startingTeamWinRate: starts / samples, draws, medianActions: lengths[Math.floor((samples - 1) / 2)], p90Actions: lengths[Math.ceil(samples * 0.9) - 1] });
 }
-process.stdout.write(JSON.stringify({ note: 'Deterministic smoke experiment with a visible-board heuristic, equal attribute/skill budgets, no equipment or potions. Draw cutoff: 240 actions. Small samples are not proof of PvP balance.', samples, results: report }, null, 2) + '\n');
+process.stdout.write(JSON.stringify({ note: 'Deterministic smoke experiment with a visible-board heuristic, no free skills, equal attribute/skill budgets, no equipment or potions. Draw cutoff: 240 actions. Small samples are not proof of PvP balance.', startingHp, startingSkillPoints: content.balance.progression.startingSkillPoints, samples, results: report }, null, 2) + '\n');

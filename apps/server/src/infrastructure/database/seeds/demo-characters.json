@@ -3,24 +3,14 @@
     "id": "de000000-0000-4000-8000-000000000001",
     "name": "Искра",
     "templateId": "pyromancer",
-    "level": 10,
+    "level": 1,
     "experience": 0,
-    "skillPoints": 1,
-    "learnedSkillIds": [
-      "strike",
-      "ember",
-      "fireball",
-      "inferno",
-      "burning-brand",
-      "purging-flame",
-      "phoenix-warmth",
-      "fire-vulnerability",
-      "meteor-shower"
-    ],
+    "skillPoints": 3,
+    "learnedSkillIds": [],
     "stats": {
-      "maxHp": 228,
-      "attack": 26,
-      "defense": 12,
+      "maxHp": 240,
+      "attack": 8,
+      "defense": 3,
       "maxEnergy": 200
     },
     "energy": {
@@ -32,6 +22,14 @@
       "defense": 0
     },
     "inventory": [
+      {
+        "itemId": "woodcutting-axe",
+        "quantity": 1
+      },
+      {
+        "itemId": "mining-pick",
+        "quantity": 1
+      },
       {
         "itemId": "potion",
         "quantity": 3,
@@ -96,50 +94,33 @@
       {
         "itemId": "ember-scroll",
         "quantity": 1
-      },
-      {
-        "itemId": "woodcutting-axe",
-        "quantity": 1
-      },
-      {
-        "itemId": "mining-pick",
-        "quantity": 1
       }
     ],
     "createdAt": "2026-10-28T00:00:00.000Z",
-    "skillLevels": {
-      "strike": 1,
-      "ember": 1,
-      "fireball": 1,
-      "inferno": 1,
-      "burning-brand": 1,
-      "purging-flame": 1,
-      "phoenix-warmth": 1,
-      "fire-vulnerability": 1,
-      "meteor-shower": 1
-    }
+    "skillLevels": {},
+    "attributeVersion": 1,
+    "baseAttributes": {
+      "strength": 10,
+      "dexterity": 10,
+      "intelligence": 10,
+      "vitality": 10,
+      "luck": 10
+    },
+    "attributePoints": 5,
+    "attributeRevision": 0
   },
   {
     "id": "de000000-0000-4000-8000-000000000002",
     "name": "Феникс",
     "templateId": "phoenix",
-    "level": 10,
+    "level": 1,
     "experience": 0,
-    "skillPoints": 2,
-    "learnedSkillIds": [
-      "strike",
-      "ember",
-      "fireball",
-      "phoenix-warmth",
-      "healing-flame",
-      "phoenix-heart",
-      "burning-brand",
-      "meteor-shower"
-    ],
+    "skillPoints": 3,
+    "learnedSkillIds": [],
     "stats": {
-      "maxHp": 228,
-      "attack": 26,
-      "defense": 12,
+      "maxHp": 240,
+      "attack": 8,
+      "defense": 3,
       "maxEnergy": 200
     },
     "energy": {
@@ -151,6 +132,14 @@
       "defense": 0
     },
     "inventory": [
+      {
+        "itemId": "woodcutting-axe",
+        "quantity": 1
+      },
+      {
+        "itemId": "mining-pick",
+        "quantity": 1
+      },
       {
         "itemId": "potion",
         "quantity": 3,
@@ -215,49 +204,33 @@
       {
         "itemId": "ember-scroll",
         "quantity": 1
-      },
-      {
-        "itemId": "woodcutting-axe",
-        "quantity": 1
-      },
-      {
-        "itemId": "mining-pick",
-        "quantity": 1
       }
     ],
     "createdAt": "2026-10-28T00:00:00.000Z",
-    "skillLevels": {
-      "strike": 1,
-      "ember": 1,
-      "fireball": 1,
-      "phoenix-warmth": 1,
-      "healing-flame": 1,
-      "phoenix-heart": 1,
-      "burning-brand": 1,
-      "meteor-shower": 1
-    }
+    "skillLevels": {},
+    "attributeVersion": 1,
+    "baseAttributes": {
+      "strength": 10,
+      "dexterity": 10,
+      "intelligence": 10,
+      "vitality": 10,
+      "luck": 10
+    },
+    "attributePoints": 5,
+    "attributeRevision": 0
   },
   {
     "id": "de000000-0000-4000-8000-000000000003",
     "name": "Прилив",
     "templateId": "tidekeeper",
-    "level": 10,
+    "level": 1,
     "experience": 0,
-    "skillPoints": 2,
-    "learnedSkillIds": [
-      "strike",
-      "ice-shard",
-      "spring",
-      "tide",
-      "renewal",
-      "mending-stream",
-      "purify",
-      "healing-rain"
-    ],
+    "skillPoints": 3,
+    "learnedSkillIds": [],
     "stats": {
-      "maxHp": 228,
-      "attack": 26,
-      "defense": 12,
+      "maxHp": 240,
+      "attack": 8,
+      "defense": 3,
       "maxEnergy": 200
     },
     "energy": {
@@ -269,6 +242,14 @@
       "defense": 0
     },
     "inventory": [
+      {
+        "itemId": "woodcutting-axe",
+        "quantity": 1
+      },
+      {
+        "itemId": "mining-pick",
+        "quantity": 1
+      },
       {
         "itemId": "potion",
         "quantity": 3,
@@ -333,49 +314,33 @@
       {
         "itemId": "ember-scroll",
         "quantity": 1
-      },
-      {
-        "itemId": "woodcutting-axe",
-        "quantity": 1
-      },
-      {
-        "itemId": "mining-pick",
-        "quantity": 1
       }
     ],
     "createdAt": "2026-10-28T00:00:00.000Z",
-    "skillLevels": {
-      "strike": 1,
-      "ice-shard": 1,
-      "spring": 1,
-      "tide": 1,
-      "renewal": 1,
-      "mending-stream": 1,
-      "purify": 1,
-      "healing-rain": 1
-    }
+    "skillLevels": {},
+    "attributeVersion": 1,
+    "baseAttributes": {
+      "strength": 10,
+      "dexterity": 10,
+      "intelligence": 10,
+      "vitality": 10,
+      "luck": 10
+    },
+    "attributePoints": 5,
+    "attributeRevision": 0
   },
   {
     "id": "de000000-0000-4000-8000-000000000004",
     "name": "Иней",
     "templateId": "frostmage",
-    "level": 10,
+    "level": 1,
     "experience": 0,
-    "skillPoints": 2,
-    "learnedSkillIds": [
-      "strike",
-      "ice-shard",
-      "ice-lance",
-      "glacier",
-      "spring",
-      "mending-stream",
-      "purify",
-      "frost-lock"
-    ],
+    "skillPoints": 3,
+    "learnedSkillIds": [],
     "stats": {
-      "maxHp": 228,
-      "attack": 26,
-      "defense": 12,
+      "maxHp": 240,
+      "attack": 8,
+      "defense": 3,
       "maxEnergy": 200
     },
     "energy": {
@@ -387,6 +352,14 @@
       "defense": 0
     },
     "inventory": [
+      {
+        "itemId": "woodcutting-axe",
+        "quantity": 1
+      },
+      {
+        "itemId": "mining-pick",
+        "quantity": 1
+      },
       {
         "itemId": "potion",
         "quantity": 3,
@@ -451,49 +424,33 @@
       {
         "itemId": "ember-scroll",
         "quantity": 1
-      },
-      {
-        "itemId": "woodcutting-axe",
-        "quantity": 1
-      },
-      {
-        "itemId": "mining-pick",
-        "quantity": 1
       }
     ],
     "createdAt": "2026-10-28T00:00:00.000Z",
-    "skillLevels": {
-      "strike": 1,
-      "ice-shard": 1,
-      "ice-lance": 1,
-      "glacier": 1,
-      "spring": 1,
-      "mending-stream": 1,
-      "purify": 1,
-      "frost-lock": 1
-    }
+    "skillLevels": {},
+    "attributeVersion": 1,
+    "baseAttributes": {
+      "strength": 10,
+      "dexterity": 10,
+      "intelligence": 10,
+      "vitality": 10,
+      "luck": 10
+    },
+    "attributePoints": 5,
+    "attributeRevision": 0
   },
   {
     "id": "de000000-0000-4000-8000-000000000005",
     "name": "Гранит",
     "templateId": "geomancer",
-    "level": 10,
+    "level": 1,
     "experience": 0,
-    "skillPoints": 2,
-    "learnedSkillIds": [
-      "strike",
-      "pebble",
-      "quake",
-      "landslide",
-      "lifesap",
-      "earthen-barrier",
-      "stone-skin",
-      "earthen-grasp"
-    ],
+    "skillPoints": 3,
+    "learnedSkillIds": [],
     "stats": {
-      "maxHp": 228,
-      "attack": 26,
-      "defense": 12,
+      "maxHp": 240,
+      "attack": 8,
+      "defense": 3,
       "maxEnergy": 200
     },
     "energy": {
@@ -505,6 +462,14 @@
       "defense": 0
     },
     "inventory": [
+      {
+        "itemId": "woodcutting-axe",
+        "quantity": 1
+      },
+      {
+        "itemId": "mining-pick",
+        "quantity": 1
+      },
       {
         "itemId": "potion",
         "quantity": 3,
@@ -569,49 +534,33 @@
       {
         "itemId": "ember-scroll",
         "quantity": 1
-      },
-      {
-        "itemId": "woodcutting-axe",
-        "quantity": 1
-      },
-      {
-        "itemId": "mining-pick",
-        "quantity": 1
       }
     ],
     "createdAt": "2026-10-28T00:00:00.000Z",
-    "skillLevels": {
-      "strike": 1,
-      "pebble": 1,
-      "quake": 1,
-      "landslide": 1,
-      "lifesap": 1,
-      "earthen-barrier": 1,
-      "stone-skin": 1,
-      "earthen-grasp": 1
-    }
+    "skillLevels": {},
+    "attributeVersion": 1,
+    "baseAttributes": {
+      "strength": 10,
+      "dexterity": 10,
+      "intelligence": 10,
+      "vitality": 10,
+      "luck": 10
+    },
+    "attributePoints": 5,
+    "attributeRevision": 0
   },
   {
     "id": "de000000-0000-4000-8000-000000000006",
     "name": "Ива",
     "templateId": "druid",
-    "level": 10,
+    "level": 1,
     "experience": 0,
-    "skillPoints": 2,
-    "learnedSkillIds": [
-      "strike",
-      "pebble",
-      "lifesap",
-      "grove",
-      "world-tree",
-      "earthen-barrier",
-      "stone-skin",
-      "earthen-grasp"
-    ],
+    "skillPoints": 3,
+    "learnedSkillIds": [],
     "stats": {
-      "maxHp": 228,
-      "attack": 26,
-      "defense": 12,
+      "maxHp": 240,
+      "attack": 8,
+      "defense": 3,
       "maxEnergy": 200
     },
     "energy": {
@@ -623,6 +572,14 @@
       "defense": 0
     },
     "inventory": [
+      {
+        "itemId": "woodcutting-axe",
+        "quantity": 1
+      },
+      {
+        "itemId": "mining-pick",
+        "quantity": 1
+      },
       {
         "itemId": "potion",
         "quantity": 3,
@@ -687,50 +644,33 @@
       {
         "itemId": "ember-scroll",
         "quantity": 1
-      },
-      {
-        "itemId": "woodcutting-axe",
-        "quantity": 1
-      },
-      {
-        "itemId": "mining-pick",
-        "quantity": 1
       }
     ],
     "createdAt": "2026-10-28T00:00:00.000Z",
-    "skillLevels": {
-      "strike": 1,
-      "pebble": 1,
-      "lifesap": 1,
-      "grove": 1,
-      "world-tree": 1,
-      "earthen-barrier": 1,
-      "stone-skin": 1,
-      "earthen-grasp": 1
-    }
+    "skillLevels": {},
+    "attributeVersion": 1,
+    "baseAttributes": {
+      "strength": 10,
+      "dexterity": 10,
+      "intelligence": 10,
+      "vitality": 10,
+      "luck": 10
+    },
+    "attributePoints": 5,
+    "attributeRevision": 0
   },
   {
     "id": "de000000-0000-4000-8000-000000000007",
     "name": "Шторм",
     "templateId": "stormcaller",
-    "level": 10,
+    "level": 1,
     "experience": 0,
-    "skillPoints": 1,
-    "learnedSkillIds": [
-      "strike",
-      "breeze",
-      "gust",
-      "tempest",
-      "soothing-wind",
-      "sheltering-wind",
-      "thunderclap",
-      "arcane-focus",
-      "flying-blade"
-    ],
+    "skillPoints": 3,
+    "learnedSkillIds": [],
     "stats": {
-      "maxHp": 228,
-      "attack": 26,
-      "defense": 12,
+      "maxHp": 240,
+      "attack": 8,
+      "defense": 3,
       "maxEnergy": 200
     },
     "energy": {
@@ -742,6 +682,14 @@
       "defense": 0
     },
     "inventory": [
+      {
+        "itemId": "woodcutting-axe",
+        "quantity": 1
+      },
+      {
+        "itemId": "mining-pick",
+        "quantity": 1
+      },
       {
         "itemId": "potion",
         "quantity": 3,
@@ -806,50 +754,33 @@
       {
         "itemId": "ember-scroll",
         "quantity": 1
-      },
-      {
-        "itemId": "woodcutting-axe",
-        "quantity": 1
-      },
-      {
-        "itemId": "mining-pick",
-        "quantity": 1
       }
     ],
     "createdAt": "2026-10-28T00:00:00.000Z",
-    "skillLevels": {
-      "strike": 1,
-      "breeze": 1,
-      "gust": 1,
-      "tempest": 1,
-      "soothing-wind": 1,
-      "sheltering-wind": 1,
-      "thunderclap": 1,
-      "arcane-focus": 1,
-      "flying-blade": 1
-    }
+    "skillLevels": {},
+    "attributeVersion": 1,
+    "baseAttributes": {
+      "strength": 10,
+      "dexterity": 10,
+      "intelligence": 10,
+      "vitality": 10,
+      "luck": 10
+    },
+    "attributePoints": 5,
+    "attributeRevision": 0
   },
   {
     "id": "de000000-0000-4000-8000-000000000008",
     "name": "Зефир",
     "templateId": "windkeeper",
-    "level": 10,
+    "level": 1,
     "experience": 0,
     "skillPoints": 3,
-    "learnedSkillIds": [
-      "strike",
-      "breeze",
-      "soothing-wind",
-      "cloud-rest",
-      "sky-blessing",
-      "sheltering-wind",
-      "arcane-focus",
-      "flying-blade"
-    ],
+    "learnedSkillIds": [],
     "stats": {
-      "maxHp": 228,
-      "attack": 26,
-      "defense": 12,
+      "maxHp": 240,
+      "attack": 8,
+      "defense": 3,
       "maxEnergy": 200
     },
     "energy": {
@@ -861,6 +792,14 @@
       "defense": 0
     },
     "inventory": [
+      {
+        "itemId": "woodcutting-axe",
+        "quantity": 1
+      },
+      {
+        "itemId": "mining-pick",
+        "quantity": 1
+      },
       {
         "itemId": "potion",
         "quantity": 3,
@@ -925,50 +864,33 @@
       {
         "itemId": "ember-scroll",
         "quantity": 1
-      },
-      {
-        "itemId": "woodcutting-axe",
-        "quantity": 1
-      },
-      {
-        "itemId": "mining-pick",
-        "quantity": 1
       }
     ],
     "createdAt": "2026-10-28T00:00:00.000Z",
-    "skillLevels": {
-      "strike": 1,
-      "breeze": 1,
-      "soothing-wind": 1,
-      "cloud-rest": 1,
-      "sky-blessing": 1,
-      "sheltering-wind": 1,
-      "arcane-focus": 1,
-      "flying-blade": 1
-    }
+    "skillLevels": {},
+    "attributeVersion": 1,
+    "baseAttributes": {
+      "strength": 10,
+      "dexterity": 10,
+      "intelligence": 10,
+      "vitality": 10,
+      "luck": 10
+    },
+    "attributePoints": 5,
+    "attributeRevision": 0
   },
   {
     "id": "de000000-0000-4000-8000-000000000009",
     "name": "Клинок",
     "templateId": "duelist",
-    "level": 10,
+    "level": 1,
     "experience": 0,
-    "skillPoints": 1,
-    "learnedSkillIds": [
-      "strike",
-      "flying-blade",
-      "lunge",
-      "cleave",
-      "execution",
-      "second-wind",
-      "bleeding-cut",
-      "concussive-blow",
-      "rending-strike"
-    ],
+    "skillPoints": 3,
+    "learnedSkillIds": [],
     "stats": {
-      "maxHp": 228,
-      "attack": 26,
-      "defense": 12,
+      "maxHp": 240,
+      "attack": 8,
+      "defense": 3,
       "maxEnergy": 200
     },
     "energy": {
@@ -980,6 +902,14 @@
       "defense": 0
     },
     "inventory": [
+      {
+        "itemId": "woodcutting-axe",
+        "quantity": 1
+      },
+      {
+        "itemId": "mining-pick",
+        "quantity": 1
+      },
       {
         "itemId": "potion",
         "quantity": 3,
@@ -1044,51 +974,33 @@
       {
         "itemId": "ember-scroll",
         "quantity": 1
-      },
-      {
-        "itemId": "woodcutting-axe",
-        "quantity": 1
-      },
-      {
-        "itemId": "mining-pick",
-        "quantity": 1
       }
     ],
     "createdAt": "2026-10-28T00:00:00.000Z",
-    "skillLevels": {
-      "strike": 1,
-      "flying-blade": 1,
-      "lunge": 1,
-      "cleave": 1,
-      "execution": 1,
-      "second-wind": 1,
-      "bleeding-cut": 1,
-      "concussive-blow": 1,
-      "rending-strike": 1
-    }
+    "skillLevels": {},
+    "attributeVersion": 1,
+    "baseAttributes": {
+      "strength": 10,
+      "dexterity": 10,
+      "intelligence": 10,
+      "vitality": 10,
+      "luck": 10
+    },
+    "attributePoints": 5,
+    "attributeRevision": 0
   },
   {
     "id": "de000000-0000-4000-8000-000000000010",
     "name": "Оплот",
     "templateId": "veteran",
-    "level": 10,
+    "level": 1,
     "experience": 0,
-    "skillPoints": 2,
-    "learnedSkillIds": [
-      "strike",
-      "flying-blade",
-      "lunge",
-      "second-wind",
-      "bleeding-cut",
-      "battle-cry",
-      "weakening",
-      "rending-strike",
-      "concussive-blow"
-    ],
+    "skillPoints": 3,
+    "learnedSkillIds": [],
     "stats": {
-      "maxHp": 228,
-      "attack": 26,
-      "defense": 12,
+      "maxHp": 240,
+      "attack": 8,
+      "defense": 3,
       "maxEnergy": 200
     },
     "energy": {
@@ -1100,6 +1012,14 @@
       "defense": 0
     },
     "inventory": [
+      {
+        "itemId": "woodcutting-axe",
+        "quantity": 1
+      },
+      {
+        "itemId": "mining-pick",
+        "quantity": 1
+      },
       {
         "itemId": "potion",
         "quantity": 3,
@@ -1164,27 +1084,19 @@
       {
         "itemId": "ember-scroll",
         "quantity": 1
-      },
-      {
-        "itemId": "woodcutting-axe",
-        "quantity": 1
-      },
-      {
-        "itemId": "mining-pick",
-        "quantity": 1
       }
     ],
     "createdAt": "2026-10-28T00:00:00.000Z",
-    "skillLevels": {
-      "strike": 1,
-      "flying-blade": 1,
-      "lunge": 1,
-      "second-wind": 1,
-      "bleeding-cut": 1,
-      "battle-cry": 1,
-      "weakening": 1,
-      "rending-strike": 1,
-      "concussive-blow": 1
-    }
+    "skillLevels": {},
+    "attributeVersion": 1,
+    "baseAttributes": {
+      "strength": 10,
+      "dexterity": 10,
+      "intelligence": 10,
+      "vitality": 10,
+      "luck": 10
+    },
+    "attributePoints": 5,
+    "attributeRevision": 0
   }
 ]

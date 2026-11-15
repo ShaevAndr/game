@@ -92,7 +92,7 @@ test('physical damage flat is added after defense, is not critical-scaled and ne
   const battle = newBattle('flat-test', 'Проверка', 'duel', 'on-match', createCharacter('hero', 'Герой', content), content);
   battle.fighters = [actor, target]; target.hp = 1000;
   actor.attributes!.effective.physicalDamageFlat = 5;
-  actor.attributes!.effective.criticalChanceBps = 10000; actor.attributes!.effective.criticalBonusBps = 5000;
+  actor.attributes!.effective.criticalChanceBps = 10000; actor.attributes!.effective.physicalCriticalChanceBps = 10000; actor.attributes!.effective.criticalBonusBps = 5000;
   target.attributes!.effective.physicalResistance = 6; target.attributes!.effective.fireResistance = 6; target.guardDefense = 2;
   assert.equal(applyResolvedDamage(battle, actor, target, 20, 'physical'), 27); // 30 − 6 − 2 + 5
   assert.equal(applyResolvedDamage(battle, actor, target, 20, 'fire'), 22);

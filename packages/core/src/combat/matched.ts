@@ -24,14 +24,14 @@ function finishMatchedTurn(battle: Battle, actor: Fighter, onBeforeCascades?: (b
     if (pending.report.regeneration) addLog(battle, pending.report.regeneration === 'cascade-limit' ? 'Достигнут предел каскадов. Поле обновлено.' : 'Нет доступных ходов. Поле обновлено.');
     delete battle.pendingBattlefield;
   }
-  delete battle.matchPowerBps;
+  delete battle.directMatches;
   nextTurn(battle);
 }
 
-/** Choices are restricted by direct matches, but remain visible when energy or cooldown blocks casting. */
+/** All learned skills stay visible; resonance and blockers are calculated only on the server. */
 export function skillChoices(battle: Battle, actor: Fighter): SkillChoice[] {
   if (battle.phase !== 'choose' || battle.usedSkill) return [];
-  return battle.content.skills.filter(skill => actor.skillIds.includes(skill.id) && battle.matchedElements?.includes(skill.element)).map(skill => {
+  return battle.content.skills.filter(skill => actor.skillIds.includes(skill.id)).map(skill => {
     let reason = (actor.cooldowns[skill.id] ?? 0) > 0 ? 'Навык перезаряжается'
       : skillEnergy(actor) < skill.cost ? 'Недостаточно энергии' : undefined;
     if (battle.effectsVersion === 1) {
@@ -42,12 +42,12 @@ export function skillChoices(battle: Battle, actor: Fighter): SkillChoice[] {
         try { effectPreviews = previewSkillEffects(battle, actor, skill); }
         catch (error) { reason ??= (error as Error).message; }
       }
-      return { skillId: skill.id, enabled: !reason, ...(reason ? { reason } : {}), targeting: skillTargeting(skill), targetIds: targets.map(target => target.id),
+      return { matchPowerBps: matchPowerBps(battle, skill), skillId: skill.id, enabled: !reason, ...(reason ? { reason } : {}), targeting: skillTargeting(skill), targetIds: targets.map(target => target.id),
         ...(battle.content.balance.formulas && !skill.effects?.length && skill.effect === 'damage' ? { damagePreviews: targets.map(target => ({ targetId: target.id, ...damageChances(battle, actor, target, skill.element) })) } : {}),
-        ...(effectPreviews ? { effectPreviews } : actor.attributes ? { magnitude: skillMagnitude(skill, actor.skillLevels?.[skill.id] ?? 1, actor.attributes.effective, battle.content.balance.attributes?.skillReferencePower, matchPowerBps(battle)) } : {}) };
+        ...(effectPreviews ? { effectPreviews } : actor.attributes ? { magnitude: skillMagnitude(skill, actor.skillLevels?.[skill.id] ?? 1, actor.attributes.effective, battle.content.balance.attributes?.skillReferencePower, matchPowerBps(battle, skill)) } : {}) };
     }
     if (skill.effects?.length) reason ??= 'Навык недоступен в этой версии боя';
-    return { skillId: skill.id, enabled: !reason, ...(reason ? { reason } : {}), ...(actor.attributes ? { magnitude: skillMagnitude(skill, actor.skillLevels?.[skill.id] ?? 1, actor.attributes.effective, battle.content.balance.attributes?.skillReferencePower, matchPowerBps(battle)) } : {}) };
+    return { matchPowerBps: matchPowerBps(battle, skill), skillId: skill.id, enabled: !reason, ...(reason ? { reason } : {}), ...(actor.attributes ? { magnitude: skillMagnitude(skill, actor.skillLevels?.[skill.id] ?? 1, actor.attributes.effective, battle.content.balance.attributes?.skillReferencePower, matchPowerBps(battle, skill)) } : {}) };
   });
 }
 
@@ -75,7 +75,7 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
     const rules = combatRules(battle.content);
     // The field resolves RNG once; only the direct step is committed to the visible board now.
     const previous = skillEnergy(actor);
-    const count = report.direct.count - (report.direct.byType.defense ?? 0);
+    const count = report.direct.count;
     actor.skillEnergy = Math.min(rules.energyCap, previous + count * rules.energyPerTile);
     const guard = (report.direct.byType.defense ?? 0) * (actor.attributes?.effective.guardPerCell ?? rules.defensePerTile);
     actor.guardDefense = (actor.guardDefense ?? 0) + guard;
@@ -86,20 +86,20 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
     battle.boardMoves = [...(battle.boardMoves ?? []), { ...report, actorId, from: { ...action.from }, to: { ...action.to },
       generated: empty, total: report.direct, cascades: 0, steps: report.steps.filter(step => step.source === 'direct'), shuffled: false, regeneration: null }].slice(-22);
     battle.pendingMatch = report.direct.count;
-    battle.matchPowerBps = 10000 + Math.max(0, report.direct.count - 3) * 3000;
+    battle.directMatches = { ...report.direct.byType };
     battle.matchedElements = elements.filter(type => (report.direct.byType[type] ?? 0) > 0);
     battle.phase = 'choose';
     battle.skillChoices = skillChoices(battle, actor);
-    addLog(battle, report.direct.count === 0 ? `${actor.name}: перестановка без совпадений, ход завершён`
-      : `${actor.name}: прямо ${report.direct.count}, сила навыка ×${matchPowerBps(battle) / 10000}. Общая энергия: +${actor.skillEnergy - previous} (${actor.skillEnergy}/${rules.energyCap})${guard ? `. Защита +${guard} до следующего собственного хода` : ''}`);
-    // Matching tiles never deals damage. No learned matching skills means energy/guard only and an automatic end.
+    addLog(battle, report.direct.count === 0 ? `${actor.name}: перестановка без совпадений, навыки без усиления`
+      : `${actor.name}: прямо ${report.direct.count}, усиление определяется школой навыка. Общая энергия: +${actor.skillEnergy - previous} (${actor.skillEnergy}/${rules.energyCap})${guard ? `. Защита +${guard} до следующего собственного хода` : ''}`);
+    // Tiles supply resources, not damage. A used item leaves no skill choices and ends after settlement.
     if (!battle.skillChoices.length) finishMatchedTurn(battle, actor, onBeforeCascades);
     return;
   }
   if (action.type === 'skill') {
-    if (battle.phase !== 'choose' || battle.usedSkill) throw new Error('Сначала совместите клетки соответствующего типа');
+    if (battle.phase !== 'choose' || battle.usedSkill) throw new Error('Сначала выполните перестановку');
     const skill = battle.content.skills.find(skill => skill.id === action.skillId && actor.skillIds.includes(skill.id));
-    if (!skill || !battle.matchedElements?.includes(skill.element)) throw new Error('Тип навыка не совпал напрямую');
+    if (!skill) throw new Error('Навык не изучен');
     const choice = skillChoices(battle, actor).find(choice => choice.skillId === skill.id);
     if (!choice?.enabled) throw new Error(choice?.reason ?? 'Навык недоступен');
     if (skill.effects?.length) {
@@ -109,7 +109,7 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
       addLog(draft, `${caster.name} применяет «${skill.name}»: −${skill.cost} энергии`);
       applySkillEffects(draft, caster, skill, action.targetId);
       finishMatchedTurn(draft, caster, onBeforeCascades);
-      delete battle.pendingBattlefield; delete battle.matchPowerBps;
+      delete battle.pendingBattlefield; delete battle.directMatches;
       Object.assign(battle, draft); return;
     }
     const victim = target(battle, actor, action.targetId, skill.effect === 'heal');
@@ -120,7 +120,7 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
     const power = skillPower(skill, actor.skillLevels?.[skill.id] ?? 1);
     if (skill.effect === 'damage') damage(battle, actor, victim, power, skill.element, skill.id);
     else {
-      const magnitude = actor.attributes ? skillMagnitude(skill, actor.skillLevels?.[skill.id] ?? 1, actor.attributes.effective, battle.content.balance.attributes?.skillReferencePower, matchPowerBps(battle)) : scaleMatchPower(battle, power);
+      const magnitude = actor.attributes ? skillMagnitude(skill, actor.skillLevels?.[skill.id] ?? 1, actor.attributes.effective, battle.content.balance.attributes?.skillReferencePower, matchPowerBps(battle, skill)) : scaleMatchPower(battle, power, skill);
       const healed = Math.min(magnitude, victim.stats.maxHp - victim.hp);
       victim.hp += healed; addLog(battle, `${victim.name}: +${healed} HP`);
     }
@@ -176,7 +176,7 @@ export function runMatchedNpcTurns(battle: Battle, fieldEngine: BattlefieldEngin
     if (battle.status !== 'active' || battle.activeId !== actor.id) continue;
     const available = skillChoices(battle, actor).filter(choice => choice.enabled).map(choice => battle.content.skills.find(skill => skill.id === choice.skillId)!);
     const best = available.flatMap(skill => legalSkillTargets(battle, actor, skill).map(receiver => ({ skill, receiver,
-      score: effectSkillUtility(battle, actor, skill, receiver.id) / Math.sqrt(Math.max(1, skill.cost / 30)) })))
+      score: effectSkillUtility(battle, actor, skill, receiver.id) / Math.sqrt(Math.max(1, skill.cost / 3)) })))
       .filter(candidate => candidate.score > 0).sort((a, b) => b.score - a.score || a.skill.id.localeCompare(b.skill.id) || a.receiver.id.localeCompare(b.receiver.id))[0];
     if (!best) { applyMatchedAction(battle, actor.id, { type: 'end' }, Math.random, fieldEngine, onAction); onAction?.(battle); continue; }
     const { skill, receiver: victim } = best;

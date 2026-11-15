@@ -32,7 +32,7 @@ export interface TimedEffect extends EffectBase {
   stackKey?: string; stacking?: 'refresh' | 'independent'; maxStacks?: number;
 }
 export type SkillEffect = StatModifierEffect | DispelEffect | DamageEffect | HealEffect | StunEffect | TimedEffect;
-export interface EffectSource { kind: 'skill' | 'item'; id: string; name: string; rank: number; element?: Element; effects: SkillEffect[] }
+export interface EffectSource { matchBonus?: boolean; kind: 'skill' | 'item'; id: string; name: string; rank: number; element?: Element; effects: SkillEffect[] }
 interface ActiveEffectBase {
   instanceId: string; definitionId: string; name: string; sourceFighterId: string; sourceName?: string;
   sourceSkillId?: string; sourceItemId?: string; sourceRank: number; targetFighterId: string;
@@ -53,7 +53,7 @@ export interface ActiveTimedEffect extends ActiveEffectBase {
 }
 export type ActiveEffect = ActiveStatEffect | ActiveStunEffect | ActiveTimedEffect;
 export interface EffectPreview {
-  hitChanceBps?: number; luckAvoidChanceBps?: number;
+  hitChanceBps?: number; luckAvoidChanceBps?: number; criticalChanceBps?: number;
   activationChanceBps?: number;
   effectId: string; name: string; kind: SkillEffect['kind']; targetId: string;
   magnitude?: number; unit?: EffectUnit; durationTurns?: number; statId?: string;

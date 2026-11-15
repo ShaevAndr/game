@@ -27,7 +27,7 @@ function resolveEffects(battle: Battle, actor: Fighter, skill: EffectSource, sel
       baseNumerator = modifierBaseNumerator(shared, definition.operation, definition.coefficientBps + (rank - 1) * (definition.coefficientPerSkillRankBps ?? 0));
     }
     const base = evaluateEffectNumerator(definition.magnitude, actor.attributes?.effective ?? {}, target.attributes?.effective ?? {}, rank, baseNumerator);
-    const multiplier = BigInt(skill.kind === 'skill' ? matchPowerBps(battle) : 10000);
+    const multiplier = BigInt(skill.kind === 'skill' ? matchPowerBps(battle, skill) : 10000);
     // Multiply is centered on 1, so strengthening a debuff cannot turn it into a buff.
     const neutral = definition.kind === 'stat_modifier' && definition.operation === 'multiply' ? 100000000n : 0n;
     let numerator = neutral * 10000n + (base - neutral) * multiplier;
@@ -44,7 +44,8 @@ function resolveEffects(battle: Battle, actor: Fighter, skill: EffectSource, sel
 
 export function previewSkillEffects(battle: Battle, actor: Fighter, skill: Skill): EffectPreview[] {
   return resolveEffects(battle, actor, skillSource(actor, skill), legalSkillTargets(battle, actor, skill)).map(({ definition, targetId, magnitude, durationTurns, chanceBps }) => ({
-    ...(battle.content.balance.formulas && definition.kind === 'damage' ? damageChances(battle, actor, battle.fighters.find(target => target.id === targetId)!, definition.damageType, skill.element === 'physical') : {}),
+    ...(battle.content.balance.formulas && definition.kind === 'damage' ? damageChances(battle, actor, battle.fighters.find(target => target.id === targetId)!, definition.damageType, skill.element === 'physical' ? 'physical' : 'magic') : {}),
+    ...(definition.kind === 'damage' && definition.canCrit === false ? { criticalChanceBps: 0 } : {}),
     activationChanceBps: chanceBps, effectId: definition.id, name: definition.name ?? skill.name, kind: definition.kind, targetId, magnitude,
     ...(definition.kind !== 'dispel' && definition.kind !== 'stun' ? { unit: definition.magnitude.unit } : {}), durationTurns,
     ...(definition.kind === 'stat_modifier' ? { statId: definition.statId, operation: definition.operation, polarity: definition.polarity } : {}),
@@ -87,7 +88,7 @@ function applyEffects(battle: Battle, actor: Fighter, skill: EffectSource, selec
       target.activeEffects = (target.activeEffects ?? []).filter(effect => !ids.has(effect.instanceId));
       if (ids.size) refreshEffectAttributes(battle, target);
       addLog(battle, `${actor.name} → ${target.name}: снято эффектов ${removed.length}${removed.length ? ` (${removed.map(effect => effect.name).join(', ')})` : ''}`);
-    } else if (definition.kind === 'damage') applyResolvedDamage(battle, casterSnapshot, target, magnitude!, definition.damageType, definition.canCrit ?? true, rawNumerator !== undefined ? rational(rawNumerator, 100000000) : undefined, { skillId: skill.kind === 'skill' ? skill.id : undefined, effectId: definition.id, canMiss: skill.element === 'physical' });
+    } else if (definition.kind === 'damage') applyResolvedDamage(battle, casterSnapshot, target, magnitude!, definition.damageType, definition.canCrit ?? true, rawNumerator !== undefined ? rational(rawNumerator, 100000000) : undefined, { skillId: skill.kind === 'skill' ? skill.id : undefined, effectId: definition.id, accuracyType: skill.element === 'physical' ? 'physical' : 'magic' });
     else {
       const healed = Math.max(0, Math.min(magnitude!, target.stats.maxHp - target.hp));
       target.hp += healed; addLog(battle, `${target.name}: +${healed} HP`);
@@ -101,8 +102,8 @@ export function effectSkillUtility(battle: Battle, actor: Fighter, skill: Skill,
   let score = 0;
   const selected = resolveSkillTargets(battle, actor, skill, targetId);
   const rank = actor.skillLevels?.[skill.id] ?? 1;
-  const simpleMagnitude = () => actor.attributes ? skillMagnitude(skill, rank, actor.attributes.effective, battle.content.balance.attributes?.skillReferencePower, matchPowerBps(battle))
-    : skill.effect === 'damage' ? skillPower(skill, rank) * matchPowerBps(battle) / 10000 + actor.stats.attack : skillPower(skill, rank) * matchPowerBps(battle) / 10000;
+  const simpleMagnitude = () => actor.attributes ? skillMagnitude(skill, rank, actor.attributes.effective, battle.content.balance.attributes?.skillReferencePower, matchPowerBps(battle, skill))
+    : skill.effect === 'damage' ? skillPower(skill, rank) * matchPowerBps(battle, skill) / 10000 + actor.stats.attack : skillPower(skill, rank) * matchPowerBps(battle, skill) / 10000;
   const resolved: ResolvedEffect[] = skill.effects?.length ? resolveEffects(battle, actor, skillSource(actor, skill), selected)
     : selected.map(target => ({ definition: { id: skill.id, kind: skill.effect === 'heal' ? 'heal' : 'damage', recipient: 'selected',
       magnitude: { unit: 'hp', constant: 0 }, damageType: skill.element } as SkillEffect, targetId: target.id, magnitude: simpleMagnitude(), chanceBps: 10000 }));
@@ -113,7 +114,7 @@ export function effectSkillUtility(battle: Battle, actor: Fighter, skill: Skill,
       const defense = (target.attributes?.effective[definition.damageType === 'physical' ? 'physicalResistance' : `${definition.damageType}Resistance`] ?? target.stats.defense) + (target.guardDefense ?? 0);
       const rules = battle.content.balance.formulas, k = rules ? rules.armorK + rules.armorKPerLevel * ((actor.combatLevel ?? 1) - 1) : 0;
       const amount = rules ? Math.max(1, magnitude! * Math.max(1 - rules.armorReductionCapBps / 10000, k / (k + defense))) : Math.max(1, magnitude! - defense);
-      const chances = damageChances(battle, actor, target, definition.damageType, skill.element === 'physical');
+      const chances = damageChances(battle, actor, target, definition.damageType, skill.element === 'physical' ? 'physical' : 'magic');
       score += (Math.min(target.hp, amount) + (amount >= target.hp ? 20 : 0)) * chances.hitChanceBps / 10000 * (1 - chances.luckAvoidChanceBps / 10000) * chanceBps / 10000;
     } else if (definition.kind === 'heal') score += Math.min(magnitude!, target.stats.maxHp - target.hp) * chanceBps / 10000;
     else if (definition.kind === 'shield' || definition.kind === 'periodic_damage' || definition.kind === 'periodic_heal') {

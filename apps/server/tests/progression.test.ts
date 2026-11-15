@@ -108,7 +108,7 @@ test('a command arriving after its deadline cannot cast a finishing skill or gra
   battle.turnDeadlineAt = 100000;
   const result = await f.service.command(battleId, f.command());
   assert.equal(result.status, 'active'); assert.equal(result.activeId, loserId);
-  assert.equal(result.fighters.find(fighter => fighter.id === loserId)!.hp, 120);
+  assert.equal(result.fighters.find(fighter => fighter.id === loserId)!.hp, 240);
   assert.equal(f.state().receipts.length, 0);
 });
 
@@ -178,6 +178,7 @@ test('a bot victory grants experience once and never creates an NPC reward', asy
 });
 test('bot commands return after the automatic NPC turn', async () => {
   const f = fixture('bot'); f.state().battles[battleId].data.fighters[0].stats.attack = 8;
+  f.state().battles[battleId].data.fighters[1].skillEnergy = 30;
   const battle = await f.service.command(battleId, f.command());
   assert.equal(battle.status, 'active'); assert.equal(battle.activeId, winnerId);
   assert.ok(battle.fighters[0].hp < battle.fighters[0].stats.maxHp);
@@ -229,8 +230,10 @@ test('battle commands expose direct and generated removals outside the old eight
 test('automatic NPC moves retain the chosen field types and each actor gets its own reports', async () => {
   const f = fixture('bot', { size: { rows: 5, cols: 10 }, elementTypes: ['fire', 'water', 'earth'] });
   const state = f.state().battles[battleId].data; state.phase = 'before';
-  const result = await f.service.command(battleId, { characterId: winnerId, version: 0, action: { type: 'swap', ...possibleMove(state.board)! } });
-  assert.deepEqual([...new Set(result.boardMoves?.map(move => move.actorId))], [winnerId, 'bot-opponent']);
+  const moved = await f.service.command(battleId, { characterId: winnerId, version: 0, action: { type: 'swap', ...possibleMove(state.board)! } });
+  assert.equal(moved.phase, 'choose');
+  const result = await f.service.command(battleId, { characterId: winnerId, version: moved.version, action: { type: 'end' } });
+  assert.deepEqual([...new Set([...moved.boardMoves ?? [], ...result.boardMoves ?? []].map(move => move.actorId))], [winnerId, 'bot-opponent']);
   assert.ok(result.board.flat().every(type => ['fire', 'water', 'earth'].includes(type)));
   assert.equal(result.activeId, winnerId); assert.equal(result.phase, 'before');
   assert.equal(result.pendingBattlefield, undefined);
@@ -239,15 +242,15 @@ test('automatic NPC moves retain the chosen field types and each actor gets its 
 test('matched combat only rewards the finishing skill and rejects its duplicate atomically', async () => {
   const f = fixture('duel', { size: { rows: 6, cols: 10 }, elementTypes: ['physical', 'water', 'defense'] });
   const state = f.state().battles[battleId].data;
-  state.phase = 'before'; state.fighters[0].skillEnergy = 0; state.content = structuredClone(seedContent);
+  state.phase = 'before'; state.fighters[0].skillEnergy = 24; state.content = structuredClone(seedContent);
   state.board = Array.from({ length: 6 }, (_, row) => Array.from({ length: 10 }, (_, col) => (row + col) % 2 ? 'water' : 'physical'));
   const moved = await f.service.command(battleId, { characterId: winnerId, version: 0, action: { type: 'swap', from: { row: 1, col: 8 }, to: { row: 1, col: 9 } } });
   assert.equal(moved.status, 'active'); assert.equal(moved.phase, 'choose');
   assert.ok(moved.pendingBattlefield);
   assert.equal('pendingBattlefield' in battleView(moved), false);
-  assert.equal(moved.matchPowerBps, 19000);
-  assert.equal(moved.fighters[1].hp, 120); assert.equal(f.state().receipts.length, 0);
-  assert.deepEqual(moved.skillChoices, [{ skillId: 'strike', enabled: true }]);
+  assert.equal(moved.skillChoices!.find(choice => choice.skillId === 'strike')!.matchPowerBps, 15000);
+  assert.equal(moved.fighters[1].hp, 240); assert.equal(f.state().receipts.length, 0);
+  assert.deepEqual(moved.skillChoices, [{ skillId: 'strike', enabled: true, matchPowerBps: 15000 }]);
   const action = { characterId: winnerId, version: moved.version, action: { type: 'skill', skillId: 'strike', targetId: loserId } };
   const results = await Promise.allSettled([f.service.command(battleId, action), f.service.command(battleId, action)]);
   assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
@@ -256,7 +259,7 @@ test('matched combat only rewards the finishing skill and rejects its duplicate 
   assert.ok(finished.boardMoves!.every(report => report.continuation));
   assert.equal(finished.pendingBattlefield, undefined);
   const secondary = moved.pendingBattlefield!.report.generated.count;
-  assert.equal(finished.fighters[0].skillEnergy, Math.min(200, moved.fighters[0].skillEnergy! - 30 + secondary * 10));
+  assert.equal(finished.fighters[0].skillEnergy, Math.min(200, moved.fighters[0].skillEnergy! - 1 + secondary));
   assert.equal(f.state().receipts.length, 1); assert.deepEqual(f.state().outbox[battleId], finished);
 });
 

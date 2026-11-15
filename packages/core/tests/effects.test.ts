@@ -31,7 +31,7 @@ function pass(battle: Battle) { battle.phase = 'choose'; applyAction(battle, bat
 
 test('seed effect skills form valid content and remain learnable, non-starter skills', () => {
   assert.equal(contentSchema.safeParse(content).success, true);
-  assert.equal(seedEffectSkills.length, 20);
+  assert.equal(seedEffectSkills.length, 25);
   assert.ok(seedEffectSkills.every(skill => !skill.learning.starter && skill.effects?.length && skill.targeting));
 });
 
@@ -42,7 +42,7 @@ test('a self buff applies now, survives the current turn and expires after two s
   assert.equal(fighter.attributes!.effective.strength, 12);
   assert.equal(fighter.activeEffects![0].remainingTurns, 2);
   assert.equal(fighter.activeEffects![0].eligibleFromTurn, 2);
-  assert.equal(fighter.skillEnergy, 170);
+  assert.equal(fighter.skillEnergy, 192);
   assert.equal(first.baseAttributes!.strength, 10);
   pass(battle); // enemy ends; first subsequent own turn starts
   assert.equal(battle.fighters[0].activeEffects![0].remainingTurns, 2);
@@ -71,11 +71,11 @@ test('a debuff counts target turns, persists through JSON round trips and does n
 
 test('match power scales negative modifiers and healing while preserving duration and activation chance', () => {
   const { battle } = fixture(), [actor, target] = battle.fighters;
-  const weakening = skill('weakening');
+  const weakening = { ...skill('weakening'), matchBonus: true };
   const before = previewSkillEffects(battle, actor, weakening)[0];
-  battle.matchPowerBps = 13000;
+  battle.directMatches = { physical: 3, fire: 3, water: 3 };
   const after = previewSkillEffects(battle, actor, weakening)[0];
-  assert.equal(after.magnitude, -2600);
+  assert.equal(after.magnitude, -3000);
   assert.equal(after.durationTurns, before.durationTurns);
   assert.equal(after.activationChanceBps, before.activationChanceBps);
   applySkillEffects(battle, actor, weakening, target.id);
@@ -84,9 +84,9 @@ test('match power scales negative modifiers and healing while preserving duratio
     id: 'heal', recipient: 'selected', kind: 'heal', magnitude: { unit: 'hp', constant: 11 },
   }] };
   actor.hp = 50;
-  assert.equal(previewSkillEffects(battle, actor, healing)[0].magnitude, 14);
+  assert.equal(previewSkillEffects(battle, actor, healing)[0].magnitude, 16);
   applySkillEffects(battle, actor, healing, actor.id);
-  assert.equal(actor.hp, 64);
+  assert.equal(actor.hp, 66);
 });
 
 test('refresh replaces the snapshot and duration; changing source attributes later does not change magnitude', () => {
@@ -156,7 +156,7 @@ test('composed casts snapshot magnitudes, but use resistance after earlier debuf
   cast(battle, 'test-combo', second.id);
   assert.equal(battle.fighters[0].attributes!.effective.strength, 12);
   // Pre-cast power 8 × 1.5 = 12, target defense after -25% is 2 => 10 HP.
-  assert.equal(battle.fighters[1].hp, 110);
+  assert.equal(battle.fighters[1].hp, 230);
   assert.equal(battle.fighters[1].attributes!.effective.physicalResistance, 2);
 });
 
@@ -193,12 +193,12 @@ test('maximum-HP buffs do not heal; expiry clamps HP; dead sources do not remove
   definition.statId = 'maxHp'; definition.magnitude = { unit: 'basis_points', constant: 10000 };
   target.hp = 80;
   applySkillEffects(battle, actor, health, target.id);
-  assert.equal(target.stats.maxHp, 240); assert.equal(target.hp, 80);
+  assert.equal(target.stats.maxHp, 480); assert.equal(target.hp, 80);
   actor.hp = 0; removeDeadEffects(battle);
   assert.equal(target.activeEffects!.length, 1);
-  target.hp = 200;
+  target.hp = 400;
   applySkillEffects(battle, target, { ...skill('purify'), effects: [{ id: 'strip', kind: 'dispel', recipient: 'selected', polarityToRemove: 'buff', maxCount: 1 }] }, target.id);
-  assert.equal(target.stats.maxHp, 120); assert.equal(target.hp, 120);
+  assert.equal(target.stats.maxHp, 240); assert.equal(target.hp, 240);
 });
 
 test('content rejects unknown references, incompatible units and invalid stacking groups', () => {
@@ -213,9 +213,9 @@ test('content rejects unknown references, incompatible units and invalid stackin
 test('NPCs use the same buff and turn lifecycle, without refreshing a healthy effect forever', () => {
   const { first } = fixture();
   const battle = newBattle('npc-effects', 'Бот', 'bot', 'on-match', first, content); startBattle(battle, () => 0);
-  const bot = battle.fighters[1]; bot.skillIds = ['strike', 'battle-cry']; battle.activeId = bot.id;
+  const bot = battle.fighters[1]; bot.skillIds = ['battle-cry']; battle.activeId = bot.id;
   ready(battle, 'battle-cry'); runNpcTurns(battle);
   assert.equal(battle.activeId, first.id);
   assert.ok(battle.fighters.some(fighter => fighter.activeEffects?.length));
-  assert.equal(battle.fighters[1].skillEnergy, 170);
+  assert.equal(battle.fighters[1].skillEnergy, 192);
 });

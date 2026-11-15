@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { InventoryCommand, InventoryState, newBattle, applyAction, applyInventoryCommand, availableItemActions, backpackStacks, characterFighter, contentSchema, createCharacter, defaultItemGroups, effectiveStats, equipmentBonuses, grantSkill, normalizeCharacter, seedContent, skillLevel, skillPower, startBattle, upgradeSkill } from '../src';
+import { InventoryCommand, InventoryState, newBattle, applyAction, applyInventoryCommand, availableItemActions, backpackStacks, characterFighter, contentSchema, createCharacter, defaultItemGroups, effectiveStats, equipmentBonuses, grantSkill, learnSkill, normalizeCharacter, seedContent, skillLevel, skillPower, startBattle, upgradeSkill } from '../src';
 import { match } from './helpers/combat';
 
-function hero() { return createCharacter('hero', 'Герой', seedContent); }
+function hero() { const character = createCharacter('hero', 'Герой', seedContent); learnSkill(character, 'strike', seedContent); return character; }
 function inventories(): InventoryState[] {
   return [
     { ownerId: 'a', inventories: [{ id: 'bag-a', ownerId: 'a', name: 'Рюкзак', capacity: 50, primary: true }, { id: 'chest', ownerId: 'a', name: 'Сундук', capacity: 1, primary: false }], items: [
@@ -55,9 +55,10 @@ test('legacy learned skills become rank one and new battles freeze ranks and equ
   assert.equal(battle.fighters[1].skillLevels?.strike, 2);
   assert.equal(battle.fighters[0].stats.attack, normalized.stats.attack + 3);
   const previousHp = battle.fighters[1].hp;
+  battle.fighters[0].skillEnergy = 27;
   match(battle);
   applyAction(battle, 'hero', { type: 'skill', skillId: 'strike', targetId: battle.fighters[1].id });
-  assert.equal(previousHp - battle.fighters[1].hp, seedContent.skills[0].power + 1 + battle.fighters[0].stats.attack - battle.fighters[1].stats.defense);
+  assert.equal(previousHp - battle.fighters[1].hp, Math.floor((seedContent.skills[0].power + 1) * 1.5) + battle.fighters[0].stats.attack - battle.fighters[1].stats.defense);
   assert.equal(effectiveStats(normalized).attack, normalized.stats.attack + 3);
 });
 

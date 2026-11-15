@@ -19,7 +19,7 @@ export function tickPeriodicEffects(battle: Battle, target: Fighter): void {
         combatLevel: effect.sourceLevel, stats: { maxHp: 1, attack: 0, defense: 0, maxEnergy: ENERGY_CAP }, hp: 1,
         inventory: [], cooldowns: {}, skillIds: [], energy: emptyEnergy() };
       applyResolvedDamage(battle, source, target, effect.magnitude, effect.damageType!, false, undefined,
-        { skillId: effect.sourceSkillId, effectId: effect.definitionId, canMiss: false, periodic: true });
+        { skillId: effect.sourceSkillId, effectId: effect.definitionId, accuracyType: 'guaranteed', periodic: true });
     }
   }
 }

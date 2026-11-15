@@ -59,8 +59,8 @@ export function finishOrWave(b: Battle): boolean {
   if (livingTeams.size > 1) return false;
   if (b.kind === 'dungeon' && livingTeams.has(0) && b.wave < b.totalWaves) { b.wave++; spawnWave(b); return false; }
   b.status = 'finished'; b.winner = [...livingTeams][0] ?? null; b.activeId = null;
-  b.skillChoices = []; b.matchedElements = [];
-  delete b.pendingBattlefield; delete b.matchPowerBps;
+  b.skillChoices = []; b.matchedElements = []; b.directMatches = {};
+  delete b.pendingBattlefield; delete b.directMatches;
   addLog(b, b.winner === null ? 'Ничья' : `Победила команда ${b.winner + 1}`); return true;
 }
 export function nextTurn(b: Battle) {
@@ -79,7 +79,7 @@ export function nextTurn(b: Battle) {
     for (let i = 1; i <= b.fighters.length; i++) {
       const next = b.fighters[(start + i) % b.fighters.length];
       if (next.hp <= 0) continue;
-      next.guardDefense = 0; b.skillChoices = []; b.matchedElements = [];
+      next.guardDefense = 0; b.skillChoices = []; b.matchedElements = []; b.directMatches = {};
       if (b.effectsVersion === 1) { initializeEffectFighter(b, next); next.turnsStarted = (next.turnsStarted ?? 0) + 1; }
       b.activeId = next.id; b.turn++; b.phase = 'before'; b.usedSkill = false; b.pendingMatch = 0;
       for (const id of Object.keys(next.cooldowns)) next.cooldowns[id] = Math.max(0, next.cooldowns[id] - 1);

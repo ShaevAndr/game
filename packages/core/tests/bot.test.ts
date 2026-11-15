@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyAction, createCharacter, joinBattle, newBattle, runNpcTurns, seedContent, startBattle, victoryRecipients } from '../src';
+import { applyAction, createCharacter, joinBattle, learnSkill, newBattle, runNpcTurns, seedContent, startBattle, victoryRecipients } from '../src';
 import { fieldWithMatch, match } from './helpers/combat';
 
 function botBattle() {
-  const character = createCharacter('hero', 'Герой', seedContent, 'pyromancer');
+  const character = createCharacter('hero', 'Герой', seedContent, 'pyromancer'); learnSkill(character, 'strike', seedContent);
   const battle = newBattle('test', 'Бот', 'bot', 'on-match', character, seedContent); startBattle(battle, () => 0); return battle;
 }
 test('bot mirrors the hero without sharing mutable state or character identity', () => {
@@ -25,6 +25,7 @@ test('bot completes its board and skill phases under the same v1 rules', () => {
   const battle = botBattle(), [hero, bot] = battle.fighters;
   match(battle); applyAction(battle, hero.id, { type: 'end' });
   assert.equal(battle.activeId, bot.id);
+  bot.skillEnergy = 27;
   runNpcTurns(battle, fieldWithMatch());
   assert.equal(battle.activeId, hero.id); assert.equal(battle.phase, 'before');
   assert.ok(hero.hp < hero.stats.maxHp);
@@ -33,12 +34,12 @@ test('an injured bot can heal itself after directly matching the healing type', 
   const battle = botBattle(), [hero, bot] = battle.fighters;
   bot.skillIds.push('phoenix-warmth'); bot.skillEnergy = 100; bot.hp = 30; battle.activeId = bot.id;
   runNpcTurns(battle, fieldWithMatch('fire'));
-  assert.equal(bot.hp, 42); assert.equal(bot.cooldowns['phoenix-warmth'], 2);
+  assert.equal(bot.hp, 48); assert.equal(bot.cooldowns['phoenix-warmth'], 2);
   assert.equal(battle.activeId, hero.id);
 });
 test('bot battle has one winner, no dungeon waves, and never awards the NPC', () => {
   const battle = botBattle(), [hero, bot] = battle.fighters;
-  bot.hp = 1; match(battle);
+  bot.hp = 1; hero.skillEnergy = 27; match(battle);
   applyAction(battle, hero.id, { type: 'skill', skillId: 'strike', targetId: bot.id });
   assert.equal(battle.status, 'finished'); assert.equal(battle.wave, 1); assert.equal(battle.winner, 0);
   assert.deepEqual(victoryRecipients(battle), [hero.id]);

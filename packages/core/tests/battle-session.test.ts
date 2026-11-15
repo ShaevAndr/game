@@ -41,7 +41,7 @@ test('expiry during choice settles the saved cascades after restoring the battle
   } };
   const restored: Battle = JSON.parse(JSON.stringify(battle));
   expireMatchedTurn(restored);
-  assert.deepEqual(restored.board, finalBoard); assert.equal(restored.fighters[0].skillEnergy, 40);
+  assert.deepEqual(restored.board, finalBoard); assert.equal(restored.fighters[0].skillEnergy, 4);
   assert.equal(restored.activeId, 'enemy'); assert.equal(restored.pendingBattlefield, undefined);
   assert.equal(restored.fighters[1].hp, restored.fighters[1].stats.maxHp);
 });
@@ -80,7 +80,7 @@ test('an opponent surrendering during skill selection is removed from the availa
   joinBattle(battle, createCharacter('other', 'Другой противник', seedContent), 1);
   startBattle(battle, () => 0);
   battle.effectsVersion = 1; battle.phase = 'choose'; battle.matchedElements = ['physical'];
-  battle.fighters[0].skillEnergy = 30;
+  battle.fighters[0].skillEnergy = 30; battle.fighters[0].skillIds = ['strike'];
   applyAction(battle, 'enemy', { type: 'surrender' });
   assert.equal(battle.status, 'active'); assert.equal(battle.activeId, 'hero');
   assert.deepEqual(battle.skillChoices?.[0].targetIds, ['other']);

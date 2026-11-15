@@ -4,10 +4,10 @@ const primary = (id: string, name: string, description: string, displayOrder: nu
   id, name, description, displayOrder, kind: 'primary', unit: 'points', min: 0, max: 1000,
   group: 'primary', visible: true, rounding: 'floor', defaultValue: 10, growthPerLevel: 0,
 });
-const derived = (id: string, name: string, unit: StatDefinition['unit'], terms: [string, number][], displayOrder: number, min = 0, max = 1_000_000): StatDefinition => ({
+const derived = (id: string, name: string, unit: StatDefinition['unit'], terms: [string, number][], displayOrder: number, min = 0, max = 1_000_000, constant = 0): StatDefinition => ({
   id, name, description: name, displayOrder, kind: 'derived', unit, min, max,
   group: id.endsWith('Resistance') ? 'resistance' : 'combat', visible: true, rounding: 'floor',
-  formula: { terms: terms.map(([statId, coefficientBps]) => ({ statId, coefficientBps })) },
+  formula: { ...(constant ? { constant } : {}), terms: terms.map(([statId, coefficientBps]) => ({ statId, coefficientBps })) },
 });
 
 export const defaultStatDefinitions: StatDefinition[] = [
@@ -16,14 +16,18 @@ export const defaultStatDefinitions: StatDefinition[] = [
   primary('intelligence', 'Интеллект', 'Магическая мощь, лечение и сопротивления стихиям.', 2),
   primary('vitality', 'Выносливость', 'Максимум здоровья, защита и стойкость.', 3),
   primary('luck', 'Удача', 'Шанс и дополнительная сила критического урона.', 4),
-  derived('maxHp', 'Максимум здоровья', 'hp', [['vitality', 120000]], 10, 1),
+  derived('maxHp', 'Максимум здоровья', 'hp', [['vitality', 120000]], 10, 1, 1000000, 120),
   derived('physicalPower', 'Физическая мощь', 'points', [['strength', 6000], ['dexterity', 2000]], 11),
+  derived('accuracy', 'Физическая точность', 'points', [['dexterity', 20000]], 15, 0, 1000000, 100),
+  derived('magicAccuracy', 'Магическая точность', 'points', [['dexterity', 10000]], 17, 0, 1000000, 150),
+  derived('evasion', 'Уклонение', 'points', [['dexterity', 20000]], 16),
   derived('physicalDamageFlat', 'Прибавка к физическому урону', 'points', [], 14),
   derived('magicPower', 'Магическая мощь', 'points', [['intelligence', 8000]], 12),
   derived('healingPower', 'Сила лечения', 'points', [['intelligence', 6000], ['vitality', 2000]], 13),
   derived('physicalResistance', 'Физическая защита', 'points', [['vitality', 2000], ['dexterity', 1000]], 20),
   ...['fire', 'water', 'earth', 'air'].map((element, index) => derived(`${element}Resistance`, `Защита: ${['огонь', 'вода', 'земля', 'воздух'][index]}`, 'points', [['intelligence', 2000], ['vitality', 1000]], 21 + index)),
-  derived('criticalChanceBps', 'Шанс критического урона', 'basis_points', [['luck', 500000]], 30, 0, 5000),
+  derived('criticalChanceBps', 'Магический крит', 'basis_points', [['luck', 500000]], 30, 0, 5000),
+  derived('physicalCriticalChanceBps', 'Физический крит', 'basis_points', [['dexterity', 400000], ['luck', 100000]], 33, 0, 5000),
   derived('criticalBonusBps', 'Бонус критического урона', 'basis_points', [['luck', 5000000]], 31, 0, 10000),
   derived('guardPerCell', 'Защита за клетку', 'points_per_cell', [['physicalResistance', 10000], ['vitality', 7000]], 32),
 ];
