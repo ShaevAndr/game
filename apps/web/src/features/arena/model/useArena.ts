@@ -14,16 +14,28 @@ export function useArena(characterId: string, onError: (message: string) => void
   useEffect(() => {
     let cancelled = false;
     let pending = false;
-    const load = async () => {
-      if (pending) return;
+    let reloadRequested = false;
+    const load = async (resume = false) => {
+      if (cancelled) return;
+      if (pending) { reloadRequested ||= resume; return; }
       pending = true;
       try { await refreshArena(); }
       catch (error) { if (!cancelled) onError((error as Error).message); }
-      finally { pending = false; }
+      finally {
+        pending = false;
+        if (reloadRequested && !cancelled) { reloadRequested = false; void load(); }
+      }
     };
+    const resume = () => { if (!document.hidden) void load(true); };
+    window.addEventListener('focus', resume);
+    document.addEventListener('visibilitychange', resume);
     void load();
     const timer = setInterval(() => { void load(); }, 3000);
-    return () => { cancelled = true; ++sequence.current; clearInterval(timer); };
+    return () => {
+      cancelled = true; ++sequence.current; clearInterval(timer);
+      window.removeEventListener('focus', resume);
+      document.removeEventListener('visibilitychange', resume);
+    };
   }, [refreshArena, onError]);
   return { arena, refreshArena };
 }

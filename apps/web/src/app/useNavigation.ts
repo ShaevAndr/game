@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 function readRoute() {
   const hash = location.hash.slice(1);
@@ -13,9 +13,10 @@ export function useNavigation() {
     window.addEventListener('hashchange', change);
     return () => window.removeEventListener('hashchange', change);
   }, []);
+  const openRoom = useCallback((id: string) => { location.hash = id; setRoute({ screen: 'arena', roomId: id }); }, []);
   return {
     ...route,
-    openRoom: (id: string) => { location.hash = id; setRoute({ screen: 'arena', roomId: id }); },
+    openRoom,
     openInventory: () => { location.hash = 'inventory'; setRoute({ screen: 'inventory', roomId: '' }); },
     openEquipment: () => { location.hash = 'equipment'; setRoute({ screen: 'equipment', roomId: '' }); },
     openCrafting: () => { location.hash = 'crafting'; setRoute({ screen: 'crafting', roomId: '' }); },

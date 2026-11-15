@@ -10,7 +10,7 @@ import { applySkillEffects, applyItemEffects, effectSkillUtility, previewSkillEf
 import { isStunned, removeDeadEffects } from '../effects/lifecycle';
 import { matchPowerBps, scaleMatchPower } from './match-power';
 
-function finishMatchedTurn(battle: Battle, actor: Fighter, onBeforeCascades?: (battle: Battle) => void) {
+function finishMatchedTurn(battle: Battle, actor: Fighter, onBeforeCascades?: (battle: Battle) => void, cellTarget?: Fighter) {
   const pending = battle.pendingBattlefield;
   if (pending?.report.steps.length) onBeforeCascades?.(battle);
   if (pending) {
@@ -23,6 +23,13 @@ function finishMatchedTurn(battle: Battle, actor: Fighter, onBeforeCascades?: (b
     }
     if (pending.report.regeneration) addLog(battle, pending.report.regeneration === 'cascade-limit' ? 'Достигнут предел каскадов. Поле обновлено.' : 'Нет доступных ходов. Поле обновлено.');
     delete battle.pendingBattlefield;
+  }
+  if (cellTarget) {
+    // A skill-less attack removes HP directly, without skill formulas or shield absorption.
+    const removed = battle.pendingMatch + (pending?.report.generated.count ?? 0);
+    const hpLoss = Math.min(cellTarget.hp, removed);
+    cellTarget.hp -= hpLoss;
+    addLog(battle, `${actor.name} → ${cellTarget.name}: −${hpLoss} HP за ${removed} убранных клеток (без навыков)`);
   }
   delete battle.directMatches;
   nextTurn(battle);
@@ -70,6 +77,9 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
   if (isStunned(actor)) throw new Error('Участник оглушён и пропускает ход');
   if (action.type === 'swap') {
     if (battle.phase !== 'before') throw new Error('Разрешена одна перестановка за ход');
+    const cellTarget = !battle.usedSkill && actor.skillIds.length === 0
+      ? target(battle, actor, action.targetId || battle.fighters.find(fighter => fighter.hp > 0 && fighter.team !== actor.team)?.id || '')
+      : undefined;
     const config = battle.battlefield ?? normalizeBattlefieldOptions({ size: { rows: battle.board.length, cols: battle.board[0]?.length ?? 0 } });
     const { board, config: nextConfig, ...report } = fieldEngine.move({ board: battle.board, config }, action.from, action.to, random);
     const rules = combatRules(battle.content);
@@ -92,8 +102,8 @@ export function applyMatchedAction(battle: Battle, actorId: string, action: Acti
     battle.skillChoices = skillChoices(battle, actor);
     addLog(battle, report.direct.count === 0 ? `${actor.name}: перестановка без совпадений, навыки без усиления`
       : `${actor.name}: прямо ${report.direct.count}, усиление определяется школой навыка. Общая энергия: +${actor.skillEnergy - previous} (${actor.skillEnergy}/${rules.energyCap})${guard ? `. Защита +${guard} до следующего собственного хода` : ''}`);
-    // Tiles supply resources, not damage. A used item leaves no skill choices and ends after settlement.
-    if (!battle.skillChoices.length) finishMatchedTurn(battle, actor, onBeforeCascades);
+    // No learned skills: settle all cells and apply their fixed HP loss. Items use the action instead.
+    if (!battle.skillChoices.length) finishMatchedTurn(battle, actor, onBeforeCascades, cellTarget);
     return;
   }
   if (action.type === 'skill') {

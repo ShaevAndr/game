@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { allocateAttributes, applySkillEffects, calculateAttributes, combatStatDefinitions, createCharacter, defaultCombatFormulaRules,
+import { allocateAttributes, applyAction, defaultBattlefieldEngine, applySkillEffects, calculateAttributes, combatStatDefinitions, createCharacter, defaultCombatFormulaRules,
   damageChances, equipmentRequirementBlockers, fillBaseAttributes, joinBattle, newBattle, previewSkillEffects, replaceFighterModifiers,
   seedContent, seedEffectSkills, skillChoices, startBattle, learnSkill, normalizeCharacter, learningBlockers, characterFighter, type Battle, type Content, type StatModifier } from '../src';
 import { applyResolvedDamage } from '../src/combat/damage';
@@ -122,4 +122,23 @@ test('a dexterity attack requires base investment and its magnitude rewards dext
   replaceFighterModifiers(actor, [modifier('dexterity', 20)], combatStatDefinitions);
   assert.ok(previewSkillEffects(battle, actor, skill)[0].magnitude! > first);
   assert.equal(skill.cost, 3);
+});
+
+
+test('cell HP loss ignores formula defenses and shields, without consuming combat randomness', () => {
+  const { battle, actor, target } = fixture();
+  applySkillEffects(battle, target, content.skills.find(skill => skill.id === 'earthen-barrier')!, target.id);
+  const shield = structuredClone(target.activeEffects!.filter(effect => effect.kind === 'shield'));
+  assert.ok(shield.length > 0);
+  replaceFighterModifiers(target, [modifier('vitality', 100), modifier('dexterity', 100), modifier('luck', 100)], combatStatDefinitions);
+  const before = target.hp, rng = battle.attributeRngState;
+  applyAction(battle, actor.id, { type: 'swap', from: { row: 0, col: 0 }, to: { row: 0, col: 1 }, targetId: target.id }, () => 0, {
+    ...defaultBattlefieldEngine,
+    move: field => ({ ...structuredClone(field), direct: { count: 3, byType: { fire: 3 } }, generated: { count: 4, byType: { water: 4 } },
+      total: { count: 7, byType: { fire: 3, water: 4 } }, cascades: 1, steps: [], shuffled: false, regeneration: null }),
+  });
+  assert.equal(target.hp, before - 7); assert.equal(battle.attributeRngState, rng);
+  const remaining = target.activeEffects!.filter(effect => effect.kind === 'shield');
+  assert.equal(remaining.length, shield.length);
+  assert.equal(remaining[0].kind === 'shield' && remaining[0].remainingShield, shield[0].kind === 'shield' && shield[0].remainingShield);
 });

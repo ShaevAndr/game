@@ -108,7 +108,7 @@ test('fantasy interface: all screens, responsive battle, target selection and a 
     await page.getByRole('button', { name: 'Бросить вызов', exact: true }).first().click();
     await page.getByRole('button', { name: 'Вызов отправлен', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Бросить вызов', exact: true }).click();
-    await page.getByRole('heading', { name: 'Ожидают ответа' }).waitFor();
+    await page.waitForFunction(() => document.querySelectorAll('.arena-offers .arena-offer').length === 2);
     assert.equal(arena.outgoing.length, 2);
     assert.equal(await page.getByRole('button', { name: 'Вызов отправлен', exact: true }).count(), 2);
     await page.setViewportSize({ width: 390, height: 844 }); await noOverflow('arena challenges mobile');
@@ -207,6 +207,121 @@ test('fantasy interface: all screens, responsive battle, target selection and a 
     await page.reload(); await page.locator('.combatant-card').nth(5).waitFor();
     assert.equal(await page.locator('.combatant-card').count(), 6);
     await page.setViewportSize({ width: 390, height: 844 }); await noOverflow('team battle mobile');
+    // An untrained fighter can finish a swap without opening a skill dialog.
+    const untrained = battle.fighters.find(fighter => fighter.id === hero.id)!;
+    untrained.skillIds = []; battle.activeId = untrained.id; battle.phase = 'before'; battle.usedSkill = false; battle.version++;
+    const selectedEnemy = battle.fighters.find(fighter => fighter.hp > 0 && fighter.team !== untrained.team)!;
+    const hpBefore = selectedEnemy.hp;
+    await page.reload();
+    await page.locator('.skill-panel').waitFor();
+    await page.getByText(/Навыки не изучены: выберите противника/).waitFor();
+    await page.getByRole('button', { name: `Выбрать цель: ${selectedEnemy.name}` }).click();
+    const plainMove = possibleMove(battle.board)!; assert.ok(plainMove);
+    await page.getByRole('button', { name: new RegExp(`строка ${plainMove.from.row + 1}, столбец ${plainMove.from.col + 1}$`) }).click();
+    await page.getByRole('button', { name: new RegExp(`строка ${plainMove.to.row + 1}, столбец ${plainMove.to.col + 1}$`) }).click();
+    await page.locator('.journal').getByText(/HP за .* убранных клеток/).waitFor();
+    const removed = battle.boardMoves!.filter(report => report.actorId === hero.id).reduce((sum, report) => sum + report.total.count, 0);
+    assert.ok(removed > 0); assert.equal(selectedEnemy.hp, Math.max(0, hpBefore - removed));
+    assert.equal(await page.getByRole('dialog', { name: 'Выберите умение' }).isVisible(), false);
+    await noOverflow('untrained fighter mobile');
     assert.deepEqual(errors, []);
   } catch (error) { console.error(error); await shot('fantasy-failure.png'); throw error; }
+});
+
+// Separate browser sessions share only the server fixture; sockets are deliberately unavailable.
+test('arena: both accounts enter an accepted duel, restore it after reload and can leave its screen', { timeout: 90000 }, async t => {
+  const { preview } = await import('vite');
+  const vite = await preview({ configFile: false, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
+  t.after(() => new Promise<void>((resolve, reject) => { vite.httpServer.closeAllConnections(); vite.httpServer.close(error => error ? reject(error) : resolve()); }));
+  const address = vite.httpServer!.address(); assert.ok(address && typeof address !== 'string');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const ownerBrowser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined, args: ['--no-sandbox'] });
+  t.after(() => ownerBrowser.close());
+  const opponentBrowser = process.env.ARENA_TEST_FIREFOX === '1'
+    ? await (await import('playwright')).firefox.launch({ headless: true }) : ownerBrowser;
+  if (opponentBrowser !== ownerBrowser) t.after(() => opponentBrowser.close());
+  const accounts = ['Хозяин комнаты', 'Второй аккаунт'].map(name => ({ id: randomUUID(), name, createdAt: new Date().toISOString() }));
+  const heroes = accounts.map((account, i) => ({ ...createCharacter(randomUUID(), i ? 'Гость' : 'Хозяин', seedContent), accountId: account.id }));
+  const offers: ArenaChallenge[] = [], rooms: import('@game/core').Battle[] = [], errors: string[] = [];
+  const active = (characterId: string) => rooms.find(room => room.status === 'active' && room.fighters.some(fighter => fighter.characterId === characterId));
+  const pages = [];
+  for (const [i, browser] of [ownerBrowser, opponentBrowser].entries()) {
+    const context = await browser.newContext(); t.after(() => context.close());
+    let selected: string | null = null;
+    const token = `arena-session-${i}`;
+    const session = () => ({ account: accounts[i], characterId: selected, expiresAt: Date.now() + 3600000 });
+    await context.route('**/socket.io/**', route => route.fulfill({ status: 503, body: '' }));
+    await context.route('https://fonts.googleapis.com/**', route => route.abort());
+    await context.route('**/api/v1/**', async route => {
+      const request = route.request(), path = new URL(request.url()).pathname.replace('/api/v1', ''), body = request.postDataJSON();
+      const send = (value: unknown, status = 200) => route.fulfill({ status, json: value });
+      if (path === '/accounts') return send(accounts);
+      if (path === '/identity/session' && request.method() === 'POST') {
+        assert.equal(body.accountId, accounts[i].id); return send({ ...session(), token }, 201);
+      }
+      assert.equal(request.headers().authorization, `Bearer ${token}`);
+      if (path === '/identity/session') return send(session());
+      if (path === '/identity/session/character') { selected = body.characterId; return send(session(), 201); }
+      if (path === '/characters') return send([heroes[i]]);
+      if (path === '/content') return send(seedContent);
+      if (path === '/parties') return send({ party: null, incoming: [], outgoing: [], players: [], capacity: 6, serverTime: Date.now() });
+      if (path === '/social') return send({ revision: 1, visibilityRevision: 1, relationships: [] });
+      if (path === '/chat/feed') return send({ messages: [], before: '', after: '', hasMore: false, partyAccess: null });
+      if (path === `/battles/arena/${heroes[i].id}`) return send({
+        incoming: offers.filter(offer => offer.status === 'pending' && offer.recipientId === heroes[i].id),
+        outgoing: offers.filter(offer => offer.status === 'pending' && offer.challengerId === heroes[i].id), activeBattleId: active(heroes[i].id)?.id ?? null,
+      });
+      if (path === '/battles') {
+        if (request.method() === 'GET') return send(rooms.filter(room => room.status === 'waiting'));
+        assert.equal(body.characterId, heroes[i].id);
+        const room = newBattle(randomUUID(), body.name, body.kind, 'on-match', heroes[i], seedContent, body.battlefield);
+        rooms.push(room); return send(room, 201);
+      }
+      const room = rooms.find(value => value.id === path.split('/')[2]);
+      if (room && path.endsWith('/challenges')) {
+        const offer: ArenaChallenge = { id: randomUUID(), battleId: room.id, roomName: room.name, challengerId: heroes[i].id,
+          challengerName: heroes[i].name, recipientId: room.fighters[0].characterId!, recipientName: room.fighters[0].name, status: 'pending', createdAt: new Date().toISOString() };
+        offers.push(offer); return send(offer, 201);
+      }
+      if (room && path.endsWith('/accept')) {
+        const offer = offers.find(value => value.id === path.split('/').at(-2))!;
+        assert.equal(offer.recipientId, heroes[i].id);
+        joinBattle(room, heroes.find(hero => hero.id === offer.challengerId)!, 1); startBattle(room, () => 0); room.version++;
+        for (const value of offers) value.status = value.id === offer.id ? 'accepted' : 'cancelled';
+        return send({ ...room, serverTime: Date.now() }, 201);
+      }
+      if (room && path === `/battles/${room.id}`) return send({ ...room, serverTime: Date.now() });
+      errors.push(`Unhandled route: ${path}`); return send({ message: path }, 404);
+    });
+    const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message)); pages.push(page);
+    await page.goto(origin);
+    await page.getByRole('button', { name: new RegExp(accounts[i].name) }).click();
+    await page.getByRole('button', { name: new RegExp(heroes[i].name) }).click();
+    await page.locator('.create-room').waitFor();
+  }
+  const [owner, opponent] = pages;
+  await owner.getByRole('button', { name: 'Создать комнату', exact: false }).click();
+  await owner.locator('.battle-arena').waitFor();
+  await opponent.getByRole('button', { name: 'Обновить ↻', exact: true }).click();
+  await opponent.getByRole('button', { name: 'Бросить вызов', exact: true }).click();
+  await opponent.getByRole('button', { name: 'Вызов отправлен', exact: true }).waitFor();
+  assert.equal(new URL(opponent.url()).hash, '');
+  await owner.getByRole('button', { name: 'Принять', exact: true }).click();
+  await opponent.locator('.battle-arena').waitFor();
+  const room = rooms[0];
+  assert.equal(new URL(owner.url()).hash, `#${room.id}`);
+  assert.equal(new URL(opponent.url()).hash, `#${room.id}`);
+  for (const page of pages) assert.equal(await page.locator('.combatant-card').count(), 2);
+  assert.deepEqual(new Set(room.fighters.map(fighter => fighter.characterId)), new Set(heroes.map(hero => hero.id)));
+  // Subsequent polls must preserve deliberate navigation away from the same battle.
+  await opponent.getByRole('button', { name: 'Навыки', exact: true }).click();
+  await opponent.locator('.skill-branches').waitFor();
+  const resumed = opponent.waitForResponse(response => response.url().endsWith(`/battles/arena/${heroes[1].id}`));
+  await opponent.evaluate(() => window.dispatchEvent(new Event('focus'))); await resumed;
+  await opponent.getByRole('button', { name: 'Перейти в бой', exact: true }).waitFor();
+  assert.equal(new URL(opponent.url()).hash, '#skills');
+  // A fresh page restores the ongoing fight even without a working WebSocket.
+  await opponent.reload(); await opponent.locator('.battle-arena').waitFor();
+  assert.equal(new URL(opponent.url()).hash, `#${room.id}`);
+  assert.deepEqual(errors, []);
 });

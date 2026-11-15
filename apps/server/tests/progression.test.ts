@@ -298,3 +298,22 @@ test('committed playback preserves player, bot swap and bot skill checkpoints fo
   assert.deepEqual(next.playback!.at(-1)!.board, next.board);
   assert.ok(next.boardMoves!.every(report => report.steps.every(step => step.cells?.length === step.removed.count && step.boardAfter)));
 });
+
+
+test('a lethal skill-less swap commits once with rewards and archive, and rolls back on archive failure', async () => {
+  const f = fixture(), state = f.state().battles[battleId].data;
+  state.phase = 'before'; state.fighters[0].skillIds = []; state.fighters[1].hp = 2;
+  const command = { characterId: winnerId, version: 0, action: { type: 'swap', from: { row: 1, col: 1 }, to: { row: 1, col: 2 }, targetId: loserId } };
+  const before = structuredClone(state);
+  f.failOutbox();
+  await assert.rejects(f.service.command(battleId, command), /outbox failure/);
+  assert.deepEqual(f.state().battles[battleId].data, before);
+  assert.equal(f.state().receipts.length, 0); assert.equal(f.published.length, 0);
+  const results = await Promise.allSettled([f.service.command(battleId, command), f.service.command(battleId, command)]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  const finished = f.state().battles[battleId].data;
+  assert.equal(finished.status, 'finished'); assert.equal(finished.winner, 0);
+  assert.equal(finished.fighters.find(fighter => fighter.id === loserId)!.hp, 0);
+  assert.equal(finished.version, 1); assert.equal(f.state().receipts.length, 1);
+  assert.deepEqual(f.state().outbox[battleId], finished); assert.equal(f.published.length, 1);
+});

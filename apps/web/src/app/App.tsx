@@ -1,5 +1,5 @@
 import { Modal } from '../shared/ui/Modal';
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { AccountSession, Content } from '@game/core';
 import { useNavigation } from './useNavigation';
 import { useAsyncAction } from './useAsyncAction';
@@ -59,6 +59,13 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
   const [content, setContent] = useState<Content | null>(null);
   const [error, setError] = useState('');
   const { arena, refreshArena } = useArena(characterId, setError);
+  const enteredBattleId = useRef<string | null>(null);
+  useEffect(() => {
+    const activeId = arena?.activeBattleId;
+    if (!activeId || enteredBattleId.current === activeId) return;
+    enteredBattleId.current = activeId;
+    if (activeId !== roomId) { setError(''); navigation.openRoom(activeId); }
+  }, [arena?.activeBattleId, roomId, navigation.openRoom]);
   const { rooms, refreshRooms } = useRooms(screen === 'arena' && !roomId, setError);
   const { battle, connected, clockOffset, updateBattle, refreshBattle, animating, fieldMotion } = useBattle(roomId, setError);
   const recover = useCallback(async () => {
@@ -106,7 +113,7 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
       {arena && (arena.incoming.length > 0 || arena.activeBattleId && arena.activeBattleId !== roomId) && <section className="panel arena-notifications" aria-label="Уведомления арены">
         {arena.activeBattleId && arena.activeBattleId !== roomId && <div className="arena-offer" role="status"><strong>Бой начался</strong><button className="primary" onClick={() => openRoom(arena.activeBattleId!)}>Перейти в бой</button></div>}
         {arena.incoming.map(offer => <div className="arena-offer" key={offer.id} role="status"><span><strong>{offer.challengerName} бросает тебе вызов</strong><small>{offer.roomName}</small></span>
-          <div><button className="primary" disabled={busy} onClick={() => void perform(async () => { const started = await arenaApi.accept(offer, characterId); await refreshArena(); openRoom(started.id); })}>Принять</button>
+          <div><button className="primary" disabled={busy} onClick={() => void perform(async () => { const started = await arenaApi.accept(offer, characterId); updateBattle(started); openRoom(started.id); await refreshArena(); })}>Принять</button>
             <button className="ghost" disabled={busy} onClick={() => void perform(async () => { await arenaApi.dismiss(offer, characterId); await refreshArena(); })}>Отклонить</button></div></div>)}
       </section>}
       <div className={`layout${workshop ? ` ${screen}-layout` : ''}${roomId && screen === 'arena' ? ' battle-layout' : ''}`}>

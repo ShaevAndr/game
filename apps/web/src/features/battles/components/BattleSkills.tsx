@@ -13,10 +13,14 @@ export function BattleSkills({ battle, me, myTurn, busy, targetId, healTarget, o
     const left = battle.skillChoices?.find(choice => choice.skillId === a.id), right = battle.skillChoices?.find(choice => choice.skillId === b.id);
     return Number(!!right?.enabled) - Number(!!left?.enabled) || (right?.matchPowerBps ?? 10000) - (left?.matchPowerBps ?? 10000) || a.cost - b.cost;
   });
+  const withoutSkills = !!me && me.skillIds.length === 0;
   const endEnabled = battle.phase === 'choose';
   return <section className="panel skill-panel">
     <div className="section-label">{choiceOnly ? 'ПОСЛЕ ХОДА' : 'АРСЕНАЛ'}</div><h2 id={choiceOnly ? 'battle-skills-title' : undefined}>{choiceOnly ? 'Выберите умение' : 'Умения и предметы'}</h2>
-    <p className="hint">{!myTurn ? 'Сейчас ход другого участника.' : battle.phase === 'before'
+    <p className="hint">{withoutSkills ? battle.usedSkill && myTurn
+      ? 'Зелье заменило атаку. Выполните перестановку: клетки дадут энергию и защиту, затем ход завершится.'
+      : 'Навыки не изучены: выберите противника и переставьте фишки. Каждая убранная клетка, включая каскады, снимает 1 HP; ход завершается автоматически.'
+      : !myTurn ? 'Сейчас ход другого участника.' : battle.phase === 'before'
       ? 'Выполните перестановку, затем выберите любой изученный навык. Прямое совпадение его школы усиливает действие.'
       : 'Можно применить любой изученный навык. Усиление указано у каждого отдельно; каскадная энергия придёт после навыка или пропуска.'}</p>
     {battle.effectsVersion !== 1 && choiceOnly && me && visible.some(skill => skill.effect === 'damage') && <label className="heal-target">Цель атаки<select value={targetId} onChange={event => onEnemy?.(event.target.value)}>

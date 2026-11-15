@@ -154,3 +154,66 @@ test('saved continuations restore without rerolling the board, and publish each 
   applyAction(restored, 'hero', { type: 'skill', skillId: 'ember', targetId: 'enemy' }, () => { throw new Error('must not reroll'); }, staged);
   assert.equal(calls, 1); assert.deepEqual(restored.board, finalBoard); assert.equal(restored.fighters[0].skillEnergy, 11);
 });
+
+
+test('without learned skills every removed cell directly removes one HP, including cascades and defense cells', () => {
+  const battle = duel(), actor = battle.fighters[0], victim = battle.fighters[1];
+  actor.skillIds = []; actor.stats.attack = 10000;
+  victim.stats.defense = 10000; victim.guardDefense = 10000;
+  swap(battle, { fire: 3, defense: 3 }, { water: 4, physical: 3 });
+  assert.equal(victim.hp, 240 - 13);
+  assert.equal(actor.skillEnergy, 26); assert.equal(actor.guardDefense, 30);
+  assert.equal(battle.phase, 'before'); assert.equal(battle.activeId, victim.id);
+  assert.equal(battle.pendingBattlefield, undefined); assert.deepEqual(battle.skillChoices, []);
+  assert.match(battle.log.join('\n'), /−13 HP за 13 убранных клеток/);
+});
+
+test('a skill-less nonmatching swap grants no free damage and still ends the turn', () => {
+  const battle = duel(); battle.fighters[0].skillIds = [];
+  swap(battle);
+  assert.equal(battle.fighters[1].hp, 240); assert.equal(battle.fighters[0].skillEnergy, 0);
+  assert.equal(battle.activeId, 'enemy'); assert.equal(battle.turn, 2);
+});
+
+test('a skill-less attack uses the selected living opponent and rejects bad targets before changing the board', () => {
+  const battle = duel(); battle.fighters[0].skillIds = [];
+  const another = { ...structuredClone(battle.fighters[1]), id: 'another', characterId: 'another' };
+  battle.fighters.push(another);
+  const action = { type: 'swap' as const, from: { row: 0, col: 0 }, to: { row: 0, col: 1 } };
+  for (const targetId of ['hero', 'missing']) {
+    const before = structuredClone(battle);
+    assert.throws(() => applyAction(battle, 'hero', { ...action, targetId }, () => 0, engine({ earth: 3 })), /противника/);
+    assert.deepEqual(battle, before);
+  }
+  applyAction(battle, 'hero', { ...action, targetId: another.id }, () => 0, engine({ earth: 3 }));
+  assert.equal(another.hp, 237); assert.equal(battle.fighters[1].hp, 240);
+});
+
+test('unaffordable or cooling learned skills do not grant cell damage', () => {
+  for (const cooldown of [0, 2]) {
+    const battle = duel(['fireball']); battle.fighters[0].skillIds = ['fireball']; battle.fighters[0].cooldowns.fireball = cooldown;
+    swap(battle, { fire: 3 }, { water: 4 });
+    assert.equal(battle.phase, 'choose'); assert.equal(battle.skillChoices![0].enabled, false);
+    applyAction(battle, 'hero', { type: 'end' });
+    assert.equal(battle.fighters[1].hp, 240);
+  }
+});
+
+test('using a potion replaces cell damage even without learned skills', () => {
+  const battle = duel(); battle.fighters[0].skillIds = []; battle.fighters[0].hp = 100;
+  applyAction(battle, 'hero', { type: 'item', itemId: 'potion' });
+  swap(battle, { fire: 3 }, { earth: 4 });
+  assert.equal(battle.fighters[0].hp, 135); assert.equal(battle.fighters[0].skillEnergy, 14);
+  assert.equal(battle.fighters[1].hp, 240); assert.equal(battle.activeId, 'enemy');
+});
+
+test('skill-less NPCs use the same cell damage and a lethal hit ends the battle without negative HP', () => {
+  const battle = duel(); battle.fighters[1].npc = true; battle.fighters[1].skillIds = []; battle.activeId = 'enemy';
+  runNpcTurns(battle, engine({ air: 3 }, { defense: 4 }));
+  assert.equal(battle.fighters[0].hp, 233); assert.equal(battle.activeId, 'hero');
+  battle.fighters[0].skillIds = []; battle.fighters[1].hp = 2;
+  swap(battle, { fire: 3 }, { water: 4 });
+  assert.equal(battle.fighters[1].hp, 0); assert.equal(battle.status, 'finished');
+  assert.equal(battle.winner, 0); assert.equal(battle.activeId, null);
+  assert.equal(battle.pendingBattlefield, undefined);
+});
