@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "node --require tsx/cjs --eval \"require('./tests/world.test.cts')\"",
-    "test:browser": "pnpm build && node --require tsx/cjs --eval \"require('./tests/world.browser.cts')\""
+    "test:browser": "pnpm build && node --require tsx/cjs --eval \"require('./tests/world.browser.cts')\"",
+    "test:ui": "pnpm build && node --require tsx/cjs --eval \"require('./tests/fantasy.browser.cts')\""
   },
   "dependencies": {
     "@babylonjs/core": "6.49.0",

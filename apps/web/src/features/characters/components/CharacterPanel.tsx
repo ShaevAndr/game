@@ -11,7 +11,7 @@ interface Props {
 export function CharacterPanel({ character, content, fighter, busy, compact, onCharacters, onSkills, onInventory, onEquipment }: Props) {
   const stats = fighter?.stats ?? (character ? effectiveStats(character) : null);
   const nextLevel = character && content ? experienceToNextLevel(character.level, content.balance.progression) : 0;
-  return <section className="panel">
+  return <section className="panel character-panel">
     <div className="section-label">01 / ПЕРСОНАЖ</div><h2>{character?.name ?? 'Твой герой'}</h2>
     <button className="ghost" disabled={busy} onClick={onCharacters}>Выбор персонажа →</button>
     {character ? compact ? null : <>

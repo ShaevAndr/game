@@ -1,0 +1,168 @@
+.app.is-battle main { max-width: 1540px; padding-top: 24px; }
+.is-battle .page-heading { margin-bottom: 20px; padding-bottom: 18px; }
+.is-battle .page-heading h1 { font-size: 30px; }
+.is-battle .page-heading .eyebrow { font-size: 9px; margin-bottom: 7px; }
+.is-battle .page-heading p { font-size: 11px; margin-top: 6px; }
+.app .battle-layout { display: flex; flex-direction: column; gap: 24px; }
+.battle-layout > .battle-screen { width: 100%; order: 0; }
+.battle-layout > .sidebar { width: 100%; order: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+.battle-screen { gap: 18px; min-width: 0; }
+.battle-screen .battle-top { padding: 16px 23px; background: linear-gradient(90deg, #162c30f7, #1b302ff7, #17272cf7); }
+.battle-top > .section-heading { margin-bottom: 0; }
+.battle-top > .section-heading h2 { margin: 5px 0 0; font-size: 23px; }
+.battle-header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.battle-header-actions .surrender-button { margin-left: 0; }
+.battle-top .section-label { font-size: 8px; }
+.battle-top .battle-turn-controls { margin: 12px 0 0; border-top: 1px solid #8b794644; padding-top: 10px; }
+.battle-top .turn-timer { padding: 6px 16px; background: #0d2026; border: 1px solid #a48b54; color: #efd69a; font-family: Georgia, serif; font-size: 21px; border-radius: 3px; box-shadow: inset 0 0 0 2px #0b1318; }
+.battle-top .turn-timer.urgent { color: #ff9a7c; border-color: #cd7450; }
+.battle-screen .battle-arena {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(170px, 220px) minmax(280px, 540px) minmax(170px, 220px);
+  justify-content: center;
+  align-items: start;
+  gap: clamp(16px, 2.5vw, 40px);
+  padding: 28px 32px 38px;
+  border: 1px solid #82714b;
+  border-radius: 7px;
+  background: linear-gradient(#07191d42, #07171c99), url('/assets/theme/arena.webp') center 32% / cover;
+  box-shadow: inset 0 0 70px #031316, inset 0 0 0 4px #17292b, 0 16px 38px #0007;
+}
+.battle-arena::before { content: ''; position: absolute; pointer-events: none; inset: 6px; border: 1px solid #b2a16a33; border-radius: 3px; }
+.battle-center { min-width: 0; position: relative; }
+.arena-crest { color: #e1c589; display: flex; justify-content: center; align-items: center; gap: 12px; font-size: 22px; height: 24px; margin: -7px 0 10px; filter: drop-shadow(0 0 8px #64d8c699); }
+.arena-crest span { height: 1px; width: 30%; background: linear-gradient(90deg, transparent, #c6a66b); }
+.arena-crest span:last-child { transform: rotate(180deg); }
+.battle-screen .battlefield-panel { padding: 16px; background: linear-gradient(135deg, #31423e, #152e31 12%, #0c2026 50%, #293c36); border: 1px solid #c9ad70; border-radius: 4px; box-shadow: inset 0 0 0 3px #0e1c23, 0 0 0 3px #937b4860, 0 0 38px #38d8b725, 0 15px 30px #0008; }
+.battlefield-panel > .section-heading { flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 12px; }
+.battlefield-panel .section-label { color: #d4bd88; font-size: 9px; margin: 0; }
+.battlefield-panel .turn-badge { color: #9fe5d3; background: #0b2125; border: 1px solid #568d7955; padding: 5px 9px; font-size: 9px; white-space: normal; text-align: center; }
+.battle-screen .board { padding: 8px; border: 1px solid #a58c4c; border-radius: 3px; background: linear-gradient(135deg, #07191b, #16292a); box-shadow: inset 0 0 0 3px #050e14, inset 0 0 30px #000; }
+.battle-screen .board-surface { background-color: #112329; background-image: linear-gradient(45deg, #ffffff03 25%, transparent 25%, transparent 75%, #ffffff03 75%), linear-gradient(45deg, #ffffff03 25%, transparent 25%, transparent 75%, #ffffff03 75%); background-size: 40px 40px; background-position: 0 0, 20px 20px; }
+.battle-screen .tile {
+  --gem-light: #85989e;
+  --gem-body: #465960;
+  --gem-dark: #182930;
+  border-radius: 50%;
+  border: 1px solid #d9e8d76b;
+  background: radial-gradient(ellipse at 30% 16%, #ffffffa6, transparent 28%), radial-gradient(ellipse at 45% 35%, var(--gem-light), var(--gem-body) 58%, var(--gem-dark));
+  box-shadow: inset 0 2px 2px #ffffff66, inset 0 -4px 5px #0007, 0 3px 4px #000b;
+  color: #fff5d7;
+  overflow: hidden;
+}
+.battle-screen .tile::after { content: ''; position: absolute; inset: 12%; border: 1px solid #ffffff28; border-bottom-color: #ffffff0a; border-radius: 50%; pointer-events: none; }
+.battle-screen .tile.fire { --gem-light: #fa7351; --gem-body: #c42d21; --gem-dark: #57191d; color: #ffe2a8; }
+.battle-screen .tile.water { --gem-light: #68cbed; --gem-body: #1482bc; --gem-dark: #102d6b; color: #d9ffff; }
+.battle-screen .tile.earth { --gem-light: #92cb59; --gem-body: #368440; --gem-dark: #123f2d; color: #e9ffc1; }
+.battle-screen .tile.air { --gem-light: #c296ea; --gem-body: #8143a5; --gem-dark: #391e60; color: #f8e9ff; }
+.battle-screen .tile.physical { --gem-light: #c3c7bb; --gem-body: #707a75; --gem-dark: #27332f; color: #f5ead5; }
+.battle-screen .tile.defense { --gem-light: #f9dd88; --gem-body: #c79c35; --gem-dark: #6f4e1b; color: #fff6c1; }
+.battle-screen .tile > span { font-family: Georgia, 'Segoe UI Symbol', serif; font-size: clamp(13px, 2.2vw, 30px); line-height: 1; color: inherit; text-shadow: 0 2px 2px #0008; filter: drop-shadow(0 0 2px #0007); }
+.battle-screen .tile:hover:not(:disabled) { background: radial-gradient(ellipse at 30% 16%, #ffffffbf, transparent 32%), radial-gradient(ellipse at 45% 35%, var(--gem-light), var(--gem-body) 58%, var(--gem-dark)); border-color: #fff7ce; filter: brightness(1.15); }
+.battle-screen .board-surface .tile.selected { outline: 2px solid #fff3ba; outline-offset: -2px; border-color: #fff8dd; box-shadow: inset 0 0 10px #ffffbd55, 0 0 12px #f5da95; z-index: 2; }
+.battle-screen .inactive .tile { filter: saturate(.9); }
+.battle-screen .board-help { font-size: 10px; color: #bdbca6; margin-top: 12px; }
+.battle-screen .battlefield-summary { margin-top: 11px; padding-top: 9px; border-color: #a9904c55; }
+.battle-screen .battlefield-summary > div:not(.section-label) { margin: 5px 0; }
+.battle-element-key { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px 14px; margin: 16px 0 0; }
+.battle-element-key > span { display: flex; align-items: center; gap: 4px; font-size: 9px; color: #d0c9b0; }
+.battle-element-key .element-icon { width: 20px; height: 20px; font-size: 13px; border: 1px solid #c5cda333; border-radius: 50%; }
+.combatant-rail { min-width: 0; display: flex; flex-direction: column; gap: 13px; padding-top: 25px; }
+.rail-heading { color: #dbc893; letter-spacing: .13em; text-align: center; font-size: 9px; font-weight: 700; padding: 9px 0 12px; border-bottom: 1px solid #b69d5f77; text-shadow: 0 1px 4px #000; }
+.rail-heading > span { color: #88dac2; margin-right: 5px; }
+.enemies-rail .rail-heading > span { color: #dfab83; }
+.combatant-card { position: relative; min-width: 0; padding: 12px; border: 1px solid #97804e; border-radius: 4px; background: linear-gradient(145deg, #253431ed, #0c1d24f5); box-shadow: inset 0 0 0 3px #0c1c1f, 0 6px 14px #0006; }
+.combatant-card.is-acting { border-color: #a7ddbb; box-shadow: inset 0 0 0 3px #12362f, 0 0 20px #4fc6a840; }
+.combatant-card.is-target { border-color: #e3ac6a; box-shadow: inset 0 0 0 3px #543829, 0 0 19px #e5ac3c22; }
+.combatant-card.is-defeated { filter: grayscale(1); opacity: .58; }
+.combatant-state { color: #c8bd9b; font-size: 8px; letter-spacing: .12em; text-align: center; padding: 3px 0 9px; }
+.is-acting .combatant-state { color: #9ee3c6; }
+.is-target .combatant-state { color: #efc291; }
+.combatant-card .combatant-target { padding: 0; width: 100%; background: transparent; box-shadow: none; border: none; display: block; text-align: center; }
+.combatant-card .combatant-target:hover:not(:disabled) { background: transparent; }
+.fighter-portrait { height: clamp(90px, 10vw, 148px); border: 1px solid #b49960; margin-bottom: 11px; background-color: #28413d; background-image: linear-gradient(0deg, #11252b 0, transparent 38%), url('/assets/theme/arena.webp'); background-size: auto, 525% auto; background-position: center, 5% 4%; box-shadow: inset 0 0 18px #0006; position: relative; overflow: hidden; }
+.fighter-portrait.portrait-knight { background-position: center, 96% 4%; }
+.fighter-portrait > span { position: absolute; bottom: 5px; left: 8px; color: #f2dba4; font-size: 19px; text-shadow: 0 1px 5px black; }
+.combatant-identity strong { display: block; color: #f1e1bd; font-family: Georgia, serif; font-size: 20px; font-weight: 500; overflow-wrap: anywhere; }
+.combatant-identity small { color: #a7b6ab; display: block; font-size: 9px; margin-top: 4px; }
+.combatant-health { display: flex; justify-content: space-between; gap: 4px; align-items: baseline; margin: 13px 0 5px; font-size: 9px; color: #c2c4ae; }
+.combatant-health b { font-family: Georgia, serif; color: #f1d2ba; font-size: 18px; font-weight: 500; }
+.combatant-health b small { font-size: 11px; color: #b8b8a2; }
+.combatant-card .hp-track { height: 10px; border: 1px solid #99815a; background: #1f1719; border-radius: 2px; box-shadow: 0 1px 3px #000; }
+.combatant-card .hp-track i { background: linear-gradient(#d97457, #a5382e 50%, #772523); box-shadow: inset 0 1px #f6a88c; }
+.combatant-card .skill-energy { margin: 9px 0 0; }
+.combatant-card .skill-energy > div { font-size: 8px; gap: 4px; }
+.combatant-card .skill-energy b { font-size: 12px; }
+.combatant-card .skill-energy progress { height: 7px; }
+.combatant-protection { display: flex; flex-direction: column; gap: 5px; margin-top: 9px; color: #afdce3; font-size: 9px; }
+.combatant-card .inspect-fighter { margin-top: 10px; font-size: 9px; padding: 7px 3px; border-color: #ad90512b; }
+.opponent-pending { padding: 45px 12px; text-align: center; color: #bca575; border: 1px dashed #8c7e4a88; background: #112529a6; }
+.opponent-pending > span { display: block; font-size: 40px; margin-bottom: 15px; }
+.battle-bottom { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: start; gap: 20px; }
+.battle-bottom .skill-panel { padding: 22px; max-height: 480px; overflow: auto; display: block; }
+.battle-bottom .skill { width: 100%; border-color: #8e7a4755; background: linear-gradient(90deg, #2a3735, #14272d); border-radius: 3px; padding: 12px; }
+.battle-bottom .skill strong { font-family: Georgia, serif; color: #eddbb4; font-size: 16px; font-weight: 500; }
+.battle-bottom .skill small { color: #b6c0af; font-size: 10px; }
+.battle-bottom .journal { max-height: 480px; min-height: 200px; }
+.battle-bottom .journal > div:not(.section-label) { color: #c6c6b3; border-color: #88734425; }
+.battle-screen .battle-character-stats { padding: 18px 22px; }
+.battle-character-stats summary { color: #ceb989; font-size: 12px; cursor: pointer; }
+body .battle-skills-dialog { width: min(900px, calc(100% - 24px)); padding: 26px; max-height: 90dvh; }
+.battle-skills-dialog .effect-skill-option { background: #11252b; border-color: #83724a; border-radius: 4px; }
+.battle-skills-dialog .skill { background: linear-gradient(100deg, #31443b, #1a3035); border-color: #baa166; padding: 14px; }
+.battle-skills-dialog .skill strong { font-family: Georgia, serif; font-size: 17px; color: #f3dfb1; }
+.battle-skills-dialog .skill small { font-size: 11px; color: #bfc7b7; }
+.battle-skills-dialog .skill b { color: #8be1cc; }
+.battle-skills-dialog .battle-choice-toolbar { color: #e8cc8e; border-bottom: 1px solid #9c834a66; padding-bottom: 13px; }
+@media (max-width: 1100px) {
+  .battle-screen .battle-arena { grid-template-columns: minmax(140px, 175px) minmax(280px, 1fr) minmax(140px, 175px); gap: 18px; padding: 23px 19px 30px; }
+  .combatant-card { padding: 9px; }
+  .combatant-identity strong { font-size: 17px; }
+  .combatant-card .skill-energy > div > span { font-size: 7px; }
+}
+@media (max-width: 800px) {
+  .battle-header-actions { gap: 6px; }
+  .battle-header-actions .ghost { font-size: 9px; padding: 7px; }
+  .battle-screen .battle-arena { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 18px; gap: 18px; }
+  .battle-center { grid-column: 1 / -1; grid-row: 2; max-width: 580px; width: 100%; justify-self: center; }
+  .allies-rail { grid-column: 1; grid-row: 1; }
+  .enemies-rail { grid-column: 2; grid-row: 1; }
+  .combatant-rail { padding-top: 0; }
+  .rail-heading { padding: 4px 0 9px; }
+  .fighter-portrait { float: left; width: 60px; height: 75px; margin: 0 9px 9px 0; background-size: auto, 760% auto; }
+  .combatant-identity { padding-top: 8px; text-align: left; min-height: 75px; }
+  .combatant-health { clear: both; }
+  .combatant-card .inspect-fighter { font-size: 9px; }
+  .battle-layout > .sidebar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .battle-bottom { grid-template-columns: minmax(0, 1fr); }
+  .battle-screen .tile > span { font-size: clamp(13px, 4vw, 28px); }
+}
+@media (max-width: 480px) {
+  .app.is-battle main { padding: 20px 10px; }
+  .is-battle .page-heading h1 { font-size: 25px; }
+  .is-battle .page-heading .eyebrow { font-size: 8px; }
+  .is-battle .page-heading > .ghost { font-size: 9px; }
+  .battle-screen .battle-top { padding: 15px; }
+  .battle-top > .section-heading { gap: 8px; align-items: start; }
+  .battle-top > .section-heading { flex-wrap: wrap; }
+  .battle-header-actions { width: 100%; justify-content: space-between; margin-top: 4px; }
+  .battle-header-actions > .turn-timer { font-size: 16px; padding: 5px 9px; }
+  .battle-header-actions > .ghost { font-size: 8px; }
+  .battle-top > .section-heading > .ghost { font-size: 9px; padding: 7px; max-width: 120px; }
+  .battle-screen .battle-arena { padding: 12px 9px 20px; gap: 16px 8px; }
+  .combatant-card { padding: 8px; }
+  .combatant-state { font-size: 7px; letter-spacing: .06em; }
+  .fighter-portrait { width: 40px; height: 57px; margin-right: 6px; }
+  .combatant-identity { min-height: 57px; padding-top: 3px; }
+  .combatant-identity strong { font-size: 15px; }
+  .combatant-identity small { font-size: 8px; }
+  .combatant-health { font-size: 8px; margin-top: 8px; }
+  .battle-screen .battlefield-panel { padding: 10px; }
+  .battle-screen .board { padding: 6px; }
+  .battle-element-key { gap: 8px; }
+  .battle-element-key > span { font-size: 8px; }
+  .battle-layout > .sidebar { grid-template-columns: minmax(0, 1fr); }
+  .battle-bottom .skill-panel { max-height: none; }
+  body .battle-skills-dialog { padding: 16px; }
+}

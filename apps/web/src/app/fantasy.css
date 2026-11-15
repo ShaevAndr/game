@@ -1,0 +1,179 @@
+/* Shared visual language: aged gold, carved stone and elemental light. */
+:root {
+  color-scheme: dark;
+  --ink: #eee5cf;
+  --muted: #afa995;
+  --line: #5b5140;
+  --accent: #e6c67e;
+  --gold: #d0a65c;
+  --gold-light: #f3dc9d;
+  --teal: #71d9c8;
+  --stone: #142325;
+  --surface: linear-gradient(145deg, #203035f5, #101a1ef8 70%);
+  font-family: 'Manrope', 'Segoe UI', sans-serif;
+  color: var(--ink);
+  background: #0a1317;
+}
+body {
+  background: radial-gradient(ellipse at 50% 0, #22484155, transparent 65%), #0a1317;
+  min-width: 320px;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(#08131880, #081318ed 85%), url('/assets/theme/arena.webp') center top / cover no-repeat;
+  z-index: -1;
+  pointer-events: none;
+}
+::selection { background: #8f713d; color: #fff5de; }
+h1, h2, h3, h4, .brand, .entry-brand, .account-card strong, .character-choice-card h2 {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+h1 { font-weight: 500; letter-spacing: .015em; color: #f4e8ca; text-shadow: 0 3px 12px #000b; }
+h2, h3, h4 { color: #ebd4a1; font-weight: 500; letter-spacing: .025em; }
+p { color: var(--muted); }
+button { border-radius: 4px; border-color: #6b5c40; background: linear-gradient(#334044, #1a292e); box-shadow: inset 0 1px #ffffff0d, 0 2px 5px #0003; }
+button:hover:not(:disabled) { background: linear-gradient(#435252, #243b3b); border-color: #d4b875; }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: .47; }
+button, input, select, textarea { color: var(--ink); }
+input, select, textarea { background: #0c181de8; border-color: #5e5846; border-radius: 4px; box-shadow: inset 0 2px 6px #0005; }
+input::placeholder { color: #92988e; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+.app .primary, .entry-page .primary, dialog .primary { background: linear-gradient(#e5c889, #ba8d48); color: #201a12; border: 1px solid #f4d794; box-shadow: inset 0 1px #ffefbb, 0 3px 10px #0005; letter-spacing: .025em; }
+.app .primary:hover:not(:disabled), .entry-page .primary:hover:not(:disabled), dialog .primary:hover:not(:disabled) { background: linear-gradient(#f9dfa3, #d0a25b); border-color: #fff1bf; }
+.ghost { color: #d0c3a4; background: #0d181a66; border-color: #7c6b474d; box-shadow: none; }
+.app .panel, .entry-page .panel, dialog { background: var(--surface); border: 1px solid #80704a99; border-radius: 6px; box-shadow: inset 0 0 0 3px #0a151990, inset 0 4px 16px #ffffff03, 0 10px 28px #0005; }
+.panel { position: relative; }
+.panel::before { content: ''; position: absolute; top: -1px; left: 18px; right: 18px; height: 1px; background: linear-gradient(90deg, transparent, #e4c47d, transparent); pointer-events: none; }
+.section-label, .eyebrow { color: #c1a873; font-size: 10px; letter-spacing: .17em; }
+.section-label { line-height: 1.6; }
+.hint { color: #b5b4a4; }
+.topbar { min-height: 92px; padding: 13px 3%; gap: 18px; background: linear-gradient(#18272bf5, #0d191df5); border-bottom: 1px solid #a98b50; box-shadow: 0 4px 24px #0007, inset 0 -4px #081115; }
+.brand { font-size: 24px; letter-spacing: .16em; color: var(--gold-light); gap: 13px; }
+.brand-mark, .entry-brand > span { color: #f3d48c; text-shadow: 0 0 22px #49c7ad88; }
+.brand-mark { display: grid; place-items: center; width: 46px; height: 46px; font-size: 36px; border: 1px solid #a88b51; border-radius: 50%; background: radial-gradient(#21423e, #0c1b20); box-shadow: inset 0 0 0 4px #102125, 0 0 15px #7eaa7730; }
+.brand-sub { color: #a99f85; font-family: 'Segoe UI', sans-serif; font-size: 8px; letter-spacing: .21em; }
+.app .topbar nav { gap: 4px; align-items: stretch; flex: 1; justify-content: center; }
+.app .topbar nav button { padding: 12px 11px; font-size: 12px; white-space: nowrap; border: 1px solid transparent; border-bottom: 2px solid transparent; background: transparent; border-radius: 0; color: #bfb8a5; box-shadow: none; }
+.app .topbar nav button:hover { color: #ffedbd; background: #d6b5740a; }
+.app .topbar nav button.nav-active { border-bottom-color: #dbb96c; background: linear-gradient(transparent, #c5a15d16); color: #f2d89b; }
+.app .topbar .account-controls { gap: 4px; }
+.app .topbar .account-controls span { color: #bda878; }
+.app .topbar .account-controls button { padding: 6px 9px; }
+.app .connection { font-size: 9px; }
+.connection i.online { background: var(--teal); box-shadow: 0 0 9px #68e2cb88; }
+main { max-width: 1540px; padding: 34px 3% 24px; }
+.page-heading { padding-bottom: 24px; margin-bottom: 25px; border-bottom: 1px solid #8f774c55; position: relative; }
+.page-heading::after { content: '◆'; position: absolute; bottom: -7px; left: 50%; padding: 0 12px; background: #0d1c20; color: #a58b56; font-size: 10px; }
+.page-heading p { color: #bdb49c; }
+.layout { grid-template-columns: 260px minmax(0, 1fr); gap: 24px; align-items: start; }
+.sidebar { min-width: 0; }
+.sidebar .panel { padding: 21px; }
+.character-panel .hero-card { margin-top: 19px; padding: 14px 0; border-block: 1px solid #84714844; }
+.avatar { color: #f0dfb8; border-radius: 3px; background: linear-gradient(#0c1b1c22, #10212199), url('/assets/theme/arena.webp') 6% 4% / 550% auto; border: 1px solid #b59960; text-shadow: 0 1px 4px black; box-shadow: inset 0 0 14px #061219aa; }
+.hero-card .avatar { width: 55px; height: 65px; }
+.stats b { color: #eee1bf; font-family: Georgia, serif; font-size: 22px; }
+.app .character-progress progress, .app .skill-energy progress { accent-color: var(--teal); }
+.app .character-progress progress::-webkit-progress-bar, .app .skill-energy progress::-webkit-progress-bar { background: #0a1318; border: 1px solid #655c40; border-radius: 2px; }
+.app .character-progress progress::-webkit-progress-value { background: linear-gradient(#c6a860, #8a672d); }
+.app .skill-energy progress::-webkit-progress-value { background: linear-gradient(#72dfcf, #1f807c); box-shadow: 0 0 9px #5ed9cc55; }
+.app .skill-energy progress::-moz-progress-bar { background: linear-gradient(#72dfcf, #1f807c); }
+.skill-energy > div > b { color: #85e0d1; }
+.inventory { background: #102125; border: 1px solid #544d39; border-radius: 3px; }
+.inventory b { color: #dbc285; }
+.app .mode-tabs button { border-radius: 4px; background: linear-gradient(150deg, #26373a, #142328); border-color: #5f5c48; min-height: 112px; }
+.app .mode-tabs button.chosen { border-color: #d7b56d; background: linear-gradient(135deg, #70603c66, #203b39); box-shadow: inset 0 0 0 3px #0b1b1b, 0 0 16px #d3b46615; }
+.app .mode-tabs button > span { color: #d5bc80; font-size: 28px; }
+.app .room-row { background: transparent; padding: 20px 8px; border-color: #7a704a55; }
+.room-symbol { color: #e6ca88; background: #344136; border: 1px solid #8d7b4d; border-radius: 3px; }
+.status { border: 1px solid #75826455; background: #1f3c36; color: #b5d1ba; border-radius: 2px; }
+.entry-page { min-height: 100dvh; position: relative; background: linear-gradient(90deg, #081418df, #0b181da8 60%, #08141860), url('/assets/theme/arena.webp') center / cover fixed; }
+.entry-page .entry-brand { color: #f0d49b; background: #0a191dbb; border-bottom: 1px solid #a68a52; letter-spacing: .2em; }
+.entry-page .entry-main { padding-top: 80px; padding-bottom: 80px; max-width: 1150px; }
+.entry-main h1 { font-size: clamp(32px, 4vw, 54px); }
+.entry-intro { color: #d3c8ac; }
+.entry-page .account-grid { max-width: 780px; gap: 20px; }
+.entry-page .account-card { background: linear-gradient(145deg, #263a3cef, #101c22f5); border: 1px solid #ac8f54; border-radius: 5px; min-height: 240px; padding: 28px; box-shadow: inset 0 0 0 4px #0a181b, 0 14px 25px #0005; }
+.entry-page .account-card:hover { border-color: #f0d28f; background: linear-gradient(145deg, #344f4d, #172b31); transform: translateY(-3px); }
+.account-card .account-emblem { border-radius: 50%; border-color: #b19a64; color: #ecd49a; background: radial-gradient(#314c45, #14272b); }
+.account-card strong { font-size: 27px; color: #f0dcae; }
+.account-card small { color: #c6b78f; }
+.entry-page .account-create { margin-top: 28px; }
+.entry-page .character-grid { grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); }
+.entry-page .character-choice-card { border: 1px solid #8e794f; border-radius: 4px; background: linear-gradient(#16262ccd, #142226f5), url('/assets/theme/arena.webp') 7% 25% / 450% auto; box-shadow: inset 0 0 0 3px #0c171b; min-height: 270px; }
+.character-choice-card .avatar { width: 64px; height: 72px; font-size: 24px; }
+.character-choice-card .character-level { color: #d5b874; }
+.character-choice-card .character-play { color: #ebcc8a; border-top: 1px solid #a38c4a44; }
+.app .skill-branch { border-color: #82714a; background: linear-gradient(#1e2e31, #111e24); border-radius: 4px; }
+.app .skill-node { background: #122129; border-color: #5e5c48; border-radius: 4px; box-shadow: inset 0 0 0 2px #0a1417; }
+.app .skill-node.available { border-color: #b59a5d; background: linear-gradient(145deg, #2d3f35, #16292b); }
+.app .skill-node.learned { background: linear-gradient(145deg, #20443d, #142a2d); border-color: #62b9a4; }
+.app .skill-node .node-status { color: #cdbb91; }
+.app .skill-node.learned .node-status { color: #8cdeca; }
+.app .points-badge { background: #372f1e; border-color: #bba16d; color: #e6cc93; border-radius: 4px; }
+.app .branch-title, .app .branch-heroes { border-color: #a68e4b44; }
+.app .inventory-slot, .app .equipment-slot, .app .recipe-card, .app .profession-card, .app .gathering-location, .app .gathering-node { background: linear-gradient(140deg, #26363a, #122128); border-color: #706047; border-radius: 4px; }
+.app .inventory-screen, .app .equipment-screen, .app .crafting-screen { color: var(--ink); }
+.app .equipment-panel, .app .backpack-panel, .app .craft-panel, .app .equipped-item, .app .equipment-candidate { background: linear-gradient(135deg, #203135e8, #0e2027ed); border-color: #88764a77; border-radius: 4px; }
+.app .bag-cell { background: linear-gradient(135deg, #2b3c3e, #11232a); border-color: #8f7d4e66; }
+.app .bag-cell.occupied { border-color: #aa9058; background: radial-gradient(ellipse at 50% 35%, #94814b40, #152c2d); }
+.app .recipe-option, .app .material-row, .app .profession-panel article, .app .ingredient-slot, .app .recipe-output { background: linear-gradient(135deg, #24373a, #12252a); border-color: #83754d77; border-radius: 4px; }
+.app .recipe-option.selected { border-color: #d5b36d; background: linear-gradient(135deg, #4d523555, #1b3433); }
+.app .gathering-area, .app .gathering-resource, .app .gathering-cargo, .app .gathering-atlas-grid article { border-radius: 4px; border-color: #a18e5355; }
+.app .gathering-area { position: relative; overflow: hidden; background: linear-gradient(155deg, #23443ce8, #112129f2), url('/assets/backgrounds/002.png') center / cover; }
+.app .gathering-area-marsh { background: linear-gradient(155deg, #244046e8, #112129f2), url('/assets/backgrounds/002.png') center / cover; }
+.app .gathering-area-highlands { background: linear-gradient(155deg, #5a4833d9, #17232cf5), url('/assets/backgrounds/002.png') center / cover; }
+.app .gathering-resource { background: linear-gradient(135deg, #293c36, #12262b); }
+.app .world-lobby { background: linear-gradient(90deg, #12272ff5, #142a2ec9 65%, #11292f90), url('/assets/theme/arena.webp') center / cover; border-color: #a58a52; }
+.app .world-compass { color: #e1c98e; text-shadow: 0 0 24px #5bd6b755; }
+.app .world-map-cell { border-color: #8a784f; border-radius: 3px; background: linear-gradient(145deg, #2d4139, #152e32); }
+.app .world-map-cell.current { border-color: #e3ca86; box-shadow: inset 0 0 16px #70cab522; }
+.app .world-viewport-wrap { border-radius: 4px; border: 1px solid #b49960; box-shadow: 0 0 0 3px #112125, 0 0 0 4px #82704b66; }
+.app .world-hotbar, .app .world-view-badge, .app .world-materials > span { border-radius: 4px; border-color: #938154; background: #172f33e8; }
+.app .inventory-toolbar, .app .inventory-container, .app .equipment-paperdoll, .app .crafting-workspace, .app .profession-panel { border-color: #77684a; }
+.app .item-details, .app .item-detail-modal, .app .equipment-detail { background: #14242a; border-color: #a18b55; }
+.app .chat-window { background: linear-gradient(#1b2c30fa, #0d1d23fc); border-color: #9b814f; border-radius: 5px; box-shadow: 0 12px 55px #000a; }
+.app .chat-toggle, body .chat-toggle { color: #eed59b; background: linear-gradient(#344645, #152a2e); border-color: #b4985a; }
+body .chat-window, body .social-panel { background: #142329f5; color: var(--ink); border-color: #a18b55; }
+body .chat-header, body .chat-tabs { border-color: #77684a; background: #203237; }
+body .party-roster { background: var(--surface); border-color: #716346; }
+body dialog, body .modal { color: var(--ink); background: var(--surface); border: 1px solid #b59a62; border-radius: 6px; box-shadow: inset 0 0 0 3px #0b181c, 0 20px 80px #000b; }
+body dialog::backdrop { background: #031116d9; backdrop-filter: blur(5px); }
+.app footer { color: #9d937a; border-top-color: #75644266; font-size: 9px; letter-spacing: .1em; }
+.error { border-color: #b16750; background: #4a2927; color: #ffcfb3; }
+@media (max-width: 1250px) {
+  .app .topbar { flex-wrap: wrap; gap: 8px 16px; }
+  .app .topbar nav { order: 3; flex-basis: 100%; justify-content: flex-start; }
+  .app .account-controls { margin-left: auto; }
+}
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 220px minmax(0, 1fr); gap: 16px; }
+  .sidebar .panel { padding: 16px; }
+  main { padding: 26px 18px; }
+}
+@media (max-width: 720px) {
+  .app .topbar { padding: 12px 14px; min-height: auto; }
+  .app .topbar nav { display: flex; overflow-x: auto; justify-content: flex-start; width: 100%; padding-bottom: 2px; }
+  .app .topbar nav button { padding: 10px 12px; font-size: 12px; min-height: 42px; flex-shrink: 0; }
+  .app .brand { font-size: 21px; }
+  .app .brand-mark { width: 36px; height: 36px; font-size: 29px; }
+  .app .account-controls { width: auto; font-size: 9px; gap: 2px; }
+  .app .account-controls span { display: none; }
+  .app .account-controls button { font-size: 9px; padding: 6px; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { grid-template-columns: minmax(0, 1fr); }
+  .sidebar .panel { padding: 18px; }
+  .page-heading { padding-bottom: 19px; margin-bottom: 22px; }
+  .page-heading h1 { font-size: 29px; }
+  .entry-page .entry-main { padding-top: 40px; }
+  .entry-page .account-grid { grid-template-columns: 1fr; }
+  .entry-page .account-card { min-height: 180px; gap: 12px; }
+  .entry-page .character-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .entry-page .character-choice-card { padding: 16px; min-height: 245px; }
+  .character-choice-card .character-choice-top { gap: 6px; flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; }
+}

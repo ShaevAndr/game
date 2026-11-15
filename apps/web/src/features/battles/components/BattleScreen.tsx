@@ -8,9 +8,12 @@ import { BattleSkills } from './BattleSkills';
 import { SkillEnergy } from '../../../shared/ui/SkillEnergy';
 import { FieldMotion } from '../../battlefield/model/field-playback';
 import { CharacterAttributes } from '../../characters/components/CharacterAttributes';
-import { ActiveEffects } from './ActiveEffects';
 import { FighterDetails } from './FighterDetails';
 import { useTurnTimer } from '../model/useTurnTimer';
+import { FighterCard } from './FighterCard';
+import { symbols } from '../../../shared/ui/game-labels';
+import { tileTypes, tileTypeNames } from '@game/core';
+import '../battle.css';
 
 interface Props {
   battle: Battle; characterId: string; hasCharacter: boolean; busy: boolean;
@@ -40,26 +43,24 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, animatin
   }, [confirmSurrender, battle.status, me?.hp]);
   const lastMove = [...(battle.boardMoves ?? [])].reverse().find(move => move.actorId === characterId) ?? battle.boardMoves?.[battle.boardMoves.length - 1];
   const phaseLabel = animating ? fieldMotion ? fieldMotion.stage === 'remove' ? 'Фишки исчезают…' : fieldMotion.stage === 'fall' ? 'Фишки падают…' : 'Перестановка…' : active?.npc ? 'Бот готовит ход…' : 'Ход выполняется…' : battle.status === 'active' ? battle.phase === 'choose' ? 'Выбери навык' : 'Переставь соседние фишки' : 'Общее поле';
-  return <div className="main-column">
+  const alliedTeam = me?.team ?? 0;
+  const allies = battle.fighters.filter(fighter => fighter.team === alliedTeam);
+  const opponents = battle.fighters.filter(fighter => fighter.team !== alliedTeam);
+  const fighterCard = (fighter: Battle['fighters'][number], opponent: boolean) => <FighterCard key={fighter.id} fighter={fighter} battle={battle}
+    mine={fighter.id === me?.id} opponent={opponent} selected={fighter.id === targetId}
+    onTarget={() => { if (opponent && fighter.hp > 0) controls.setTargetId(fighter.id); }} onInspect={() => setInspectedId(fighter.id)}/>;
+  return <div className="main-column battle-screen">
     <section className="panel battle-top">
       <div className="section-heading"><div>
-        <div className="section-label">БОЕВОЙ ИНСТАНС · ХОД {battle.turn || '—'}</div>
+        <div className="section-label">АРЕНА СТИХИЙ · ХОД {battle.turn || '—'}</div>
         <h2>{battle.status === 'waiting' ? 'Сбор участников' : battle.status === 'finished' ? battle.winner === null ? 'Бой завершён' : `Победа команды ${battle.winner + 1}` : myTurn ? 'Твой ход' : `Ход: ${active?.name}`}</h2>
-      </div><button className="ghost" onClick={onCopy}>Скопировать приглашение ↗</button></div>
-      <BattleRewards battle={battle} characterId={characterId}/>
-      {battle.status === 'active' && <div className="battle-turn-controls">
+      </div><div className="battle-header-actions">
+      {battle.status === 'active' && <>
         {seconds !== undefined && !animating && <span className={`turn-timer ${seconds <= 5 ? 'urgent' : ''}`} role="timer" aria-label="Осталось времени на ход">⏱ {seconds} с</span>}
         {me && me.hp > 0 && <button className="ghost surrender-button" disabled={busy} onClick={() => setConfirmSurrender(true)}>Закончить бой</button>}
-      </div>}
-      <div className="fighters">{battle.fighters.map(fighter => <div className="fighter-card" key={fighter.id}><button
-        onClick={() => { if (fighter.team !== me?.team && fighter.hp > 0) controls.setTargetId(fighter.id); }}
-        className={`fighter ${fighter.id === battle.activeId ? 'acting' : ''} ${fighter.id === targetId ? 'target' : ''} ${fighter.hp === 0 ? 'dead' : ''}`}>
-        <div><span>{fighter.npc ? '⬡' : '◈'} {fighter.name}</span><small>Команда {fighter.team + 1}{fighter.id === me?.id ? ' · ты' : ''}{fighter.id === targetId ? ' · цель' : ''}</small>{(fighter.guardDefense ?? 0) > 0 && <small className="guard-status">⛨ Защита +{fighter.guardDefense} до своего хода</small>}</div>
-        <b>{fighter.hp}<small> / {fighter.stats.maxHp}</small></b><div className="hp-track"><i style={{ width: `${100 * fighter.hp / fighter.stats.maxHp}%` }}/></div>
-        {battle.combatVersion === 1 && <SkillEnergy value={skillEnergy(fighter)}/>}
-        {(fighter.activeEffects ?? []).some(effect => effect.kind === 'shield') && <small className="shield-status">◈ Щит: {(fighter.activeEffects ?? []).reduce((sum, effect) => sum + (effect.kind === 'shield' ? effect.remainingShield ?? 0 : 0), 0)} HP</small>}
-      </button><button className="ghost inspect-fighter" onClick={() => setInspectedId(fighter.id)}>Посмотреть персонажа</button><ActiveEffects effects={fighter.activeEffects ?? []} fighters={battle.fighters} definitions={battle.content.statDefinitions ?? []}/></div>)}</div>
-      {me?.attributes && battle.content.statDefinitions && <details className="battle-character-stats"><summary>Параметры в этом бою</summary><CharacterAttributes attributes={me.attributes} definitions={battle.content.statDefinitions}/></details>}
+      </>}
+      <button className="ghost" onClick={onCopy}>Скопировать приглашение ↗</button></div></div>
+      <BattleRewards battle={battle} characterId={characterId}/>
       {battle.status === 'waiting' && <div className="lobby-actions">
         {!me ? <>{(battle.kind === 'bot' ? [] : [0, 1]).filter(team => battle.kind !== 'dungeon' || team === 0).map(team =>
           <button key={team} disabled={!hasCharacter || busy} onClick={() => onJoin(team)}>Вступить в команду {team + 1}</button>)}</>
@@ -67,12 +68,24 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, animatin
         <p className="hint">{battle.kind === 'bot' ? 'Играй один: бот получит характеристики и навыки твоего героя и будет ходить автоматически.' : battle.kind === 'dungeon' ? 'Можно играть одному или пригласить ещё двух героев.' : 'Другой игрок открывает приглашение и выбирает своего персонажа.'}</p>
       </div>}
     </section>
-    <div className="combat-grid">
+    <div className="battle-arena">
+      <aside className="combatant-rail allies-rail" aria-label="Ваша команда"><div className="rail-heading"><span>✦</span> ВАША КОМАНДА</div>{allies.map(fighter => fighterCard(fighter, false))}</aside>
+      <div className="battle-center">
+      <div className="arena-crest" aria-hidden="true"><span/>✦<span/></div>
       <BattlefieldBoard board={battle.board} motion={fieldMotion} enabled={myTurn && !busy && battle.phase === 'before'} selected={controls.selected} onTile={controls.tileClick} phaseLabel={phaseLabel}>
         <BattlefieldSummary report={lastMove} actorName={battle.fighters.find(fighter => fighter.id === lastMove?.actorId)?.name}/>
       </BattlefieldBoard>
-      <BattleSkills battle={battle} me={me} myTurn={myTurn} busy={busy} targetId={targetId} healTarget={healTarget} onAlly={controls.setAllyId} onCommand={onCommand}/>
+      <div className="battle-element-key" aria-label="Типы клеток">{tileTypes.map(type => <span key={type}><i className={`element-icon ${type}`}>{symbols[type]}</i>{tileTypeNames[type]}</span>)}</div>
+      </div>
+      <aside className="combatant-rail enemies-rail" aria-label="Команда противника"><div className="rail-heading"><span>⚔</span> ПРОТИВНИК</div>{opponents.map(fighter => fighterCard(fighter, true))}{!opponents.length && <div className="opponent-pending"><span>⚔</span><p>Ожидаем соперника</p></div>}</aside>
     </div>
+    <div className="battle-bottom">
+      <BattleSkills battle={battle} me={me} myTurn={myTurn} busy={busy} targetId={targetId} healTarget={healTarget} onAlly={controls.setAllyId} onCommand={onCommand}/>
+      <section className="panel journal"><div className="section-label">ЛЕТОПИСЬ СРАЖЕНИЯ</div>
+        {[...battle.log].reverse().slice(0, 30).map((line, index) => <div key={`${battle.log.length}-${index}`}><span>{String(battle.log.length - index).padStart(2, '0')}</span>{line}</div>)}
+      </section>
+    </div>
+    {me?.attributes && battle.content.statDefinitions && <details className="panel battle-character-stats"><summary>Параметры в этом бою</summary><CharacterAttributes attributes={me.attributes} definitions={battle.content.statDefinitions}/></details>}
     <dialog ref={dialog} className="battle-skills-dialog" aria-labelledby="battle-skills-title" onCancel={event => event.preventDefault()}>
       {choosing && <>
         <div className="battle-choice-toolbar"><span role="timer">⏱ {seconds ?? '—'} с</span><button className="ghost" disabled={busy} onClick={() => { dialog.current?.close(); setConfirmSurrender(true); }}>Закончить бой</button></div>
@@ -87,8 +100,5 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, animatin
       <button disabled={busy} onClick={() => onCommand({ type: 'surrender' })}>Сдаться</button><button className="ghost" onClick={() => setConfirmSurrender(false)}>Продолжить бой</button>
     </dialog>
     <FighterDetails battle={battle} fighter={battle.fighters.find(fighter => fighter.id === inspectedId)} onClose={() => setInspectedId(undefined)}/>
-    <section className="panel journal"><div className="section-label">ЖУРНАЛ БОЯ</div>
-      {[...battle.log].reverse().slice(0, 30).map((line, index) => <div key={`${battle.log.length}-${index}`}><span>{String(battle.log.length - index).padStart(2, '0')}</span>{line}</div>)}
-    </section>
   </div>;
 }

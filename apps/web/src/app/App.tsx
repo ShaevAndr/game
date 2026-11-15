@@ -91,7 +91,7 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
     : battle ? `${kindNames[battle.kind]} · ${ruleNames[battle.rule]} · ${battle.kind === 'dungeon' ? `Волна ${battle.wave} из ${battle.totalWaves}` : 'Две команды — одно поле'}`
     : 'Четыре стихии. Физическая сила. Защита. Твоя тактика.';
 
-  return <div className="app">
+  return <div className={`app${roomId && screen === 'arena' ? ' is-battle' : ''}`}>
     <header className="topbar">
       <a className="brand" href="#" onClick={() => openRoom('')}><span className="brand-mark">✦</span><span>СТИХИИ<span className="brand-sub">TACTICAL MATCH–3</span></span></a>
       <nav aria-label="Основная навигация"><button onClick={() => openRoom('')} className={screen === 'arena' ? 'nav-active' : ''}>Арена</button><button onClick={openSkills} className={screen === 'skills' ? 'nav-active' : ''}>Навыки</button><button onClick={openEquipment} className={screen === 'equipment' ? 'nav-active' : ''}>Экипировка</button><button onClick={openWorld} className={screen === 'world' ? 'nav-active' : ''}>Мир</button><button onClick={openGathering} className={screen === 'gathering' ? 'nav-active' : ''}>Вылазки</button><button onClick={openCrafting} className={screen === 'crafting' ? 'nav-active' : ''}>Крафт</button><button onClick={openInventory} className={screen === 'inventory' ? 'nav-active' : ''}>Инвентарь</button></nav>
@@ -101,7 +101,7 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
     <main>
       <div className="page-heading"><div><div className="eyebrow">СОБИРАЙ. НАПОЛНЯЙ. ПОБЕЖДАЙ.</div><h1>{heading}</h1><p>{description}</p></div>{roomId && <button className="ghost" onClick={() => openRoom('')}>← Все комнаты</button>}</div>
       {(error || sessionError) && <div className="error" role="alert">{error || sessionError}<button onClick={() => setError('')} aria-label="Закрыть ошибку">×</button></div>}
-      <div className={`layout${workshop ? ` ${screen}-layout` : ''}`}>
+      <div className={`layout${workshop ? ` ${screen}-layout` : ''}${roomId && screen === 'arena' ? ' battle-layout' : ''}`}>
         <aside className="sidebar">
           <CharacterPanel compact={workshop} character={character} content={content} fighter={fighter} busy={busy || sessionBusy} onCharacters={onCharacters} onSkills={openSkills} onInventory={openInventory} onEquipment={openEquipment}/>
           <PartyRoster state={party.state} playerId={session.account.id} characterId={characterId} busy={party.busy} pending={party.pending} error={party.error} message={party.message}
