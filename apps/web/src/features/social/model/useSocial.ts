@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SocialAction, SocialCommand, SocialState } from '@game/core';
 import { ApiError } from '../../../shared/api/http';
+import { operationId } from '../../../shared/api/operation-id';
 import { socialApi } from '../api/social.api';
 
 export function useSocial(enabled: boolean) {
@@ -27,7 +28,7 @@ export function useSocial(enabled: boolean) {
   const act = async (action: SocialAction, targetPlayerId: string) => {
     if (commandPending.current || !enabled) return;
     const signature = JSON.stringify({ action, targetPlayerId });
-    if (pending.current?.signature !== signature) pending.current = { signature, command: { operationId: crypto.randomUUID(), targetPlayerId, action,
+    if (pending.current?.signature !== signature) pending.current = { signature, command: { operationId: operationId(), targetPlayerId, action,
       expectedRevision: current.current?.relationships.find(row => row.playerId === targetPlayerId)?.revision ?? 0 } };
     commandPending.current = true; setBusy(true); setError('');
     try { await socialApi.command(pending.current.command); pending.current = undefined; await refresh(); }

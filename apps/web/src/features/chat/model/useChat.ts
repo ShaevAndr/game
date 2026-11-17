@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { operationId } from '../../../shared/api/operation-id';
 import { io } from 'socket.io-client';
 import type { Account, AccountSession, ChatMessage, ChatSend, ChatView } from '@game/core';
 import { ApiError, getSessionToken } from '../../../shared/api/http';
@@ -99,7 +100,7 @@ export function useChat(session: AccountSession, enabled: boolean, visibilityRev
     const destination: ChatSend['destination'] = groupDestination ? { kind: 'party', partyId: recipientId.slice(6) }
       : recipientId ? { kind: 'direct', recipientPlayerId: recipientId } : { kind: 'world' };
     const signature = JSON.stringify({ authorCharacterId: session.characterId, destination, text: draft.trim() });
-    if (pendingSend.current?.signature !== signature) pendingSend.current = { signature, body: { operationId: crypto.randomUUID(), authorCharacterId: session.characterId, destination, segments: [{ kind: 'text', text: draft.trim() }] } };
+    if (pendingSend.current?.signature !== signature) pendingSend.current = { signature, body: { operationId: operationId(), authorCharacterId: session.characterId, destination, segments: [{ kind: 'text', text: draft.trim() }] } };
     const body = pendingSend.current.body;
     const sendingPartyAccess = partyAccess;
     sendingNow.current = true; setSending(true); setSendError('');
