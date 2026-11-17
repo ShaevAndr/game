@@ -71,6 +71,11 @@ export class PostgresBattlesRepository extends BattlesRepository {
   async create(battle: Battle) {
     await this.db.sql.insertInto('battles').values({ id: battle.id, version: battle.version, data: JSON.stringify(battle) }).execute();
   }
+  async removeRoom(id: string, context: TransactionContext) {
+    const transaction = this.db.session(context);
+    await transaction.deleteFrom('arena_challenges').where('battle_id', '=', id).execute();
+    await transaction.deleteFrom('battles').where('id', '=', id).execute();
+  }
   async expired(now: number, limit: number) {
     return (await this.db.sql.selectFrom('battles').select('id')
       .where(sql<boolean>`data->>'status' = 'active' AND (data->>'turnDeadlineAt')::bigint <= ${now}`)

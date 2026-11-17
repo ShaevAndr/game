@@ -122,6 +122,7 @@ test('real infrastructure: REST commands, WS push, cache, transactional rewards,
     await verifyRankedCrafting(request, app);
     const gatheringCheckpoint = await verifyGathering(app, origin, authToken, request);
     await verifyArena(request, app);
+    await verifyRoomCancellation(request, app);
     await verifyBattleEffects(request, app);
     await verifyTimedBattleEffects(request, app);
     await verifyModifierModel(request, app);
@@ -1118,7 +1119,7 @@ async function verifyIdentity(origin: string, request: TestRequest, accounts: Ac
   assert.equal((await call('/battles', primaryToken, { name: 'Чужой герой', characterId: foreign.id, kind: 'bot' })).status, 403);
   const foreignRoom = await call('/battles', otherToken, { name: 'Бой другого аккаунта', characterId: foreign.id, kind: 'bot' });
   assert.equal(foreignRoom.status, 201);
-  for (const action of ['join', 'start', 'actions']) {
+  for (const action of ['join', 'start', 'actions', 'cancel']) {
     assert.equal((await call(`/battles/${foreignRoom.data.id}/${action}`, primaryToken, { characterId: foreign.id, version: foreignRoom.data.version, team: 0, action: { type: 'surrender' } })).status, 403);
   }
   assert.equal((await call('/identity/session', otherToken, undefined, 'DELETE')).status, 200);
@@ -1230,4 +1231,74 @@ async function verifyArena(request: TestRequest, app: INestApplication) {
   const bot = await request<Battle>('/battles', { name: 'Вместо вызова', characterId: other.id, kind: 'bot' });
   await request(`/battles/${bot.id}/start`, { characterId: other.id, version: bot.version });
   assert.equal((await state(availableHost)).incoming.length, 0);
+}
+
+async function verifyRoomCancellation(request: TestRequest, app: INestApplication) {
+  const [host, challenger, other] = await Promise.all(['Отмена: создатель', 'Отмена: соперник', 'Отмена: участник'].map(name => request<Character>('/characters', { name })));
+  const create = (kind: Battle['kind'] = 'duel', owner = host) => request<Battle>('/battles', { name: 'Отменяемая комната', characterId: owner.id, kind });
+  const state = (hero: Character) => request<ArenaState>(`/battles/arena/${hero.id}`);
+  const cancel = (room: Battle, hero = host, status = 201) => request(`/battles/${room.id}/cancel`, { characterId: hero.id }, status);
+  const [room, remaining, elsewhere] = await Promise.all([create(), create(), create('duel', other)]);
+  const offered = await request<ArenaChallenge>(`/battles/${room.id}/challenges`, { characterId: challenger.id });
+  const retained = await request<ArenaChallenge>(`/battles/${remaining.id}/challenges`, { characterId: challenger.id });
+  const outgoing = await request<ArenaChallenge>(`/battles/${elsewhere.id}/challenges`, { characterId: host.id });
+  const inventory = await app.get(InventoryService).get(host.id);
+  await cancel(room, challenger, 403); await cancel(room, other, 403);
+  const repository = app.get(BattlesRepository), remove = repository.removeRoom.bind(repository);
+  // Even failure after both SQL deletes must restore the room and every offer.
+  repository.removeRoom = async (id, context) => { await remove(id, context); throw new Error('room cancellation write failure'); };
+  try { await cancel(room, host, 500); } finally { repository.removeRoom = remove; }
+  assert.equal((await request<Battle>(`/battles/${room.id}`)).status, 'waiting');
+  assert.ok((await state(host)).incoming.some(offer => offer.id === offered.id));
+  assert.ok((await state(challenger)).outgoing.some(offer => offer.id === offered.id));
+  await cancel(room); await cancel(room); // Safe replay after a lost response.
+  await request(`/battles/${room.id}`, undefined, 404);
+  await request(`/battles/${room.id}/challenges`, { characterId: challenger.id }, 404);
+  await request(`/battles/${room.id}/challenges/${offered.id}/accept`, { characterId: host.id }, 404);
+  assert.deepEqual((await state(host)).incoming.map(offer => offer.id), [retained.id]);
+  assert.deepEqual((await state(host)).outgoing.map(offer => offer.id), [outgoing.id]);
+  assert.deepEqual((await state(challenger)).outgoing.map(offer => offer.id), [retained.id]);
+  const removedIds = [room.id];
+  for (const kind of ['bot', 'team', 'dungeon'] as const) {
+    const waiting = await create(kind);
+    if (kind === 'team') {
+      await request(`/battles/${waiting.id}/join`, { characterId: other.id, team: 0 });
+      await cancel(waiting, other, 403); // Joining does not transfer room ownership.
+    }
+    await cancel(waiting); await request(`/battles/${waiting.id}`, undefined, 404); removedIds.push(waiting.id);
+  }
+  assert.deepEqual(await app.get(InventoryService).get(host.id), inventory);
+  const db = app.get(Database);
+  assert.equal((await db.sql.selectFrom('battle_rewards').selectAll().where('battle_id', 'in', removedIds).execute()).length, 0);
+  assert.equal((await db.sql.selectFrom('battle_archive_outbox').selectAll().where('id', 'in', removedIds).execute()).length, 0);
+
+  const service = app.get(BattlesService);
+  const bot = await create('bot');
+  const started = await request<Battle>(`/battles/${bot.id}/start`, { characterId: host.id, version: bot.version });
+  await cancel(bot, host, 409);
+  assert.equal((await request<Battle>(`/battles/${bot.id}`)).version, started.version);
+  const finished = await request<Battle>(`/battles/${bot.id}/actions`, { characterId: host.id, version: started.version, action: { type: 'surrender' } });
+  await cancel(bot, host, 409);
+  assert.equal((await request<Battle>(`/battles/${bot.id}`)).version, finished.version);
+
+  for (const kind of ['bot', 'duel'] as const) {
+    const racing = await create(kind);
+    const offer = kind === 'duel' ? await request<ArenaChallenge>(`/battles/${racing.id}/challenges`, { characterId: challenger.id }) : null;
+    const results = await Promise.allSettled([
+      service.cancelRoom(racing.id, { characterId: host.id }),
+      offer ? service.acceptChallenge(racing.id, offer.id, { characterId: host.id }) : service.start(racing.id, { characterId: host.id, version: racing.version }),
+    ]);
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+    const rejection = results.find(result => result.status === 'rejected') as PromiseRejectedResult;
+    if (results[0].status === 'fulfilled') {
+      assert.equal(rejection.reason.getStatus(), 404);
+      await request(`/battles/${racing.id}`, undefined, 404);
+    } else {
+      assert.equal(rejection.reason.getStatus(), 409);
+      const active = await request<Battle>(`/battles/${racing.id}`);
+      assert.equal(active.status, 'active');
+      await request(`/battles/${racing.id}/actions`, { characterId: host.id, version: active.version, action: { type: 'surrender' } });
+    }
+    assert.ok(!(await state(challenger)).outgoing.some(offer => offer.battleId === racing.id));
+  }
 }

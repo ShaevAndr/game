@@ -22,6 +22,9 @@ export class BattlesController {
   }
   @Get(':id') async get(@Param('id') id: string) { return battleView(await this.service.get(idSchema.parse(id))); }
   @Post() async create(@Body() body: unknown) { return battleView(await this.service.create(body)); }
+  @Post(':id/cancel') async cancel(@Param('id') id: string, @Body() body: unknown) {
+    await this.service.cancelRoom(idSchema.parse(id), body); return { ok: true };
+  }
   @Post(':id/join') async join(@Param('id') id: string, @Body() body: unknown) { return battleView(await this.service.join(idSchema.parse(id), body)); }
   @Post(':id/start') async start(@Param('id') id: string, @Body() body: unknown) { return battleView(await this.service.start(idSchema.parse(id), body)); }
   @Post(':id/actions') async command(@Param('id') id: string, @Body() body: unknown) { return battleView(await this.service.command(idSchema.parse(id), body)); }

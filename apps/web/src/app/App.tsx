@@ -66,7 +66,12 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
     if (activeId !== roomId) { setError(''); navigation.openRoom(activeId); }
   }, [arena?.activeBattleId, roomId, navigation.openRoom]);
   const { rooms, loading: roomsLoading, refreshRooms } = useRooms(screen === 'arena' && !roomId, setError);
-  const { battle, clockOffset, updateBattle, refreshBattle, animating, fieldMotion } = useBattle(roomId, setError);
+  const { battle, clockOffset, updateBattle, refreshBattle, animating, fieldMotion, missingRoomId } = useBattle(roomId, setError);
+  useEffect(() => {
+    if (roomId && missingRoomId === roomId) {
+      navigation.openRoom(''); setError('Комната больше недоступна. Возможно, создатель отменил её.');
+    }
+  }, [roomId, missingRoomId, navigation.openRoom]);
   const recover = useCallback(async () => {
     await Promise.allSettled([refreshCharacters(), refreshBattle(), refreshRooms(), refreshArena()]);
   }, [refreshCharacters, refreshBattle, refreshRooms, refreshArena]);
@@ -89,6 +94,11 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
   }, [battle?.id, battle?.status, battle?.kind, navigation.openRoom]);
 
   const openRoom = (id: string) => { setError(''); navigation.openRoom(id); };
+  const cancelRoom = (id: string) => void perform(async () => {
+    await arenaApi.cancel(id, characterId);
+    if (roomId === id) openRoom('');
+    await Promise.all([refreshRooms(), refreshArena()]);
+  });
   const openSkills = () => { setError(''); navigation.openSkills(); };
   const openGathering = () => { setError(''); navigation.openGathering(); };
   const openWorld = () => { setError(''); navigation.openWorld(); };
@@ -129,13 +139,14 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
             onCommand={action => void perform(async () => updateBattle(await battlesApi.command(battle.id, characterId, battle.version, action)))}
             onJoin={team => void perform(async () => updateBattle(await battlesApi.join(battle.id, characterId, team)))}
             onStart={() => void perform(async () => updateBattle(await battlesApi.start(battle.id, characterId, battle.version)))}
+            onCancel={() => cancelRoom(battle.id)}
             onCopy={() => void perform(async () => { await navigator.clipboard.writeText(location.href); })}/>
             : <section className="panel" role="status">Загрузка боя…</section>
           : <ArenaScreen characterId={characterId} arena={arena}
             onAccept={offer => void perform(async () => { const started = await arenaApi.accept(offer, characterId); updateBattle(started); openRoom(started.id); await refreshArena(); })}
             onChallenge={id => void perform(async () => { await arenaApi.challenge(id, characterId); await refreshArena(); })}
             onDismiss={offer => void perform(async () => { await arenaApi.dismiss(offer, characterId); await refreshArena(); })}
-            rooms={rooms} loading={roomsLoading} canCreate={!!character && !!arena && !arena.activeBattleId} busy={busy} onOpen={openRoom}
+            rooms={rooms} loading={roomsLoading} canCreate={!!character && !!arena && !arena.activeBattleId} busy={busy} onOpen={openRoom} onCancel={cancelRoom}
             onRefresh={() => void perform(refreshRooms)}
             onCreate={async input => { let created = false; await perform(async () => { const room = await arenaApi.create({ ...input, characterId }); created = true; if (room.kind === 'duel') await Promise.all([refreshRooms(), refreshArena()]); else openRoom(room.id); }); return created; }}/>}
       </div>

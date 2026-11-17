@@ -256,6 +256,7 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
   const accounts = ['Хозяин комнаты', 'Второй аккаунт'].map(name => ({ id: randomUUID(), name, createdAt: new Date().toISOString() }));
   const heroes = accounts.map((account, i) => ({ ...createCharacter(randomUUID(), i ? 'Гость' : 'Хозяин', seedContent), accountId: account.id }));
   const offers: ArenaChallenge[] = [], rooms: import('@game/core').Battle[] = [], errors: string[] = [];
+  let rejectCancellation = false;
   const active = (characterId: string) => rooms.find(room => room.status === 'active' && room.fighters.some(fighter => fighter.characterId === characterId));
   const pages = [];
   for (const [i, browser] of [ownerBrowser, opponentBrowser].entries()) {
@@ -291,6 +292,14 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
         rooms.push(room); return send(room, 201);
       }
       const room = rooms.find(value => value.id === path.split('/')[2]);
+      if (room && path.endsWith('/cancel')) {
+        assert.equal(room.fighters[0].characterId, heroes[i].id);
+        assert.equal(room.status, 'waiting');
+        if (rejectCancellation) { rejectCancellation = false; return send({ message: 'Не удалось отменить комнату' }, 503); }
+        rooms.splice(rooms.indexOf(room), 1);
+        for (let index = offers.length - 1; index >= 0; index--) if (offers[index].battleId === room.id) offers.splice(index, 1);
+        return send({ ok: true }, 201);
+      }
       if (room && path.endsWith('/challenges')) {
         const offer: ArenaChallenge = { id: randomUUID(), battleId: room.id, roomName: room.name, challengerId: heroes[i].id,
           challengerName: heroes[i].name, recipientId: room.fighters[0].characterId!, recipientName: room.fighters[0].name, status: 'pending', createdAt: new Date().toISOString() };
@@ -304,6 +313,7 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
         return send({ ...room, serverTime: Date.now() }, 201);
       }
       if (room && path === `/battles/${room.id}`) return send({ ...room, serverTime: Date.now() });
+      if (/^\/battles\/[^/]+$/.test(path)) return send({ message: 'Бой не найден' }, 404);
       errors.push(`Unhandled route: ${path}`); return send({ message: path }, 404);
     });
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message)); pages.push(page);
@@ -322,12 +332,52 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
   await opponent.getByRole('button', { name: 'Бросить вызов', exact: true }).click();
   await opponent.getByRole('button', { name: 'Вызов отправлен', exact: true }).waitFor();
   assert.equal(new URL(opponent.url()).hash, '');
+  assert.equal(await opponent.getByRole('button', { name: 'Отменить комнату', exact: true }).count(), 0);
+  // The host can cancel even after receiving an offer; a failed command keeps the room available.
+  await owner.getByRole('button', { name: 'Принять', exact: true }).waitFor();
+  await owner.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await owner.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  rejectCancellation = true;
+  await owner.getByRole('button', { name: 'Отменить комнату', exact: true }).click();
+  await owner.getByText('Не удалось отменить комнату', { exact: false }).waitFor();
+  assert.equal(rooms.length, 1); assert.equal(offers.length, 1);
+  await owner.getByRole('button', { name: 'Отменить комнату', exact: true }).click();
+  await owner.getByText('Пока нет доступных комнат.', { exact: true }).waitFor();
+  assert.equal(rooms.length, 0); assert.equal(offers.length, 0);
+  await opponent.getByRole('button', { name: 'Отозвать', exact: true }).waitFor({ state: 'hidden' });
+  await owner.reload(); await owner.getByText('Пока нет доступных комнат.', { exact: true }).waitFor();
+  for (const mode of ['Командный бой', 'Бой с ботом', 'Подземелье']) {
+    await owner.getByRole('button', { name: 'Создать комнату', exact: true }).click();
+    await owner.locator('.mode-tabs').getByRole('button', { name: new RegExp(mode) }).click();
+    await owner.getByRole('button', { name: 'Создать', exact: true }).click();
+    await owner.locator('.lobby-actions').getByRole('button', { name: 'Отменить комнату', exact: true }).waitFor();
+    if (mode === 'Командный бой') {
+      await opponent.goto(owner.url()); await opponent.locator('.battle-arena').waitFor();
+      assert.equal(await opponent.getByRole('button', { name: 'Отменить комнату', exact: true }).count(), 0);
+    }
+    await owner.getByRole('button', { name: 'Отменить комнату', exact: true }).click();
+    await owner.locator('.rooms').waitFor();
+    assert.equal(new URL(owner.url()).hash, '');
+    assert.equal(rooms.length, 0);
+    if (mode === 'Командный бой') {
+      await opponent.locator('.rooms').waitFor();
+      await opponent.getByText('Комната больше недоступна.', { exact: false }).waitFor();
+      assert.equal(new URL(opponent.url()).hash, '');
+    }
+  }
+  await owner.getByRole('button', { name: 'Создать комнату', exact: true }).click();
+  await owner.locator('.mode-tabs').getByRole('button', { name: /^Дуэль/ }).click();
+  await owner.getByRole('button', { name: 'Создать', exact: true }).click();
+  await owner.getByText('Твоя комната', { exact: false }).waitFor();
+  await opponent.getByRole('button', { name: 'Обновить ↻', exact: true }).click();
+  await opponent.getByRole('button', { name: 'Бросить вызов', exact: true }).click();
   await owner.getByRole('button', { name: 'Принять', exact: true }).click();
   await opponent.locator('.battle-arena').waitFor();
   const room = rooms[0];
   assert.equal(new URL(owner.url()).hash, `#${room.id}`);
   assert.equal(new URL(opponent.url()).hash, `#${room.id}`);
   for (const page of pages) assert.equal(await page.locator('.combatant-card').count(), 2);
+  for (const page of pages) assert.equal(await page.getByRole('button', { name: 'Отменить комнату', exact: true }).count(), 0);
   assert.deepEqual(new Set(room.fighters.map(fighter => fighter.characterId)), new Set(heroes.map(hero => hero.id)));
   // Subsequent polls must preserve deliberate navigation away from the same battle.
   await opponent.getByRole('button', { name: 'Навыки', exact: true }).click();

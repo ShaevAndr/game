@@ -6,11 +6,11 @@ import { kindNames } from '../../../shared/ui/game-labels';
 
 interface Props {
   characterId: string; arena: ArenaState | null; onChallenge: (id: string) => void; onDismiss: (offer: ArenaChallenge) => void; onAccept: (offer: ArenaChallenge) => void;
-  rooms: Battle[]; loading: boolean; canCreate: boolean; busy: boolean; onRefresh: () => void; onOpen: (id: string) => void;
+  rooms: Battle[]; loading: boolean; canCreate: boolean; busy: boolean; onRefresh: () => void; onOpen: (id: string) => void; onCancel: (id: string) => void;
   onCreate: (input: { name: string; kind: Battle['kind']; battlefield: BattlefieldOptions }) => Promise<boolean>;
 }
 
-export function ArenaScreen({ characterId, arena, onChallenge, onDismiss, onAccept, rooms, loading, canCreate, busy, onRefresh, onOpen, onCreate }: Props) {
+export function ArenaScreen({ characterId, arena, onChallenge, onDismiss, onAccept, rooms, loading, canCreate, busy, onRefresh, onOpen, onCancel, onCreate }: Props) {
   const [creating, setCreating] = useState(false);
   const [battlefield, setBattlefield] = useState<BattlefieldOptions>({ size: DEFAULT_FIELD_SIZE });
   const validField = battlefieldOptionsSchema.safeParse(battlefield);
@@ -56,6 +56,7 @@ export function ArenaScreen({ characterId, arena, onChallenge, onDismiss, onAcce
           {room.kind === 'duel' ? !own && <button className="primary" disabled={busy || !canCreate || pending}
             onClick={() => onChallenge(room.id)}>{pending ? 'Вызов отправлен' : 'Бросить вызов'}</button>
             : <button className="ghost" disabled={busy} onClick={() => onOpen(room.id)}>{own ? 'Открыть комнату' : 'Вступить'}</button>}
+          {room.fighters[0]?.characterId === characterId && <button className="ghost" disabled={busy} onClick={() => onCancel(room.id)}>Отменить комнату</button>}
         </div>;
       })}
     </div>

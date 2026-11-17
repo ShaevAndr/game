@@ -13,6 +13,8 @@ export abstract class BattlesRepository {
   abstract hasActiveCharacter(characterId: string, context?: TransactionContext): Promise<boolean>;
   abstract expired(now: number, limit: number): Promise<string[]>;
   abstract create(battle: Battle): Promise<void>;
+  /** Remove a locked waiting room and its offers in the caller's transaction. */
+  abstract removeRoom(id: string, context: TransactionContext): Promise<void>;
   abstract lock(id: string, context: TransactionContext): Promise<{ battle: Battle; version: number } | undefined>;
   abstract save(battle: Battle, context: TransactionContext): Promise<void>;
 }

@@ -3,13 +3,14 @@ import { Battle } from '@game/core';
 import { io } from 'socket.io-client';
 import { battlesApi } from '../api/battles.api';
 import { useBattlePlayback } from './useBattlePlayback';
-import { getSessionToken } from '../../../shared/api/http';
+import { ApiError, getSessionToken } from '../../../shared/api/http';
 
 /** REST loads and recovers snapshots. The socket exists only while viewing a battle. */
 export function useBattle(roomId: string, onError: (message: string) => void) {
   const [snapshot, setSnapshot] = useState<Battle | null>(null);
   const [connected, setConnected] = useState(false);
   const [clockOffset, setClockOffset] = useState(0);
+  const [missingRoomId, setMissingRoomId] = useState('');
   const updateBattle = useCallback((value: Battle) => {
     if (value.id !== roomId) return;
     if (value.serverTime !== undefined) setClockOffset(value.serverTime - Date.now());
@@ -17,12 +18,18 @@ export function useBattle(roomId: string, onError: (message: string) => void) {
   }, [roomId]);
 
   const refreshBattle = useCallback(async () => {
-    if (roomId) updateBattle(await battlesApi.get(roomId));
+    if (!roomId) return;
+    try { updateBattle(await battlesApi.get(roomId)); }
+    catch (error) {
+      if (error instanceof ApiError && error.status === 404) setMissingRoomId(roomId);
+      else throw error;
+    }
   }, [roomId, updateBattle]);
 
   useEffect(() => {
     setSnapshot(null);
     setConnected(false);
+    setMissingRoomId('');
     if (!roomId) return;
     let cancelled = false;
     let pending = false;
@@ -34,7 +41,12 @@ export function useBattle(roomId: string, onError: (message: string) => void) {
       if (pending) { reloadRequested ||= afterSubscription; return; }
       pending = true;
       try { const battle = await battlesApi.get(roomId, controller.signal); if (!cancelled) updateBattle(battle); }
-      catch (error) { if (!cancelled) onError((error as Error).message); }
+      catch (error) {
+        if (!cancelled) {
+          if (error instanceof ApiError && error.status === 404) setMissingRoomId(roomId);
+          else onError((error as Error).message);
+        }
+      }
       finally {
         pending = false;
         if (reloadRequested && !cancelled) { reloadRequested = false; void load(); }
@@ -69,5 +81,5 @@ export function useBattle(roomId: string, onError: (message: string) => void) {
   }, [roomId, onError, updateBattle]);
 
   const playback = useBattlePlayback(snapshot?.id === roomId ? snapshot : null);
-  return { ...playback, connected, clockOffset, updateBattle, refreshBattle };
+  return { ...playback, connected, clockOffset, updateBattle, refreshBattle, missingRoomId };
 }

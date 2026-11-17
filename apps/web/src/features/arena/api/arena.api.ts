@@ -7,5 +7,6 @@ export const arenaApi = {
   accept: (offer: ArenaChallenge, characterId: string) => request<Battle>(`/battles/${offer.battleId}/challenges/${offer.id}/accept`, { body: { characterId } }),
   dismiss: (offer: ArenaChallenge, characterId: string) => request<{ ok: boolean }>(`/battles/${offer.battleId}/challenges/${offer.id}/dismiss`, { body: { characterId } }),
   list: () => request<Battle[]>('/battles'),
+  cancel: (id: string, characterId: string) => request<{ ok: boolean }>(`/battles/${id}/cancel`, { body: { characterId } }),
   create: (input: { name: string; characterId: string; kind: Battle['kind']; rule?: Rule; battlefield?: BattlefieldOptions }) => request<Battle>('/battles', { body: input }),
 };

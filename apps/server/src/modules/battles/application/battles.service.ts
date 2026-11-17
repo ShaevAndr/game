@@ -52,6 +52,18 @@ export class BattlesService {
     return battle;
   }
 
+  async cancelRoom(id: string, body: unknown) {
+    const { characterId } = z.object({ characterId: z.string().uuid() }).strict().parse(body);
+    await this.transactions.run(async context => {
+      await this.repository.lockMatchmaking(context);
+      const row = await this.repository.lock(id, context);
+      if (!row) return; // A retry after a committed cancellation is safe.
+      if (row.battle.fighters[0]?.characterId !== characterId) throw new ForbiddenException('Отменить комнату может только её создатель');
+      if (row.battle.status !== 'waiting') throw new ConflictException('Бой уже начался. Отменить комнату нельзя');
+      await this.repository.removeRoom(id, context);
+    });
+  }
+
   private async mutate(id: string, expected: number | undefined, change: (battle: Battle, context: TransactionContext, checkpoint: (battle: Battle) => void) => void | Promise<void>, guard?: (battle: Battle) => boolean, matchmaking = false) {
     const result = await this.transactions.run(async context => {
       if (matchmaking) await this.repository.lockMatchmaking(context);

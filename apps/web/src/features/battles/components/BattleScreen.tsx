@@ -20,10 +20,10 @@ interface Props {
   animating?: boolean; fieldMotion?: FieldMotion;
   clockOffset?: number;
   onChallenge?: () => void; challengePending?: boolean; canChallenge?: boolean;
-  onCommand: (action: Action) => void; onJoin: (team: number) => void; onStart: () => void; onCopy: () => void;
+  onCommand: (action: Action) => void; onJoin: (team: number) => void; onStart: () => void; onCopy: () => void; onCancel: () => void;
 }
 
-export function BattleScreen({ battle, characterId, hasCharacter, busy, animating, fieldMotion, clockOffset = 0, onChallenge, challengePending, canChallenge, onCommand, onJoin, onStart, onCopy }: Props) {
+export function BattleScreen({ battle, characterId, hasCharacter, busy, animating, fieldMotion, clockOffset = 0, onChallenge, challengePending, canChallenge, onCommand, onJoin, onStart, onCopy, onCancel }: Props) {
   const controls = useBattleControls(battle, characterId, busy, onCommand);
   const { me, active, myTurn, targetId, healTarget } = controls;
   const dialog = useRef<HTMLDialogElement>(null);
@@ -68,6 +68,7 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, animatin
           : <p role="status">Комната доступна другим игрокам. Ожидаем вызовов.</p> : !me ? <>{(battle.kind === 'bot' ? [] : [0, 1]).filter(team => battle.kind !== 'dungeon' || team === 0).map(team =>
           <button key={team} disabled={!hasCharacter || busy} onClick={() => onJoin(team)}>Вступить в команду {team + 1}</button>)}</>
           : <button className="primary" disabled={busy} onClick={onStart}>Начать бой →</button>}
+        {battle.fighters[0]?.characterId === characterId && <button className="ghost" disabled={busy} onClick={onCancel}>Отменить комнату</button>}
         <p className="hint">{battle.kind === 'duel' ? 'Владелец комнаты получает вызов и принимает его или отклоняет. Бой начинается сразу после принятия.' : battle.kind === 'bot' ? 'Играй один: бот получит характеристики и навыки твоего героя и будет ходить автоматически.' : battle.kind === 'dungeon' ? 'Можно играть одному или пригласить ещё двух героев.' : 'Другой игрок открывает приглашение и выбирает своего персонажа.'}</p>
       </div>}
     </section>
