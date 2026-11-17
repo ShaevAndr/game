@@ -20,6 +20,7 @@ import { TaskQueue } from '../src/shared/application/task-queue.port';
 import { RewardsService } from '../src/modules/rewards/application/rewards.service';
 import { SkillsService } from '../src/modules/skills/application/skills.service';
 import { SkillsCatalogService } from '../src/modules/skills/application/skills-catalog.service';
+import { IdentityService } from '../src/modules/identity/application/identity.service';
 
 const winnerId = '00000000-0000-4000-8000-000000000001', loserId = '00000000-0000-4000-8000-000000000002';
 const battleId = '00000000-0000-4000-8000-000000000003';
@@ -90,7 +91,7 @@ function fixture(kind: 'duel' | 'bot' = 'duel', battlefield: BattlefieldOptions 
   let time = 100000;
   battles.expired = async now => Object.values(state.battles).filter(row => row.data.status === 'active' && row.data.turnDeadlineAt !== undefined && row.data.turnDeadlineAt <= now).map(row => row.data.id);
   const inventory = { state: async (ownerId: string) => ({ ownerId, inventories: [], items: [] }) } as unknown as InventoryService;
-  const service = new BattlesService(adapter, battles, characters, content, rewards, history, events, new BattlefieldService(), inventory, { now: () => time, random: () => 0 });
+  const service = new BattlesService(adapter, battles, characters, content, rewards, history, events, new BattlefieldService(), inventory, { now: () => time, random: () => 0 }, {} as IdentityService);
   const command = () => ({ characterId: winnerId, version: 0, action: { type: 'skill', skillId: 'strike', targetId: battle.fighters[1].id } });
   return { service, characters, skills, command, published, locks, setTime: (now: number) => { time = now; }, state: () => state, failWrite: () => { failCharacterWrite = true; }, failOutbox: () => { failOutboxWrite = true; } };
 }

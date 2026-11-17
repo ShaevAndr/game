@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { elements, elementNames, skillTreeNodes, type Character, type Content, type Element, type SkillTreeNode } from '@game/core';
+import { elements, skillTreeNodes, type Character, type Content, type Element, type SkillTreeNode } from '@game/core';
 import { SkillEmblem } from './SkillEmblem';
 import { SkillCard } from './SkillCard';
 import { useSkillConnections } from '../model/useSkillConnections';
@@ -57,7 +57,7 @@ export function SkillTree({ character, content, busy, onLearn, onUpgrade }: Prop
     event.preventDefault(); setElement(elements[next]); tabs.current[next]?.focus();
   };
   return <section className="panel skill-tree-screen skill-grimoire">
-    <header className="grimoire-heading"><div><div className="section-label">ГРИМУАР МАСТЕРСТВА</div><h2>Выбери свой путь</h2><p>{character ? `${character.name} · уровень ${character.level}` : 'Выбери персонажа, чтобы изучать навыки.'}</p></div>
+    <header className="grimoire-heading"><div><h2>Навыки</h2><p>{character ? `${character.name} · уровень ${character.level}` : 'Выбери персонажа, чтобы изучать навыки.'}</p></div>
       <div className="points-badge" role="status"><strong>{character?.skillPoints ?? '—'}</strong><span>ОЧКОВ НАВЫКОВ</span></div>
     </header>
     <div className="skill-school-tabs" role="tablist" aria-label="Школы навыков">{elements.map((school, index) => {
@@ -68,7 +68,7 @@ export function SkillTree({ character, content, busy, onLearn, onUpgrade }: Prop
       </button>;
     })}</div>
     <section role="tabpanel" id={`school-panel-${element}`} aria-labelledby={`school-tab-${element}`} tabIndex={0} className={`skill-school-panel school-${element}`}>
-      <div className="school-introduction"><SkillEmblem element={element} icon={current.icon}/><div><span className="section-label">ПУТЬ {element === 'physical' ? 'МАСТЕРА ОРУЖИЯ' : elementNames[element].toUpperCase()}</span><h3>{current.title}</h3><p>{current.motto}</p></div><div className="school-mastery"><b>{learned}<span> / {skills.length}</span></b><small>навыков изучено</small></div></div>
+      <div className="school-introduction"><SkillEmblem element={element} icon={current.icon}/><div><h3>{current.title}</h3><p>{current.motto}</p></div><div className="school-mastery"><b>{learned}<span> / {skills.length}</span></b><small>навыков изучено</small></div></div>
       <div className="tree-rule"><span aria-hidden="true">◇</span><p>Изучи <strong>любой один навык</strong> предыдущего узла, чтобы открыть следующий. Соседние навыки можно выбирать независимо. Уровень героя, характеристики и очки также учитываются.</p></div>
       {character && learnedIds.length === 0 && <p className="grimoire-empty-note">Начни с верхнего узла. Все пять школ открыты для изучения; выбирать только одну не обязательно.</p>}
       <div className="tree-state-key"><span><i className="key-learned"/>Изучено</span><span><i className="key-available"/>Можно изучить</span><span><i className="key-locked"/>Нужны требования</span></div>

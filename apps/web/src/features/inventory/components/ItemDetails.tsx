@@ -14,7 +14,7 @@ interface Props {
 export function ItemDetails({ view, selectedId, characters, busy, recipientId, destinations, onRecipient, onExecute }: Props) {
   const [amount, setAmount] = useState(1);
   const selected = view.items.find(item => item.id === selectedId);
-  if (!selected) return <aside className="item-details empty-item-details"><span aria-hidden="true">◇</span><div><h3>Выберите предмет</h3><p>Нажмите на ячейку рюкзака или на надетую вещь, чтобы увидеть свойства и действия.</p></div></aside>;
+  if (!selected) return null;
   const originalDefinition = view.definitions.find(item => item.id === selected.itemId);
   const definition = originalDefinition && rankedItemDefinition(originalDefinition, selected);
   const primary = view.inventories.find(inventory => inventory.primary);
@@ -35,7 +35,7 @@ export function ItemDetails({ view, selectedId, characters, busy, recipientId, d
       {!selected.quality && <p className="hint">Уровень предмета: {selected.itemLevel ?? 1}</p>}
       <p>{definition?.description ?? 'Описание предмета недоступно.'}</p>
       {!!definition?.bonuses && <dl className="item-bonuses">{Object.entries(definition.bonuses).map(([key, value]) => <div key={key}><dt>{statNames[key] ?? key}</dt><dd>+{value}</dd></div>)}</dl>}
-      {!!definition?.bonuses?.attack && view.statDefinitions && <p className="hint">Мощь оружия усиливается характеристиками героя. Итоговый вклад показан в расчёте параметров на экране экипировки.</p>}
+      {!!definition?.bonuses?.attack && view.statDefinitions && <p className="hint">Мощь оружия усиливается характеристиками героя. Итоговый вклад показан во вкладке «Характеристики».</p>}
       {!equipped && selected.actions.find(action => action.id === 'equip')?.reason && <p className="inventory-notice">{selected.actions.find(action => action.id === 'equip')?.reason}</p>}
       {previous && !equipped && <p className="replacement-note">При надевании «{previousDefinition?.name ?? previous.itemId}» вернётся в рюкзак.</p>}
       {selected.actions.some(action => action.id === 'use-in-battle') && <p className="hint">Используется во время боя.</p>}

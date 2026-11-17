@@ -11,3 +11,14 @@
   .arena-room { padding-bottom: 12px; gap: 0; }
   .arena-room > button.primary { margin: 0 12px; }
 }
+.arena-heading > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.create-room { padding: 20px 0; margin-bottom: 20px; border-block: 1px solid var(--line); }
+.create-room h3 { margin-bottom: 16px; }
+.arena-field-settings { margin: 18px 0; }
+.arena-field-settings summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.arena-offers { margin: 20px 0; }
+.arena-offers h3 { font-size: 15px; }
+.arena-notifications { border-left: 2px solid var(--accent); padding: 0 16px; }
+@media (max-width: 600px) {
+  .arena-heading { align-items: start; flex-direction: column; }
+}

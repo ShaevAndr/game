@@ -55,6 +55,7 @@ export function BattleScreen({ battle, characterId, hasCharacter, busy, animatin
       <div className="section-heading"><div>
         <div className="section-label">АРЕНА СТИХИЙ · ХОД {battle.turn || '—'}</div>
         <h2>{battle.status === 'waiting' ? 'Сбор участников' : battle.status === 'finished' ? battle.winner === null ? 'Бой завершён' : `Победа команды ${battle.winner + 1}` : myTurn ? 'Твой ход' : `Ход: ${active?.name}`}</h2>
+        {battle.kind === 'dungeon' && <p>Волна {battle.wave} из {battle.totalWaves}</p>}
       </div><div className="battle-header-actions">
       {battle.status === 'active' && <>
         {seconds !== undefined && !animating && <span className={`turn-timer ${seconds <= 5 ? 'urgent' : ''}`} role="timer" aria-label="Осталось времени на ход">⏱ {seconds} с</span>}

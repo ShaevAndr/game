@@ -8,9 +8,11 @@ import { BattlesRepository } from '../ports/battles.repository';
 @Injectable()
 export class PostgresBattlesRepository extends BattlesRepository {
   constructor(@Inject(Database) private readonly db: Database) { super(); }
-  async list() {
+  async list(onlineCharacterIds: string[]) {
+    if (!onlineCharacterIds.length) return [];
     return (await this.db.sql.selectFrom('battles').select('data')
       .where(sql<boolean>`data->>'status' = 'waiting'`)
+      .where(sql<string>`data->'fighters'->0->>'characterId'`, 'in', onlineCharacterIds)
       .where(sql<boolean>`NOT EXISTS (SELECT 1 FROM battles AS active
         WHERE active.data->>'status' = 'active' AND EXISTS (
           SELECT 1 FROM jsonb_array_elements(active.data->'fighters') AS fighter

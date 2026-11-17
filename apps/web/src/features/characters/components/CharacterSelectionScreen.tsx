@@ -4,7 +4,6 @@ import { CharacterCreation } from './CharacterCreation';
 interface Props { account: Account; characters: Character[]; content: Content | null; loading: boolean; busy: boolean; error: string; onChoose: (id: string) => void; onAccount: () => void; onRefresh: () => void; onCreate: (name: string, templateId?: string) => Promise<boolean> }
 export function CharacterSelectionScreen({ account, characters, content, loading, busy, error, onChoose, onAccount, onRefresh, onCreate }: Props) {
   return <div className="entry-page"><header className="entry-brand"><span>✦</span> СТИХИИ<button className="ghost" disabled={busy} onClick={onAccount}>Сменить аккаунт</button></header><main className="entry-main">
-    <div className="eyebrow">01 / {account.name} → 02 / ПЕРСОНАЖ → 03 / ИГРА</div>
     <h1>Выбери своего героя</h1><p className="entry-intro">Персонажи аккаунта «{account.name}»</p>
     {error && <div className="error" role="alert">{error}<button className="ghost" disabled={busy} onClick={onRefresh}>Повторить</button></div>}
     {loading ? <p role="status">Загрузка персонажей…</p> : <div className="character-grid">{characters.map(hero => <button key={hero.id} className="character-choice-card" disabled={busy} onClick={() => onChoose(hero.id)}>

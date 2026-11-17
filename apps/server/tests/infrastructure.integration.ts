@@ -7,7 +7,7 @@ import { CraftingOperationsRepository } from '../src/modules/crafting/ports/craf
 import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -34,6 +34,8 @@ import { BattlesService } from '../src/modules/battles/application/battles.servi
 import { BattleRuntime } from '../src/modules/battles/ports/battle-runtime';
 import { BattleTimeoutService } from '../src/modules/battles/application/battle-timeout.service';
 import { ContentService } from '../src/modules/content/application/content.service';
+import { IdentityService } from '../src/modules/identity/application/identity.service';
+import { SessionPresence } from '../src/modules/identity/ports/session-presence';
 
 async function eventually(check: () => Promise<boolean>, timeout = 15000) {
   const until = Date.now() + timeout;
@@ -1150,8 +1152,29 @@ async function verifyArena(request: TestRequest, app: INestApplication) {
   const [challenger, first, second, other] = heroes;
   const create = (hero: Character) => request<Battle>('/battles', { name: `Арена ${hero.name}`, characterId: hero.id, kind: 'duel' });
   const [roomA, roomB] = await Promise.all([create(first), create(second)]);
+  assert.ok(!(await request<Battle[]>('/battles')).some(room => room.id === roomA.id || room.id === roomB.id));
+  const identity = app.get(IdentityService);
+  const hostSession = await identity.login({ accountId: first.accountId });
+  await identity.selectCharacter(hostSession.token, { characterId: first.id });
   const rooms = await request<Battle[]>('/battles');
   assert.ok(rooms.some(room => room.id === roomA.id));
+  assert.ok(!rooms.some(room => room.id === roomB.id));
+  const secondTab = await identity.login({ accountId: first.accountId });
+  await identity.selectCharacter(secondTab.token, { characterId: first.id });
+  await identity.logout(hostSession.token);
+  assert.ok((await request<Battle[]>('/battles')).some(room => room.id === roomA.id));
+  await identity.selectCharacter(secondTab.token, { characterId: null });
+  assert.ok(!(await request<Battle[]>('/battles')).some(room => room.id === roomA.id));
+  await identity.selectCharacter(secondTab.token, { characterId: first.id });
+  // Use a short lease to verify real Redis expiry without waiting the full offline timeout.
+  await app.get(SessionPresence).refresh(createHash('sha256').update(secondTab.token).digest('hex'), first.id, Date.now() + 50);
+  await delay(80);
+  assert.ok(!(await request<Battle[]>('/battles')).some(room => room.id === roomA.id));
+  await identity.authenticate(secondTab.token);
+  assert.ok((await request<Battle[]>('/battles')).some(room => room.id === roomA.id));
+  const otherHost = await identity.login({ accountId: second.accountId });
+  await identity.selectCharacter(otherHost.token, { characterId: second.id });
+  assert.ok((await request<Battle[]>('/battles')).some(room => room.id === roomB.id));
   const challenge = (room: Battle, hero: Character) => request<ArenaChallenge>(`/battles/${room.id}/challenges`, { characterId: hero.id });
   const state = (hero: Character) => request<ArenaState>(`/battles/arena/${hero.id}`);
   await request(`/battles/${roomA.id}/challenges`, { characterId: first.id }, 400);

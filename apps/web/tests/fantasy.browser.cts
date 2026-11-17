@@ -104,7 +104,10 @@ test('fantasy interface: all screens, responsive battle, target selection and a 
     await page.getByRole('button', { name: /Игрок 1/ }).click();
     await page.getByRole('button', { name: /Алира/ }).waitFor(); await shot('fantasy-characters.png');
     await page.getByRole('button', { name: /Алира/ }).click();
-    await page.locator('.create-room').waitFor(); await shot('fantasy-arena.png');
+    await page.locator('.rooms').waitFor();
+    assert.equal(await page.locator('.create-room, .sidebar, .connection').count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Экипировка', exact: true }).count(), 0);
+    await shot('fantasy-arena.png');
     await page.getByRole('button', { name: 'Бросить вызов', exact: true }).first().click();
     await page.getByRole('button', { name: 'Вызов отправлен', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Бросить вызов', exact: true }).click();
@@ -128,8 +131,18 @@ test('fantasy interface: all screens, responsive battle, target selection and a 
     assert.equal(await page.getByRole('button', { name: 'Начать бой →' }).count(), 0);
     arena.activeBattleId = null;
     await page.setViewportSize({ width: 1440, height: 1120 });
-    for (const [hash, ready] of [['skills', '.skill-branches'], ['inventory', '.backpack-grid'], ['equipment', '.equipment-workspace'], ['crafting', '.recipe-options'], ['gathering', '.gathering-areas'], ['world', '.world-lobby']]) {
+    for (const [hash, ready] of [['skills', '.skill-branches'], ['inventory', '.backpack-grid'], ['attributes', '.attribute-allocation'], ['crafting', '.recipe-options'], ['gathering', '.gathering-areas'], ['world', '.world-lobby']]) {
       await page.goto(`${origin}/#${hash}`); await page.locator(ready).waitFor(); await noOverflow(hash); await shot(`fantasy-${hash}.png`);
+      if (hash === 'inventory') {
+        assert.equal(await page.locator('.item-details').count(), 0);
+        await page.locator('.bag-cell.occupied').first().click();
+        await page.getByRole('complementary', { name: 'Свойства предмета' }).waitFor();
+      }
+      if (hash === 'crafting') {
+        assert.equal(await page.locator('.recipe-workbench').count(), 0);
+        await page.locator('.recipe-option').first().click(); await page.locator('.ingredient-slots').waitFor();
+      }
+      if (hash === 'world') assert.equal(await page.locator('.world-deliveries').count(), 0);
       await page.setViewportSize({ width: 390, height: 844 }); await noOverflow(`${hash} mobile`);
       await page.setViewportSize({ width: 1440, height: 1120 });
     }
@@ -297,11 +310,14 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
     await page.goto(origin);
     await page.getByRole('button', { name: new RegExp(accounts[i].name) }).click();
     await page.getByRole('button', { name: new RegExp(heroes[i].name) }).click();
-    await page.locator('.create-room').waitFor();
+    await page.locator('.rooms').waitFor();
   }
   const [owner, opponent] = pages;
   await owner.getByRole('button', { name: 'Создать комнату', exact: false }).click();
-  await owner.locator('.battle-arena').waitFor();
+  await owner.getByRole('button', { name: 'Создать', exact: true }).click();
+  await owner.getByText('Твоя комната', { exact: false }).waitFor();
+  assert.equal(await owner.locator('.create-room, .battle-arena').count(), 0);
+  assert.equal(new URL(owner.url()).hash, '');
   await opponent.getByRole('button', { name: 'Обновить ↻', exact: true }).click();
   await opponent.getByRole('button', { name: 'Бросить вызов', exact: true }).click();
   await opponent.getByRole('button', { name: 'Вызов отправлен', exact: true }).waitFor();
@@ -323,5 +339,157 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
   // A fresh page restores the ongoing fight even without a working WebSocket.
   await opponent.reload(); await opponent.locator('.battle-arena').waitFor();
   assert.equal(new URL(opponent.url()).hash, `#${room.id}`);
+  assert.deepEqual(errors, []);
+});
+
+test('character selection: ownership, creation, retries, reload, switching and an expired pending selection', { timeout: 120000 }, async t => {
+  const { preview } = await import('vite');
+  const vite = await preview({ configFile: false, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
+  t.after(() => new Promise<void>((resolve, reject) => { vite.httpServer.closeAllConnections(); vite.httpServer.close(error => error ? reject(error) : resolve()); }));
+  const address = vite.httpServer!.address(); assert.ok(address && typeof address !== 'string');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined, args: ['--no-sandbox'] });
+  t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  t.after(() => context.close());
+  const page = await context.newPage(), errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const content: Content = structuredClone({ ...seedContent, statDefinitions: combatStatDefinitions, balance: { ...seedContent.balance, formulas: defaultCombatFormulaRules } });
+  const accounts = ['Первый аккаунт', 'Другой аккаунт', 'Пустой аккаунт'].map(name => ({ id: randomUUID(), name, createdAt: new Date().toISOString() }));
+  const heroes = [0, 0, 1].map((index, i) => ({ ...createCharacter(randomUUID(), ['Первый герой', 'Второй герой', 'Чужой герой'][i], content), accountId: accounts[index].id }));
+  const sessions = new Map<string, { accountId: string; characterId: string | null }>();
+  const expired = new Set<string>();
+  let rejectSelection = false, rejectCreation = false, pauseLeave = false, leaveStarted = false;
+  let releaseLeave: (() => void) | undefined;
+  let lastToken = '', allocations = 0;
+  await context.route('**/socket.io/**', route => route.fulfill({ status: 503, body: '' }));
+  await context.route('https://fonts.googleapis.com/**', route => route.abort());
+  await context.route('**/api/v1/**', async route => {
+    const request = route.request(), path = new URL(request.url()).pathname.replace('/api/v1', ''), body = request.postDataJSON(), method = request.method();
+    const send = (value: unknown, status = 200) => route.fulfill({ status, json: value });
+    if (path === '/accounts') {
+      if (method === 'GET') return send(accounts);
+      const account = { id: randomUUID(), name: body.name.trim(), createdAt: new Date().toISOString() }; accounts.push(account); return send(account, 201);
+    }
+    if (path === '/identity/session' && method === 'POST') {
+      lastToken = randomUUID(); sessions.set(lastToken, { accountId: body.accountId, characterId: null });
+      return send({ token: lastToken, account: accounts.find(account => account.id === body.accountId), characterId: null, expiresAt: Date.now() + 3600000 }, 201);
+    }
+    const token = request.headers().authorization?.replace('Bearer ', ''), state = sessions.get(token);
+    if (!state || expired.has(token)) return send({ message: 'Сессия завершена' }, 401);
+    const session = () => ({ account: accounts.find(account => account.id === state.accountId), characterId: state.characterId, expiresAt: Date.now() + 3600000 });
+    if (path === '/identity/session') {
+      if (method === 'DELETE') { sessions.delete(token); return send({ ok: true }); }
+      return send(session());
+    }
+    if (path === '/identity/session/character') {
+      if (rejectSelection) { rejectSelection = false; return send({ message: 'Выбор временно недоступен' }, 409); }
+      if (body.characterId && !heroes.some(hero => hero.id === body.characterId && hero.accountId === state.accountId)) return send({ message: 'Чужой персонаж' }, 403);
+      state.characterId = body.characterId;
+      const result = session();
+      if (pauseLeave && body.characterId === null) { pauseLeave = false; leaveStarted = true; await new Promise<void>(resolve => { releaseLeave = resolve; }); }
+      return send(result, 201);
+    }
+    if (path === '/characters') {
+      if (method === 'GET') return send(heroes.filter(hero => hero.accountId === state.accountId));
+      if (rejectCreation) { rejectCreation = false; return send({ message: 'Имя уже занято' }, 409); }
+      const hero = { ...createCharacter(randomUUID(), body.name, content, body.templateId), accountId: state.accountId }; heroes.push(hero); return send(hero, 201);
+    }
+    if (path.endsWith('/attributes')) {
+      const index = heroes.findIndex(hero => hero.id === path.split('/')[2] && hero.accountId === state.accountId);
+      assert.ok(index >= 0); assert.equal(body.expectedRevision, heroes[index].attributeRevision);
+      heroes[index] = allocateAttributes(heroes[index], body.allocations, content); allocations++; return send(heroes[index], 201);
+    }
+    if (path.endsWith('/inventories')) {
+      const hero = heroes.find(hero => hero.id === path.split('/')[2] && hero.accountId === state.accountId)!; assert.ok(hero);
+      return send({ ownerId: hero.id, inventories: [{ id: hero.id, ownerId: hero.id, name: 'Рюкзак', capacity: 50, primary: true }], items: [], definitions: content.items, groups: content.itemGroups });
+    }
+    if (path === '/content') return send(content);
+    if (path === '/battles') return send([]);
+    if (path.startsWith('/battles/arena/')) return send({ incoming: [], outgoing: [], activeBattleId: null });
+    if (path === '/parties') return send({ party: null, incoming: [], outgoing: [], players: [], capacity: 6, serverTime: Date.now() });
+    if (path === '/social') return send({ revision: 1, visibilityRevision: 1, relationships: [] });
+    if (path === '/chat/feed') return send({ messages: [], before: '', after: '', hasMore: false, partyAccess: null });
+    errors.push(`Unhandled route: ${path}`); return send({ message: path }, 404);
+  });
+  const chooseAccount = async (name: string) => {
+    await page.getByRole('button', { name: new RegExp(name) }).click(); await page.getByRole('heading', { name: 'Выбери своего героя' }).waitFor();
+    await page.getByText('Загрузка персонажей…', { exact: true }).waitFor({ state: 'hidden' });
+  };
+  const chooseHero = async (name: string) => {
+    await page.getByRole('button', { name: new RegExp(name) }).click();
+    await page.waitForFunction(name => document.querySelector('.account-controls > span')?.textContent === name, name);
+  };
+  const noOverflow = async () => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  // A direct link cannot skip account or character selection.
+  await page.goto(`${origin}/#attributes`);
+  await chooseAccount(accounts[0].name);
+  assert.equal(await page.getByRole('button', { name: /Чужой герой/ }).count(), 0);
+  assert.equal(await page.locator('.character-choice-card').count(), 2);
+  rejectSelection = true;
+  await page.getByRole('button', { name: /Первый герой/ }).click();
+  await page.getByRole('alert').getByText('Выбор временно недоступен', { exact: false }).waitFor();
+  assert.equal(sessions.get(lastToken)?.characterId, null);
+  await chooseHero('Первый герой'); await page.locator('.attribute-allocation').waitFor();
+  const revision = heroes[0].attributeRevision;
+  await page.getByRole('spinbutton', { name: 'Добавить очки: Сила', exact: true }).fill('2');
+  await page.getByRole('button', { name: 'Применить характеристики', exact: true }).click();
+  await page.getByText('Свободно очков: 3', { exact: true }).waitFor();
+  assert.equal(allocations, 1); assert.equal(heroes[0].attributeRevision, revision! + 1);
+  await noOverflow(); await page.reload(); await page.locator('.attribute-allocation').waitFor();
+  assert.equal(sessions.get(lastToken)?.characterId, heroes[0].id);
+  await page.getByRole('button', { name: 'Навыки', exact: true }).click(); await page.locator('.skill-branches').waitFor();
+  assert.equal(await page.locator('.attribute-allocation, .equipment-panel, .party-roster, .legend').count(), 0);
+  await page.getByRole('button', { name: 'Группа', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Группа', exact: true }).waitFor(); await noOverflow();
+  await page.getByRole('button', { name: 'Закрыть · Esc', exact: true }).click();
+  await page.goto(`${origin}/#equipment`); await page.locator('.backpack-grid').waitFor();
+  assert.equal(await page.locator('.attribute-allocation').count(), 0); await noOverflow();
+  await page.getByRole('button', { name: 'Персонажи', exact: true }).click();
+  await page.getByRole('heading', { name: 'Выбери своего героя' }).waitFor();
+  assert.equal(sessions.get(lastToken)?.characterId, null); assert.equal(new URL(page.url()).hash, '');
+  await chooseHero('Второй герой'); await page.locator('.rooms').waitFor();
+  assert.equal(sessions.get(lastToken)?.characterId, heroes[1].id);
+  await page.getByRole('button', { name: 'Сменить аккаунт', exact: true }).click();
+  await chooseAccount(accounts[1].name);
+  await page.getByRole('button', { name: /Чужой герой/ }).waitFor();
+  assert.equal(await page.locator('.character-choice-card').count(), 1);
+  assert.equal(await page.getByRole('button', { name: /Первый герой|Второй герой/ }).count(), 0);
+  await chooseHero('Чужой герой'); await page.locator('.rooms').waitFor();
+  // A selection that succeeded on the server but arrives after expiry must not restore that session.
+  pauseLeave = true;
+  await page.getByRole('button', { name: 'Персонажи', exact: true }).click();
+  await new Promise<void>((resolve, reject) => {
+    const timer = setInterval(() => { if (leaveStarted) { clearInterval(timer); clearTimeout(timeout); resolve(); } }, 10);
+    const timeout = setTimeout(() => { clearInterval(timer); reject(new Error('Leave request did not start')); }, 5000);
+  });
+  expired.add(lastToken);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.getByRole('heading', { name: 'Выбери аккаунт', exact: true }).waitFor();
+  await chooseAccount(accounts[2].name);
+  const newToken = lastToken;
+  await page.getByText('У этого аккаунта пока нет героев.', { exact: false }).waitFor();
+  releaseLeave!();
+  await page.getByRole('heading', { name: 'Выбери своего героя' }).waitFor();
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('game-session-token')), newToken);
+  rejectCreation = true;
+  await page.getByRole('textbox', { name: 'Имя нового героя', exact: true }).fill('Новый герой');
+  await page.getByRole('button', { name: 'Создать персонажа', exact: true }).click();
+  await page.getByText('Имя уже занято', { exact: false }).waitFor();
+  assert.equal(await page.getByRole('textbox', { name: 'Имя нового героя', exact: true }).inputValue(), 'Новый герой');
+  await page.getByRole('button', { name: 'Создать персонажа', exact: true }).click();
+  await page.getByRole('button', { name: /Новый герой/ }).waitFor();
+  assert.equal(sessions.get(newToken)?.characterId, null);
+  assert.equal(await page.getByRole('textbox', { name: 'Имя нового героя', exact: true }).inputValue(), '');
+  assert.equal(heroes.filter(hero => hero.accountId === accounts[2].id).length, 1);
+  await chooseHero('Новый герой'); await page.locator('.rooms').waitFor(); await noOverflow();
+  await page.reload(); await page.locator('.rooms').waitFor();
+  await page.locator('.account-controls > span').filter({ hasText: 'Новый герой' }).waitFor();
+  assert.equal(await page.locator('.account-controls > span').innerText(), 'Новый герой');
+  // A revoked token on initial restore still displays the public account list and supports a new login.
+  expired.add(newToken); await page.reload();
+  await page.getByRole('heading', { name: 'Выбери аккаунт', exact: true }).waitFor();
+  await chooseAccount(accounts[0].name);
+  await page.getByRole('button', { name: /Первый герой/ }).waitFor();
   assert.deepEqual(errors, []);
 });

@@ -15,7 +15,7 @@ export function RecipeWorkshop({ view, recipes, ranks, professions, recipeId, bu
   const ready = (recipe: CraftingRecipeView) => recipe.available && recipe.inputs.every(input => (totals.get(input.itemId) ?? 0) >= input.quantity);
   const recipe = recipes.find(recipe => recipe.id === recipeId);
 
-  return <div className="crafting-grid">
+  return <div className={`crafting-grid${recipe ? '' : ' recipe-list-only'}`}>
     <section className="craft-panel" aria-label="Известные рецепты">
       <div className="craft-panel-heading"><h3>Известные рецепты</h3><span>{recipes.length}</span></div>
       <p className="hint recipe-intro">Выберите рецепт — справа появятся ячейки необходимых предметов.</p>
@@ -26,8 +26,7 @@ export function RecipeWorkshop({ view, recipes, ranks, professions, recipeId, bu
         <span><strong>{entry.name}</strong><small>{entry.outputs.map(output => `${name(output.itemId)} ×${output.quantity}`).join(', ')}</small><small className={ready(entry) ? 'recipe-ready' : ''}>{ready(entry) ? 'Материалы собраны' : 'Не хватает материалов'}</small></span>
       </button>)}</div>
     </section>
-    <section className="craft-panel recipe-workbench" aria-label="Ячейки рецепта">
-      {recipe ? <>
+    {recipe && <section className="craft-panel recipe-workbench" aria-label="Ячейки рецепта">
         <div className="craft-panel-heading"><h3>{recipe.name}</h3></div>
         <p>{recipe.description}</p>
         <p className="hint">{professions.find(entry => entry.id === recipe.professionId)?.name ?? 'Ремесло'} · требуется уровень {recipe.requiredLevel ?? 1}</p>
@@ -48,7 +47,6 @@ export function RecipeWorkshop({ view, recipes, ranks, professions, recipeId, bu
         <div className="recipe-outputs">{recipe.outputs.map(output => <div className="recipe-output" key={output.itemId}><ItemIcon item={definition(output.itemId)}/><span>{name(output.itemId)} <b>×{output.quantity}</b></span></div>)}</div>
         <p className={`recipe-availability ${ready(recipe) ? 'recipe-ready' : ''}`} role="status">{ready(recipe) ? 'Все ингредиенты готовы к крафту.' : !recipe.available ? `Нужен уровень профессии ${recipe.requiredLevel}` : 'Соберите недостающие предметы в основном рюкзаке.'}</p>
         <button className="primary" disabled={busy || !ready(recipe)} onClick={() => onCraft(recipe.id)}>Создать</button>
-      </> : <div className="recipe-placeholder"><span aria-hidden="true">◇</span><h3>Выберите известный рецепт</h3><p>Здесь появятся ячейки ингредиентов, их количество и результат крафта.</p></div>}
-    </section>
+    </section>}
   </div>;
 }

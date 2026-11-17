@@ -4,14 +4,18 @@ import type { Account, AccountLogin, AccountSession } from '@game/core';
 import { z } from 'zod';
 import { CharactersService } from '../../characters/application/characters.service';
 import { IdentityRepository } from '../ports/identity.repository';
+import { SessionPresence } from '../ports/session-presence';
 
 const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+const PRESENCE_LIFETIME_MS = 30_000;
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 
 @Injectable()
 export class IdentityService {
   constructor(@Inject(IdentityRepository) private readonly repository: IdentityRepository,
-    @Inject(CharactersService) private readonly characters: CharactersService) {}
+    @Inject(CharactersService) private readonly characters: CharactersService,
+    @Inject(SessionPresence) private readonly presence: SessionPresence) {}
+  onlineCharacterIds() { return this.presence.onlineCharacterIds(Date.now()); }
   list() { return this.repository.list(); }
   async getAccount(id: string) {
     const account = await this.repository.findAccount(id);
@@ -37,6 +41,7 @@ export class IdentityService {
     if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) throw new UnauthorizedException('Выберите аккаунт');
     const session = await this.repository.session(hash(token), Date.now());
     if (!session) throw new UnauthorizedException('Сессия завершена. Выберите аккаунт снова');
+    await this.presence.refresh(hash(token), session.characterId, Math.min(session.expiresAt, Date.now() + PRESENCE_LIFETIME_MS));
     return session;
   }
   async selectCharacter(token: string, body: unknown) {
@@ -46,5 +51,8 @@ export class IdentityService {
     await this.repository.selectCharacter(hash(token), characterId, Date.now());
     return this.authenticate(token);
   }
-  logout(token: string) { return this.repository.revoke(hash(token)); }
+  async logout(token: string) {
+    await this.repository.revoke(hash(token));
+    await this.presence.refresh(hash(token), null, 0);
+  }
 }

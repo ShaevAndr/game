@@ -6,7 +6,7 @@ import { useCharacters } from './model/useCharacters';
 import { CharacterSelectionScreen } from './components/CharacterSelectionScreen';
 
 export function CharacterSelectionPage({ account, busy, error, onChoose, onAccount }: { account: Account; busy: boolean; error: string; onChoose: (id: string) => void; onAccount: () => void }) {
-  const { characters, refreshCharacters } = useCharacters();
+  const { characters, refreshCharacters, updateCharacter } = useCharacters();
   const [content, setContent] = useState<Content | null>(null), [loading, setLoading] = useState(true), [creating, setCreating] = useState(false), [localError, setError] = useState('');
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -18,7 +18,7 @@ export function CharacterSelectionPage({ account, busy, error, onChoose, onAccou
   return <CharacterSelectionScreen account={account} characters={characters} content={content} loading={loading} busy={busy || creating} error={error || localError} onChoose={onChoose} onAccount={onAccount} onRefresh={() => void load()}
     onCreate={async (name, templateId) => {
       setCreating(true); setError('');
-      try { await charactersApi.create(name, templateId); await refreshCharacters(); return true; }
+      try { updateCharacter(await charactersApi.create(name, templateId)); return true; }
       catch (reason) { setError((reason as Error).message); return false; }
       finally { setCreating(false); }
     }}/>;

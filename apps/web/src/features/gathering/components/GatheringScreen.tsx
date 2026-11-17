@@ -18,7 +18,7 @@ export function GatheringScreen({ view, busy, pending, message, onAction, onRefr
   const resourceSummary = (resource: GatheringResource) => resource.methods.map(method => lootText(method.output)).join(' / ');
   const cargoSize = expedition?.cargo.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   return <section className="panel gathering-screen">
-    <div className="gathering-heading"><div><div className="eyebrow">ИССЛЕДОВАНИЕ И РЕМЕСЛО</div><h2>Ресурсные земли</h2><p>Открывай места, выбирай добычу и возвращайся с материалами.</p></div>
+    <div className="gathering-heading"><div><h2>Ресурсные земли</h2><p>Открывай места, выбирай добычу и возвращайся с материалами.</p></div>
       <div className="gathering-links"><button className="ghost" disabled={busy} onClick={onRefresh}>Обновить</button><button className="ghost" onClick={onCrafting}>Крафт</button><button className="ghost" onClick={onInventory}>Инвентарь</button></div>
     </div>
     <div className="gathering-progress"><strong>Собиратель · уровень {view.level}</strong><span>{view.xp} XP{view.nextLevelXp !== null ? ` · следующий уровень: ${view.nextLevelXp} XP` : ' · максимальный уровень'}</span><span>Атлас: {view.atlas.length} находок</span></div>

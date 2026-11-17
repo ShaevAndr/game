@@ -159,8 +159,8 @@ body dialog::backdrop { background: #031116d9; backdrop-filter: blur(5px); }
   .app .topbar nav button { padding: 10px 12px; font-size: 12px; min-height: 42px; flex-shrink: 0; }
   .app .brand { font-size: 21px; }
   .app .brand-mark { width: 36px; height: 36px; font-size: 29px; }
-  .app .account-controls { width: auto; font-size: 9px; gap: 2px; }
-  .app .account-controls span { display: none; }
+  .app .account-controls { width: 100%; font-size: 9px; gap: 2px; justify-content: flex-start; }
+  .app .account-controls > span { display: block; margin-right: auto; max-width: 100%; overflow-wrap: anywhere; }
   .app .account-controls button { font-size: 9px; padding: 6px; }
   .layout { grid-template-columns: minmax(0, 1fr); }
   .sidebar { grid-template-columns: minmax(0, 1fr); }
@@ -177,3 +177,8 @@ body dialog::backdrop { background: #031116d9; backdrop-filter: blur(5px); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; }
 }
+
+.screen-content, .screen-content > * { min-width: 0; }
+.attributes-screen .character-progress { display: grid; gap: 8px; margin-bottom: 24px; font-size: 13px; color: var(--muted); }
+.attributes-screen .character-progress progress { width: 100%; }
+.game-modal .party-roster { border: 0; background: transparent; padding: 0; }

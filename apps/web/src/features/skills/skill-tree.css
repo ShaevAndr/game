@@ -41,7 +41,7 @@
 .key-available { border-color: #e1c485!important; background: #9f8147; }
 .key-locked { border-color: #79847c!important; background: #354745; }
 .skill-grimoire .skill-graph { position: relative; display: flex; flex-direction: column; gap: 58px; padding: 5px 0 20px; overflow: visible; }
-.skill-tree-connections { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 0; overflow: visible; }
+.skill-tree-connections { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 0; max-width: 100%; overflow: hidden; }
 .skill-tree-connections path { fill: none; stroke: #8d8b6477; stroke-width: 1.6; stroke-dasharray: 4 5; }
 .skill-tree-connections path.connection-open { stroke: #bda16b; stroke-dasharray: none; stroke-width: 2; filter: drop-shadow(0 0 3px #9ad6af55); }
 .skill-tree-stage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; position: relative; align-items: start; }

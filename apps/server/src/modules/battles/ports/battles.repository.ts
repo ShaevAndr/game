@@ -8,7 +8,7 @@ export abstract class BattlesRepository {
   abstract pendingChallenge(battleId: string, challengerId: string, context: TransactionContext): Promise<ArenaChallenge | undefined>;
   abstract saveChallenge(challenge: ArenaChallenge, context: TransactionContext): Promise<void>;
   abstract cancelChallenges(characterIds: string[], context: TransactionContext): Promise<void>;
-  abstract list(): Promise<Battle[]>;
+  abstract list(onlineCharacterIds: string[]): Promise<Battle[]>;
   abstract find(id: string): Promise<Battle | undefined>;
   abstract hasActiveCharacter(characterId: string, context?: TransactionContext): Promise<boolean>;
   abstract expired(now: number, limit: number): Promise<string[]>;

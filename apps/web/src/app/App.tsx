@@ -4,7 +4,8 @@ import { AccountSession, Content } from '@game/core';
 import { useNavigation } from './useNavigation';
 import { useAsyncAction } from './useAsyncAction';
 import { useCharacters } from '../features/characters/model/useCharacters';
-import { CharacterPanel } from '../features/characters/components/CharacterPanel';
+import { AttributesScreen } from '../features/characters/components/AttributesScreen';
+import { charactersApi } from '../features/characters/api/characters.api';
 import { contentApi } from '../features/content/api/content.api';
 import { SkillTree } from '../features/skills/components/SkillTree';
 import { skillsApi } from '../features/skills/api/skills.api';
@@ -16,11 +17,8 @@ import { useBattle } from '../features/battles/model/useBattle';
 import { BattleScreen } from '../features/battles/components/BattleScreen';
 import { battlesApi } from '../features/battles/api/battles.api';
 import { InventoryPage } from '../features/inventory/InventoryPage';
-import { EquipmentPage } from '../features/equipment/EquipmentPage';
 import { GatheringPage } from '../features/gathering/GatheringPage';
 import { CraftingPage } from '../features/crafting/CraftingPage';
-import { EnergyPanel } from '../shared/ui/EnergyPanel';
-import { kindNames, ruleNames } from '../shared/ui/game-labels';
 import '../features/skills/skill-tree.css';
 import '../features/identity/identity.css';
 import { useAccountSession } from '../features/identity/model/useAccountSession';
@@ -42,7 +40,7 @@ export function App() {
     {!identity.session.characterId ? <CharacterSelectionPage key={`characters:${identity.session.account.id}`} account={identity.session.account} busy={identity.busy} error={identity.error}
       onChoose={id => void identity.selectCharacter(id)} onAccount={() => void identity.logout()}/>
       : <GameApp key={`${identity.session.account.id}:${identity.session.characterId}`} session={identity.session} sessionBusy={identity.busy} sessionError={identity.error}
-        onCharacters={() => void identity.selectCharacter(null)} onAccount={() => void identity.logout()} party={party}/>}
+        onCharacters={() => void identity.selectCharacter(null).then(ok => { if (ok) location.hash = ''; })} onAccount={() => void identity.logout().then(ok => { if (ok) location.hash = ''; })} party={party}/>}
     <ChatPanel key={`chat:${identity.session.account.id}`} session={identity.session} enabled={!!identity.session.characterId} party={party.state?.party ?? null} onInvite={party.invite}
       inviteDisabled={!party.state || party.busy || party.pending || !!party.state.party && (party.state.party.leaderPlayerId !== identity.session.account.id || party.state.party.members.length >= party.state.capacity)}/>
     {identity.session.characterId && party.incoming[0] && <PartyInvitationDialog key={party.incoming[0].id} invitation={party.incoming[0]} serverNow={party.serverNow}
@@ -56,6 +54,7 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
   const { roomId, screen } = navigation;
   const { characters, characterId, character, updateCharacter, refreshCharacters } = useCharacters(session.characterId!);
   const [worldInventoryOpen, setWorldInventoryOpen] = useState(false);
+  const [partyOpen, setPartyOpen] = useState(false);
   const [content, setContent] = useState<Content | null>(null);
   const [error, setError] = useState('');
   const { arena, refreshArena } = useArena(characterId, setError);
@@ -66,13 +65,12 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
     enteredBattleId.current = activeId;
     if (activeId !== roomId) { setError(''); navigation.openRoom(activeId); }
   }, [arena?.activeBattleId, roomId, navigation.openRoom]);
-  const { rooms, refreshRooms } = useRooms(screen === 'arena' && !roomId, setError);
-  const { battle, connected, clockOffset, updateBattle, refreshBattle, animating, fieldMotion } = useBattle(roomId, setError);
+  const { rooms, loading: roomsLoading, refreshRooms } = useRooms(screen === 'arena' && !roomId, setError);
+  const { battle, clockOffset, updateBattle, refreshBattle, animating, fieldMotion } = useBattle(roomId, setError);
   const recover = useCallback(async () => {
     await Promise.allSettled([refreshCharacters(), refreshBattle(), refreshRooms(), refreshArena()]);
   }, [refreshCharacters, refreshBattle, refreshRooms, refreshArena]);
   const { busy, perform } = useAsyncAction(setError, recover);
-  const fighter = battle?.fighters.find(value => value.id === characterId);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +84,10 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
     if (battle?.status === 'finished') void refreshCharacters().catch(reason => setError(reason.message));
   }, [battle?.id, battle?.status, refreshCharacters]);
 
+  useEffect(() => {
+    if (battle?.status === 'waiting' && battle.kind === 'duel') navigation.openRoom('');
+  }, [battle?.id, battle?.status, battle?.kind, navigation.openRoom]);
+
   const openRoom = (id: string) => { setError(''); navigation.openRoom(id); };
   const openSkills = () => { setError(''); navigation.openSkills(); };
   const openGathering = () => { setError(''); navigation.openGathering(); };
@@ -93,38 +95,28 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
   const openCrafting = () => { setError(''); navigation.openCrafting(); };
   const openInventory = () => { setError(''); if (screen === 'world') setWorldInventoryOpen(true); else navigation.openInventory(); };
   useEffect(() => { if (screen !== 'world') setWorldInventoryOpen(false); }, [screen]);
-  const openEquipment = () => { setError(''); navigation.openEquipment(); };
-  const workshop = ['inventory', 'equipment', 'crafting', 'gathering', 'world'].includes(screen);
-  const heading = screen === 'world' ? 'Оставь свой след.' : screen === 'gathering' ? 'Отправляйся за находками.' : screen === 'equipment' ? 'Подготовь героя к бою.' : screen === 'inventory' ? 'Всё для следующего боя.' : screen === 'crafting' ? 'Кузница героя.' : screen === 'skills' ? 'Выбери свой путь.' : battle ? battle.name : roomId ? 'Загрузка боя…' : 'Каждый ход имеет значение.';
-  const description = screen === 'world' ? 'Исследуй мир вместе с группой. Прокладывай путь и возвращайся с добычей.' : screen === 'gathering' ? 'Исследуй леса, топи и нагорья. Собирай материалы для своего ремесла.' : screen === 'equipment' ? 'Выбери слот, надень снаряжение и проверь бонусы.' : screen === 'inventory' ? 'Снаряжение, запасы и знания твоего героя.' : screen === 'crafting' ? 'Выбери известный рецепт и собери необходимые предметы.' : screen === 'skills' ? 'Развивай четыре стихии и физические навыки героя.'
-    : battle ? `${kindNames[battle.kind]} · ${ruleNames[battle.rule]} · ${battle.kind === 'dungeon' ? `Волна ${battle.wave} из ${battle.totalWaves}` : 'Две команды — одно поле'}`
-    : 'Четыре стихии. Физическая сила. Защита. Твоя тактика.';
+  const openAttributes = () => { setError(''); navigation.openAttributes(); };
+  const lobby = screen === 'arena' && !roomId;
 
   return <div className={`app${roomId && screen === 'arena' ? ' is-battle' : ''}`}>
     <header className="topbar">
       <a className="brand" href="#" onClick={() => openRoom('')}><span className="brand-mark">✦</span><span>СТИХИИ<span className="brand-sub">TACTICAL MATCH–3</span></span></a>
-      <nav aria-label="Основная навигация"><button onClick={() => openRoom('')} className={screen === 'arena' ? 'nav-active' : ''}>Арена</button><button onClick={openSkills} className={screen === 'skills' ? 'nav-active' : ''}>Навыки</button><button onClick={openEquipment} className={screen === 'equipment' ? 'nav-active' : ''}>Экипировка</button><button onClick={openWorld} className={screen === 'world' ? 'nav-active' : ''}>Мир</button><button onClick={openGathering} className={screen === 'gathering' ? 'nav-active' : ''}>Вылазки</button><button onClick={openCrafting} className={screen === 'crafting' ? 'nav-active' : ''}>Крафт</button><button onClick={openInventory} className={screen === 'inventory' ? 'nav-active' : ''}>Инвентарь</button></nav>
-      <div className="account-controls"><span>{session.account.name}</span><button className="ghost" disabled={busy || sessionBusy} onClick={onCharacters}>Персонажи</button><button className="ghost" disabled={busy || sessionBusy} onClick={onAccount}>Сменить аккаунт</button></div>
-      <div className="connection"><i className={(roomId ? connected : !!content) ? 'online' : ''}/>{roomId ? connected ? 'Автообновление' : 'Обновление каждые 5 с' : content ? 'Сервер подключён' : 'Подключение…'}</div>
+      <nav aria-label="Основная навигация"><button onClick={() => openRoom('')} className={screen === 'arena' ? 'nav-active' : ''}>Арена</button><button onClick={openSkills} className={screen === 'skills' ? 'nav-active' : ''}>Навыки</button><button onClick={openAttributes} className={screen === 'attributes' ? 'nav-active' : ''}>Характеристики</button><button onClick={openWorld} className={screen === 'world' ? 'nav-active' : ''}>Мир</button><button onClick={openGathering} className={screen === 'gathering' ? 'nav-active' : ''}>Вылазки</button><button onClick={openCrafting} className={screen === 'crafting' ? 'nav-active' : ''}>Крафт</button><button onClick={openInventory} className={screen === 'inventory' ? 'nav-active' : ''}>Инвентарь</button></nav>
+      <div className="account-controls"><span title={`Аккаунт: ${session.account.name}`}>{character?.name ?? session.account.name}</span><button className="ghost" onClick={() => setPartyOpen(true)}>Группа{party.state?.party ? ` · ${party.state.party.members.length}` : ''}</button><button className="ghost" disabled={busy || sessionBusy} onClick={onCharacters}>Персонажи</button><button className="ghost" disabled={busy || sessionBusy} onClick={onAccount}>Сменить аккаунт</button></div>
     </header>
     <main>
-      <div className="page-heading"><div><div className="eyebrow">СОБИРАЙ. НАПОЛНЯЙ. ПОБЕЖДАЙ.</div><h1>{heading}</h1><p>{description}</p></div>{roomId && <button className="ghost" onClick={() => openRoom('')}>← Все комнаты</button>}</div>
+      {roomId && <div className="page-heading"><h1>{battle?.name ?? 'Загрузка боя…'}</h1><button className="ghost" onClick={() => openRoom('')}>← Все комнаты</button></div>}
       {(error || sessionError) && <div className="error" role="alert">{error || sessionError}<button onClick={() => setError('')} aria-label="Закрыть ошибку">×</button></div>}
-      {arena && (arena.incoming.length > 0 || arena.activeBattleId && arena.activeBattleId !== roomId) && <section className="panel arena-notifications" aria-label="Уведомления арены">
+      {!lobby && arena && (arena.incoming.length > 0 || arena.activeBattleId && arena.activeBattleId !== roomId) && <section className="arena-notifications" aria-label="Уведомления арены">
         {arena.activeBattleId && arena.activeBattleId !== roomId && <div className="arena-offer" role="status"><strong>Бой начался</strong><button className="primary" onClick={() => openRoom(arena.activeBattleId!)}>Перейти в бой</button></div>}
         {arena.incoming.map(offer => <div className="arena-offer" key={offer.id} role="status"><span><strong>{offer.challengerName} бросает тебе вызов</strong><small>{offer.roomName}</small></span>
           <div><button className="primary" disabled={busy} onClick={() => void perform(async () => { const started = await arenaApi.accept(offer, characterId); updateBattle(started); openRoom(started.id); await refreshArena(); })}>Принять</button>
             <button className="ghost" disabled={busy} onClick={() => void perform(async () => { await arenaApi.dismiss(offer, characterId); await refreshArena(); })}>Отклонить</button></div></div>)}
       </section>}
-      <div className={`layout${workshop ? ` ${screen}-layout` : ''}${roomId && screen === 'arena' ? ' battle-layout' : ''}`}>
-        <aside className="sidebar">
-          <CharacterPanel compact={workshop} character={character} content={content} fighter={fighter} busy={busy || sessionBusy} onCharacters={onCharacters} onSkills={openSkills} onInventory={openInventory} onEquipment={openEquipment}/>
-          <PartyRoster state={party.state} playerId={session.account.id} characterId={characterId} busy={party.busy} pending={party.pending} error={party.error} message={party.message}
-            onAction={action => void party.act(action)} onRetry={party.retry} onRefresh={party.refresh}/>
-          {!workshop && <EnergyPanel character={character} fighter={fighter}/>}
-        </aside>
+      <div className="screen-content">
         {screen === 'inventory' ? <InventoryPage key={characterId} ownerId={characterId} characters={characters} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters}/>
-          : screen === 'equipment' ? <EquipmentPage key={characterId} ownerId={characterId} character={character} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters} onInventory={openInventory}/>
+          : screen === 'attributes' ? <AttributesScreen character={character} content={content} busy={busy}
+            onAllocate={(allocations, revision) => void perform(async () => updateCharacter(await charactersApi.allocate(characterId, allocations, revision)))}/>
           : screen === 'world' ? <Suspense fallback={<section className="panel" role="status">Загрузка мира…</section>}><WorldPage key={characterId} playerId={session.account.id} characterId={characterId} party={party.state?.party ?? null} partyReady={!!party.state} partyBusy={party.busy || party.pending} inventoryOpen={worldInventoryOpen} content={content} onChanged={refreshCharacters} onInventory={openInventory} onCrafting={openCrafting} onGathering={openGathering}/></Suspense>
           : screen === 'gathering' ? <GatheringPage key={characterId} ownerId={characterId} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters} onCrafting={openCrafting} onInventory={openInventory}/>
           : screen === 'crafting' ? <CraftingPage key={characterId} ownerId={characterId} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters}/>
@@ -140,14 +132,16 @@ function GameApp({ session, sessionBusy, sessionError, onCharacters, onAccount, 
             onCopy={() => void perform(async () => { await navigator.clipboard.writeText(location.href); })}/>
             : <section className="panel" role="status">Загрузка боя…</section>
           : <ArenaScreen characterId={characterId} arena={arena}
+            onAccept={offer => void perform(async () => { const started = await arenaApi.accept(offer, characterId); updateBattle(started); openRoom(started.id); await refreshArena(); })}
             onChallenge={id => void perform(async () => { await arenaApi.challenge(id, characterId); await refreshArena(); })}
             onDismiss={offer => void perform(async () => { await arenaApi.dismiss(offer, characterId); await refreshArena(); })}
-            rooms={rooms} canCreate={!!character} busy={busy} onOpen={openRoom}
+            rooms={rooms} loading={roomsLoading} canCreate={!!character && !!arena && !arena.activeBattleId} busy={busy} onOpen={openRoom}
             onRefresh={() => void perform(refreshRooms)}
-            onCreate={input => void perform(async () => { const room = await arenaApi.create({ ...input, characterId }); openRoom(room.id); })}/>}
+            onCreate={async input => { let created = false; await perform(async () => { const room = await arenaApi.create({ ...input, characterId }); created = true; if (room.kind === 'duel') await Promise.all([refreshRooms(), refreshArena()]); else openRoom(room.id); }); return created; }}/>}
       </div>
       {worldInventoryOpen && screen === 'world' && <Modal title="Инвентарь" wide onClose={() => setWorldInventoryOpen(false)}>{error && <p className="error" role="alert">{error}</p>}<InventoryPage key={characterId} ownerId={characterId} characters={characters} busy={busy} onError={setError} run={perform} onChanged={refreshCharacters}/></Modal>}
-      <footer><span>СТИХИИ / ТАКТИЧЕСКАЯ АРЕНА</span><span>Состояние боя рассчитывает сервер</span></footer>
+      {partyOpen && <Modal title="Группа" onClose={() => setPartyOpen(false)}><PartyRoster state={party.state} playerId={session.account.id} characterId={characterId} busy={party.busy} pending={party.pending} error={party.error} message={party.message}
+        onAction={action => void party.act(action)} onRetry={party.retry} onRefresh={party.refresh}/></Modal>}
     </main>
   </div>;
 }

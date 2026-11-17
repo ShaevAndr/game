@@ -39,8 +39,8 @@ export function InventoryScreen({ view, characters, busy, recipientId, destinati
   };
 
   return <section className="panel inventory-screen">
-    <div className="section-heading inventory-heading"><div><div className="section-label">СНАРЯЖЕНИЕ ПЕРСОНАЖА</div><h2>{character?.name ? `Инвентарь · ${character.name}` : 'Инвентарь'}</h2></div><button className="ghost" onClick={onRefresh} disabled={busy} aria-label="Обновить инвентарь">↻ Обновить</button></div>
-    <div className="rpg-inventory">
+    <div className="section-heading inventory-heading"><div><h2>{character?.name ? `Инвентарь · ${character.name}` : 'Инвентарь'}</h2></div><button className="ghost" onClick={onRefresh} disabled={busy} aria-label="Обновить инвентарь">↻ Обновить</button></div>
+    <div className={`rpg-inventory${view.items.some(item => item.id === selectedId) ? ' has-item-details' : ''}`}>
       <EquipmentPanel view={view} character={character} selectedId={selectedId} selectedSlot={slotFilter} onSelect={select} onSlot={slot => { setSelectedId(''); setSlotFilter(slot); setGroupId(''); setSearch(''); }} onQuickAction={quickAction}/>
       <section className="backpack-panel" aria-label="Рюкзак">
         <div className="inventory-panel-heading"><h3>Рюкзак</h3><span className={backpack.length >= (primary?.capacity ?? 50) ? 'bag-full' : ''}>{backpack.length} / {primary?.capacity ?? 50} мест</span></div>
@@ -57,6 +57,6 @@ export function InventoryScreen({ view, characters, busy, recipientId, destinati
       <ItemDetails key={selectedId} view={view} selectedId={selectedId} characters={characters} busy={busy} recipientId={recipientId} destinations={destinations} onRecipient={onRecipient} onExecute={onExecute}/>
     </div>
     {!!saved.length && <details className="saved-items"><summary>Другие сохранённые предметы <span>{saved.length}</span></summary><p className="hint">Вещи из прежних контейнеров. Выберите предмет и верните его в рюкзак.</p><div className="saved-items-list">{saved.map(item => <button key={item.id} style={qualityStyle(item)} className={item.id === selectedId ? 'selected' : ''} onClick={() => select(item.id)}><ItemIcon item={view.definitions.find(definition => definition.id === item.itemId)}/><span>{name(item.itemId)}{item.quantity > 1 ? ` ×${item.quantity}` : ''}<small>{view.inventories.find(inventory => inventory.id === item.inventoryId)?.name ?? 'Вне рюкзака'}</small></span></button>)}</div></details>}
-    <p className="inventory-footnote">Двойной щелчок — надеть или снять вещь. Экипировка не занимает места в рюкзаке. Изменения снаряжения действуют со следующего боя.</p>
+    <p className="inventory-footnote">Нажмите на предмет для просмотра свойств и действий. Двойной щелчок — надеть или снять вещь. Экипировка не занимает места в рюкзаке. Изменения снаряжения действуют со следующего боя.</p>
   </section>;
 }

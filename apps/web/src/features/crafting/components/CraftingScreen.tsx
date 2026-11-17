@@ -19,7 +19,7 @@ export function CraftingScreen({ view, catalog, selection, busy, message, create
   const [mode, setMode] = useState<'recipe' | 'experiment'>('recipe');
   const [recipeId, setRecipeId] = useState('');
   return <section className="panel crafting-screen">
-    <div className="section-heading crafting-heading"><div><div className="section-label">МАСТЕРСКАЯ ГЕРОЯ</div><h2>Крафт</h2></div><button className="ghost" onClick={onRefresh} disabled={busy} aria-label="Обновить кузницу">↻ Обновить</button></div>
+    <div className="section-heading crafting-heading"><div><h2>Крафт</h2></div><button className="ghost" onClick={onRefresh} disabled={busy} aria-label="Обновить кузницу">↻ Обновить</button></div>
     <ProfessionPanel professions={catalog.professions}/>
     <div className="craft-mode" aria-label="Способ крафта">
       <button aria-pressed={mode === 'recipe'} disabled={busy} onClick={() => setMode('recipe')}>По известному рецепту</button>

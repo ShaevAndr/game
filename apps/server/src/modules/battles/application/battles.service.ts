@@ -12,6 +12,7 @@ import { BattlefieldService } from '../../battlefield/application/battlefield.se
 import { BattleEvents } from '../ports/battle-events';
 import { InventoryService } from '../../inventory/application/inventory.service';
 import { BattleRuntime } from '../ports/battle-runtime';
+import { IdentityService } from '../../identity/application/identity.service';
 
 function domainAction<T>(action: () => T): T {
   try { return action(); }
@@ -31,9 +32,10 @@ export class BattlesService {
     @Inject(BattlefieldService) private readonly battlefield: BattlefieldService,
     @Inject(InventoryService) private readonly inventory: InventoryService,
     @Inject(BattleRuntime) private readonly runtime: BattleRuntime,
+    @Inject(IdentityService) private readonly identity: IdentityService,
   ) {}
 
-  list() { return this.repository.list(); }
+  async list() { return this.repository.list(await this.identity.onlineCharacterIds()); }
   async get(id: string) {
     const battle = await this.repository.find(id);
     if (!battle) throw new NotFoundException('Бой не найден');

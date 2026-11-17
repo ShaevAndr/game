@@ -56,12 +56,12 @@ export function WorldScreen({ world, playerId, party, partyReady, partyBusy, inv
   }, [view, isLeader, controlsLocked, paused, onInventory, world.act]);
 
   return <section className="world-screen main-column" aria-label="Мир экспедиции">
-    <header className="world-heading"><div><div className="eyebrow">ЗА ГРАНИЦЕЙ ТРОП</div><h2>Общий мир. Твои находки.</h2><p>Отряд идёт за лидером. Каждый собирает собственную добычу.</p></div>
+    <header className="world-heading"><div><h2>Общий мир. Твои находки.</h2><p>Отряд идёт за лидером. Каждый собирает собственную добычу.</p></div>
       <div className="world-links"><button className="ghost" onClick={onGathering}>Вылазки</button><button className="ghost" onClick={onCrafting}>Крафт</button><button className="ghost" onClick={onInventory}>Инвентарь</button></div></header>
     {world.error && <div className="world-notice error" role="alert"><span>{world.error}</span><button className="ghost" disabled={world.busy} onClick={world.refresh}>Обновить</button></div>}
     {world.message && <p className="world-message" role="status">{world.message}</p>}
     {world.pending && <div className="world-pending" role="alert"><div><strong>Уточняем результат действия</strong><p>Оно сохранено. Можно безопасно повторить запрос с тем же действием.</p></div><button disabled={world.busy} onClick={world.retry}>{world.busy ? 'Ожидание…' : 'Повторить действие'}</button></div>}
-    {!view ? <article className="panel world-lobby"><div className="world-compass" aria-hidden="true">✧</div><div className="eyebrow">ИССЛЕДУЙ. ИЗМЕНЯЙ. СОБИРАЙ.</div>
+    {!view ? <article className="panel world-lobby"><div className="world-compass" aria-hidden="true">✧</div>
       <h3>Что скрывается за следующим холмом?</h3><p>Открой карту, выбери участок и спустись за ресурсами. Срубленные деревья и прорытые ходы останутся до конца экспедиции.</p>
       <div className="world-lobby-facts"><span><b>Один мир</b>для всей группы</span><span><b>Личный груз</b>для твоего героя</span><span><b>Без спешки</b>прогресс сохраняется</span></div>
       <button className="primary" disabled={controlsLocked || !isLeader} onClick={world.start}>{!world.ready ? 'Подключение к миру…' : isLeader ? 'Начать экспедицию →' : 'Ожидаем лидера'}</button>
@@ -118,11 +118,11 @@ export function WorldScreen({ world, playerId, party, partyReady, partyBusy, inv
       <div className="world-close">{confirmClose ? <div className="world-close-confirm" role="group" aria-label="Завершение экспедиции"><p>Завершить для всей группы? Добыча сохранится, участки будут закрыты.</p><button disabled={!isLeader || controlsLocked} onClick={() => { setConfirmClose(false); world.act({ type: 'close' }); }}>Завершить и забрать груз</button><button className="ghost" onClick={() => setConfirmClose(false)}>Продолжить поход</button></div>
         : <button className="ghost" disabled={!isLeader || controlsLocked} onClick={() => setConfirmClose(true)}>Завершить экспедицию</button>}</div>
     </>}
-    <article className="panel world-deliveries"><div className="section-heading"><div><div className="section-label">ПОСЛЕ ПОХОДА</div><h3>Добыча из экспедиций</h3></div><button className="ghost" onClick={world.refresh} disabled={world.busy}>Обновить</button></div>
+    {(world.cargo.length > 0 || world.cargoError) && <article className="panel world-deliveries"><div className="section-heading"><div><h3>Добыча из экспедиций</h3></div><button className="ghost" onClick={world.refresh} disabled={world.busy}>Обновить</button></div>
       {world.cargoError && <p className="world-action-reason" role="alert">{world.cargoError}</p>}
-      {!world.cargo.length ? <p>Здесь появится запечатанный груз после похода или выхода из группы.</p> : <div className="world-documents">{world.cargo.map(document => <div className="world-document" key={document.id}><div><strong>{document.cargo.map(entry => `${itemName(entry.itemId)} ×${entry.quantity}`).join(' · ')}</strong>
+      <div className="world-documents">{world.cargo.map(document => <div className="world-document" key={document.id}><div><strong>{document.cargo.map(entry => `${itemName(entry.itemId)} ×${entry.quantity}`).join(' · ')}</strong>
         <small>{document.status === 'imported' ? 'В рюкзаке' : document.status === 'available' ? document.reason ?? 'Освободи место в рюкзаке' : 'Ожидает получения'}</small></div>
-        {document.status === 'imported' ? <span className="world-received">Получено ✓</span> : <button disabled={world.busy || world.pending} onClick={() => world.claim(document.id)}>Получить</button>}</div>)}</div>}
-    </article>
+        {document.status === 'imported' ? <span className="world-received">Получено ✓</span> : <button disabled={world.busy || world.pending} onClick={() => world.claim(document.id)}>Получить</button>}</div>)}</div>
+    </article>}
   </section>;
 }

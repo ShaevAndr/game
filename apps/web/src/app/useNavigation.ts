@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 
 function readRoute() {
   const hash = location.hash.slice(1);
-  const screen = hash === 'world' ? 'world' : hash === 'gathering' ? 'gathering' : hash === 'skills' ? 'skills' : hash === 'inventory' ? 'inventory' : hash === 'crafting' ? 'crafting' : hash === 'equipment' ? 'equipment' : 'arena';
-  return { screen, roomId: ['skills', 'inventory', 'crafting', 'equipment', 'gathering', 'world'].includes(hash) ? '' : hash } as const;
+  const screen = hash === 'world' ? 'world' : hash === 'gathering' ? 'gathering' : hash === 'skills' ? 'skills' : hash === 'inventory' || hash === 'equipment' ? 'inventory' : hash === 'crafting' ? 'crafting' : hash === 'attributes' ? 'attributes' : 'arena';
+  return { screen, roomId: ['skills', 'inventory', 'crafting', 'equipment', 'attributes', 'gathering', 'world'].includes(hash) ? '' : hash } as const;
 }
 
 export function useNavigation() {
@@ -18,7 +18,7 @@ export function useNavigation() {
     ...route,
     openRoom,
     openInventory: () => { location.hash = 'inventory'; setRoute({ screen: 'inventory', roomId: '' }); },
-    openEquipment: () => { location.hash = 'equipment'; setRoute({ screen: 'equipment', roomId: '' }); },
+    openAttributes: () => { location.hash = 'attributes'; setRoute({ screen: 'attributes', roomId: '' }); },
     openCrafting: () => { location.hash = 'crafting'; setRoute({ screen: 'crafting', roomId: '' }); },
     openGathering: () => { location.hash = 'gathering'; setRoute({ screen: 'gathering', roomId: '' }); },
     openWorld: () => { location.hash = 'world'; setRoute({ screen: 'world', roomId: '' }); },
