@@ -257,6 +257,7 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
   const heroes = accounts.map((account, i) => ({ ...createCharacter(randomUUID(), i ? 'Гость' : 'Хозяин', seedContent), accountId: account.id }));
   const offers: ArenaChallenge[] = [], rooms: import('@game/core').Battle[] = [], errors: string[] = [];
   let rejectCancellation = false;
+  const battleReads = [0, 0];
   const active = (characterId: string) => rooms.find(room => room.status === 'active' && room.fighters.some(fighter => fighter.characterId === characterId));
   const pages = [];
   for (const [i, browser] of [ownerBrowser, opponentBrowser].entries()) {
@@ -312,7 +313,10 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
         for (const value of offers) value.status = value.id === offer.id ? 'accepted' : 'cancelled';
         return send({ ...room, serverTime: Date.now() }, 201);
       }
-      if (room && path === `/battles/${room.id}`) return send({ ...room, serverTime: Date.now() });
+      if (room && path === `/battles/${room.id}`) {
+        battleReads[i]++;
+        return send({ ...room, serverTime: Date.now() });
+      }
       if (/^\/battles\/[^/]+$/.test(path)) return send({ message: 'Бой не найден' }, 404);
       errors.push(`Unhandled route: ${path}`); return send({ message: path }, 404);
     });
@@ -386,6 +390,9 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
   await opponent.evaluate(() => window.dispatchEvent(new Event('focus'))); await resumed;
   await opponent.getByRole('button', { name: 'Перейти в бой', exact: true }).waitFor();
   assert.equal(new URL(opponent.url()).hash, '#skills');
+  const readsAfterLeaving = battleReads[1];
+  await opponent.waitForTimeout(5500);
+  assert.equal(battleReads[1], readsAfterLeaving, 'leaving the battle page stops its REST reconciliation');
   // A fresh page restores the ongoing fight even without a working WebSocket.
   await opponent.reload(); await opponent.locator('.battle-arena').waitFor();
   assert.equal(new URL(opponent.url()).hash, `#${room.id}`);
