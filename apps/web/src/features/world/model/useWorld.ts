@@ -13,13 +13,11 @@ export function useWorld(playerId: string, characterId: string, party: Party | n
   const [cargo, setCargo] = useState<WorldCargoDocument[]>([]), [ready, setReady] = useState(false), [stale, setStale] = useState(true);
   const [error, setError] = useState(''), [loadError, setLoadError] = useState(''), [cargoError, setCargoError] = useState(''), [inventoryError, setInventoryError] = useState('');
   const [motionReset, setMotionReset] = useState(0);
-  const [message, setMessage] = useState(''), [busy, setBusy] = useState(false), [pending, setPending] = useState<PendingWorldCommand | null>(() => {
+  const [busy, setBusy] = useState(false), [pending, setPending] = useState<PendingWorldCommand | null>(() => {
     try { return parsePendingWorldCommand(sessionStorage.getItem(key)); } catch { return null; }
   });
   const pendingRef = useRef(pending), viewRef = useRef(view), sending = useRef(false), sequence = useRef(0), mounted = useRef(true);
   const changed = useRef(onChanged); changed.current = onChanged; pendingRef.current = pending; viewRef.current = view;
-  const inventoryRef = useRef(inventory); inventoryRef.current = inventory;
-  const lastLoot = useRef('');
   const collectionAttempt = useRef('');
   const importedDocuments = useRef(new Set<string>());
   const finish = useCallback((command: PendingWorldCommand) => {
@@ -29,15 +27,8 @@ export function useWorld(playerId: string, characterId: string, party: Party | n
   }, [key]);
   const report = useCallback((result: WorldCommandResult) => {
     const outcome = result.outcome;
-    if (outcome.type === 'move') return;
-    if (outcome.hit && !outcome.hit.destroyed) { setMessage(`Удар: −${outcome.hit.damage} HP. Прочность ${outcome.hit.hp} / ${outcome.hit.maxHp}.`); return; }
-    const loot = outcome.loot.map(entry => `${inventoryRef.current?.definitions.find(item => item.id === entry.itemId)?.name ?? entry.itemId} ×${entry.quantity}`).join(', ');
-    if (outcome.type === 'harvest' && outcome.success) lastLoot.current = loot;
-    setMessage(outcome.type === 'collect' ? result.inventoryDelivery?.status === 'available' ? `Рюкзак заполнен: ${result.inventoryDelivery.reason ?? 'освободи место'}. Добыча сохранена для получения.` : `В рюкзаке: ${lastLoot.current || 'добыча экспедиции'}.`
-      : outcome.type === 'close' ? 'Экспедиция завершена. Добыча доставляется в рюкзак.'
-      : outcome.type === 'harvest' ? outcome.success ? `${loot ? `Получено: ${loot}.` : 'Объект добыт без материалов.'} Передаём в рюкзак · +${outcome.xpGained} XP.` : 'Добыча не удалась. Попробуйте ещё раз.'
-      : outcome.type === 'build' ? 'Постройка установлена. Материалы списаны из рюкзака.'
-      : outcome.type === 'start' ? 'Экспедиция открыта. Выберите участок на карте.' : 'Отряд переместился.');
+    if (outcome.type === 'harvest' && !outcome.success && (!outcome.hit || outcome.hit.destroyed))
+      setError('Добыча не удалась. Попробуйте ещё раз.');
   }, []);
   const refresh = useCallback(async (signal?: AbortSignal) => {
     const attempt = ++sequence.current;
@@ -71,7 +62,7 @@ export function useWorld(playerId: string, characterId: string, party: Party | n
     if (!saved || sending.current) return;
     if (saved.kind === 'claim') {
       if (documents.status === 'fulfilled' && documents.value.some(document => document.id === saved.manifestId && document.status === 'imported')) {
-        finish(saved); setMessage('Добыча получена в рюкзак.'); void changed.current().catch(() => {});
+        finish(saved); void changed.current().catch(() => {});
       }
       return;
     }
@@ -98,10 +89,10 @@ export function useWorld(playerId: string, characterId: string, party: Party | n
     try { sessionStorage.setItem(key, JSON.stringify(command)); } catch { setError('Не удалось сохранить действие в браузере. Проверьте доступ к хранилищу.'); return; }
     let motionApplied = false;
     const moving = command.kind === 'action' && command.command.action.type === 'move';
-    sending.current = true; pendingRef.current = command; setPending(command); setBusy(true); setError(''); if (command.kind !== 'action' || !['move', 'collect'].includes(command.command.action.type)) setMessage('');
+    sending.current = true; pendingRef.current = command; setPending(command); setBusy(true); setError('');
     sequence.current++;
     try {
-      if (command.kind === 'claim') { await worldApi.claim(command.manifestId, command.command); if (mounted.current) setMessage('Добыча получена в рюкзак.'); }
+      if (command.kind === 'claim') { await worldApi.claim(command.manifestId, command.command); }
       else {
         const result = command.kind === 'start' ? await worldApi.start(command.request) : await worldApi.execute(command.worldId, command.command);
         if (mounted.current) {
@@ -126,7 +117,7 @@ export function useWorld(playerId: string, characterId: string, party: Party | n
       if (mounted.current) setError(reason instanceof DOMException && reason.name === 'TimeoutError' ? 'Ответ задерживается. Действие сохранено; можно безопасно повторить запрос.' : (reason as Error).message);
     } finally {
       sending.current = false;
-      if (mounted.current) { setBusy(false); if (!motionApplied) setStale(true); void refresh(); }
+      if (mounted.current) { setBusy(false); if (!motionApplied) { setStale(true); void refresh(); } }
     }
   };
   useEffect(() => {
@@ -136,7 +127,7 @@ export function useWorld(playerId: string, characterId: string, party: Party | n
     collectionAttempt.current = revision;
     void send({ kind: 'action', worldId: view.id, command: { operationId: operationId(), expectedRevision: view.revision, action: { type: 'collect' } } });
   }, [view, ready, stale, busy, pending]);
-  return { view, inventory, cargo, ready, stale, error: error || loadError, cargoError, inventoryError, message, busy, motionReset, moving: busy && pending?.kind === 'action' && pending.command.action.type === 'move', pending: !!pending && !busy, refresh: () => { void refresh(); },
+  return { view, inventory, cargo, ready, stale, error: error || loadError, cargoError, inventoryError, busy, motionReset, moving: busy && pending?.kind === 'action' && pending.command.action.type === 'move', pending: !!pending && !busy, refresh: () => { void refresh(); },
     start: () => { if (!pendingRef.current && !sending.current) void send({ kind: 'start', request: { worldId: operationId(), operationId: operationId() } }); },
     act: (action: WorldAction) => { const current = viewRef.current;
       if (current && !pendingRef.current && !sending.current && !stale) { void send({ kind: 'action', worldId: current.id, command: { operationId: operationId(), expectedRevision: current.revision, action } }); return true; } return false; },

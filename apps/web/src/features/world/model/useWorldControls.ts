@@ -6,7 +6,7 @@ import type { WorldScreenProps } from './world-screen';
 export const worldDirections = [{ name: 'На север', icon: '↑', dx: 0, dz: -1, key: 'ArrowUp' }, { name: 'На запад', icon: '←', dx: -1, dz: 0, key: 'ArrowLeft' },
   { name: 'На юг', icon: '↓', dx: 0, dz: 1, key: 'ArrowDown' }, { name: 'На восток', icon: '→', dx: 1, dz: 0, key: 'ArrowRight' }];
 
-export function useWorldControls({ world, playerId, party, partyReady, partyBusy, inventoryOpen, content, onInventory }: WorldScreenProps) {
+export function useWorldControls({ world, playerId, party, partyReady, partyBusy, inventoryOpen, content, onInventory }: WorldScreenProps, helpOpen = false) {
   const { view } = world, position = view?.location?.position ?? null;
   const [selected, setSelected] = useState<VoxelPosition | null>(null), [toolId, setToolId] = useState<string | null>(null);
   const [menu, setMenu] = useState<'tools' | 'buildings' | null>(null), [recipeId, setRecipeId] = useState(worldBuildingRecipes[0].id);
@@ -23,7 +23,7 @@ export function useWorldControls({ world, playerId, party, partyReady, partyBusy
   const primary = world.inventory?.inventories.find(bag => bag.primary);
   const amount = (itemId: string) => world.inventory?.items.filter(item => item.itemId === itemId && item.inventoryId === primary?.id && !item.equippedSlot && !item.actions.some(action => action.reason === 'Инструмент используется командой мира')).reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const canBuild = recipe.ingredients.every(cost => amount(cost.itemId) >= cost.quantity);
-  const paused = inventoryOpen || menu !== null;
+  const paused = inventoryOpen || menu !== null || helpOpen;
   const hit = (p: VoxelPosition) => {
     if (controlsLocked || paused || !position || !reachableBlock(position, p, view?.region?.blockSizeMeters)) return;
     const block = view?.region?.blocks.find(entry => sameVoxel(entry.position, p));
@@ -35,7 +35,6 @@ export function useWorldControls({ world, playerId, party, partyReady, partyBusy
     : !blockType?.allowedToolClassIds.length ? 'Этот блок нельзя добывать.' : !tool ? 'В основном рюкзаке нужен подходящий инструмент.'
       : tool.reserved ? 'Инструмент занят предыдущим действием.' : !blockType.allowedToolClassIds.includes(tool.toolClassId) ? 'Выберите подходящий инструмент.' : '';
   const near = view?.region?.blocks.filter(block => position && reachableBlock(position, block.position, view?.region?.blockSizeMeters)) ?? [];
-  const cargoSize = view?.cargo.reduce((sum, entry) => sum + entry.quantity, 0) ?? 0;
   useEffect(() => { setSelected(null); }, [view?.id, view?.region?.cellId]);
   useEffect(() => { if (selected && !selectedBlock) setSelected(null); }, [selected, selectedBlock]);
   useEffect(() => {
@@ -54,5 +53,5 @@ export function useWorldControls({ world, playerId, party, partyReady, partyBusy
   const movementEnabled = isLeader && !partyBusy && partyReady && world.ready && !world.stale && !world.pending && (!world.busy || world.moving);
   return { movementEnabled, position, selected, setSelected, tool, tools, setToolId, menu, setMenu, recipeId, setRecipeId,
     recipe, canBuild, isLeader, controlsLocked, leader, itemName, selectedBlock, blockType, amount,
-    paused, hit, move, reason, near, cargoSize };
+    paused, hit, move, reason, near };
 }

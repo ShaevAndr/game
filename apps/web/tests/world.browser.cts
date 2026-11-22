@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
@@ -12,7 +13,14 @@ import { applyWorldCommand, createCharacter, createVoxelWorld, defaultWorldSetti
 test('world screen: rendering, targeting, leader movement, recovery, cargo and mobile fallback', { timeout: 300000 }, async t => {
   const { preview } = await import('vite');
   const vite = await preview({ configFile: false, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
-  t.after(() => new Promise<void>((resolve, reject) => { vite.httpServer.closeAllConnections(); vite.httpServer.close(error => error ? reject(error) : resolve()); }));
+  const { Server } = createRequire(join(process.cwd(), '../server/package.json'))('socket.io');
+  const transport = new Server(vite.httpServer);
+  transport.of('/updates').on('connection', (socket: any) => {
+    socket.on('subscribe', (_topics: unknown, ack: (value: unknown) => void) => ack({ ok: true }));
+    socket.on('heartbeat', (ack: (value: unknown) => void) => ack({ ok: true }));
+  });
+  transport.of('/chat').on('connection', (socket: any) => socket.on('subscribe', (ack: (value: unknown) => void) => ack({ ok: true })));
+  t.after(() => new Promise<void>(resolve => transport.close(() => resolve())));
   const address = vite.httpServer!.address(); assert.ok(address && typeof address !== 'string'); const origin = `http://127.0.0.1:${address.port}`;
   const browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
     args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -28,7 +36,6 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
   const receipts = new Map<string, WorldCommandResult>(), actions: WorldCommand[] = [], errors: string[] = [];
   const screenshotDir = process.env.WORLD_UI_SCREENSHOT_DIR;
   await context.addInitScript(() => sessionStorage.setItem('game-session-token', 'browser-fixture'));
-  await context.route('**/socket.io/**', route => route.fulfill({ status: 503, body: '' }));
   await context.route('https://fonts.googleapis.com/**', route => route.abort());
   await context.route('**/api/v1/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname.replace('/api/v1', ''), body = request.postDataJSON();
@@ -91,19 +98,30 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     return send({ message: `Unhandled test endpoint: ${path}` }, 404);
   });
   const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
+  // tsx preserves local function names in serialized evaluate callbacks.
+  await page.addInitScript({ content: 'window.__name = (fn) => fn;' });
   await page.addInitScript(() => {
     const state = window as unknown as { worldInputTrace: unknown[] }; state.worldInputTrace = [];
-    window.addEventListener('message', event => { if (event.data?.channel === 'game-world' && event.data?.type === 'snapshot') { state.worldInputTrace.push({ type: 'snapshot', locked: event.data.locked, paused: event.data.paused, revision: event.data.revision }); if (state.worldInputTrace.length > 12) state.worldInputTrace.shift(); } });
+    window.addEventListener('message', event => { if (event.data?.channel === 'game-world' && event.data?.type === 'snapshot') { state.worldInputTrace.push({ type: 'snapshot', locked: event.data.locked, paused: event.data.paused, movementEnabled: event.data.movementEnabled, revision: event.data.revision }); if (state.worldInputTrace.length > 12) state.worldInputTrace.shift(); } });
     window.addEventListener('pointerdown', event => { state.worldInputTrace.push({ type: 'pointerdown', button: event.button, locked: !!document.pointerLockElement }); });
   });
   page.setDefaultTimeout(12000);
   const shot = async (name: string) => { if (screenshotDir) { await mkdir(screenshotDir, { recursive: true }); await page.screenshot({ path: join(screenshotDir, name), fullPage: true }); } };
+  const showButtons = async (targetPage = page) => {
+    const controls = targetPage.locator('.world-button-controls');
+    if (!await controls.evaluate(element => (element as HTMLDetailsElement).open)) await controls.locator(':scope > summary').click();
+  };
+  const viewportTop = () => page.locator('[data-testid="world-viewport"]').evaluate(element => element.getBoundingClientRect().top + window.scrollY);
+  const received = (text: string | RegExp) => page.locator('.world-document strong').filter({ hasText: text }).first();
   const hitSelected = async () => {
+    const beforeTop = await viewportTop();
     for (let hit = 1; hit <= 4; hit++) {
       await page.waitForTimeout(300);
       const response = page.waitForResponse(response => response.url().endsWith('/actions') && response.request().postDataJSON()?.action.type === 'harvest');
       await page.getByRole('button', { name: 'Бить', exact: true }).click();
       const result = await (await response).json(); assert.equal(result.outcome.hit.hp, 100 - hit * 25);
+      assert.equal(await page.locator('.world-message, .world-cargo').count(), 0);
+      assert.ok(Math.abs(await viewportTop() - beforeTop) < 1, 'harvesting must not move the scene');
       if (hit < 4) {
         await page.frameLocator('iframe[title="Мир от первого лица"]').locator('#hp-readout').filter({ hasText: `HP ${100 - hit * 25} / 100` }).waitFor();
         assert.deepEqual(result.outcome.loot, []); assert.equal(result.outcome.xpGained, 0);
@@ -116,6 +134,18 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     await page.getByRole('button', { name: /отряд здесь/ }).click();
     await page.frameLocator('iframe[title="Мир от первого лица"]').locator('canvas').waitFor();
     assert.equal(await page.frameLocator('iframe[title="Мир от первого лица"]').locator('canvas').evaluate(canvas => !!(canvas as HTMLCanvasElement).getContext('webgl2')), true);
+    const initialTop = await viewportTop();
+    await page.getByRole('button', { name: 'Помощь', exact: true }).click();
+    const help = page.getByRole('dialog', { name: 'Помощь: исследование мира', exact: true });
+    await help.waitFor();
+    await help.getByRole('heading', { name: 'Управление', exact: true }).waitFor();
+    const helpFrame = page.frames().find(frame => frame.url().includes('/world.html'))!;
+    await helpFrame.waitForFunction(() => (window as unknown as { worldInputTrace: { type: string; paused?: boolean }[] }).worldInputTrace.filter(event => event.type === 'snapshot').at(-1)?.paused === true);
+    const helpActions = actions.length;
+    await page.keyboard.press('ArrowUp'); assert.equal(actions.length, helpActions);
+    await page.keyboard.press('Escape'); await help.waitFor({ state: 'detached' });
+    assert.ok(Math.abs(await viewportTop() - initialTop) < 1);
+    await showButtons();
     await page.getByRole('button', { name: 'На север', exact: true }).waitFor();
     const canvas = page.frameLocator('iframe[title="Мир от первого лица"]').locator('canvas');
     await shot('world-initial.png');
@@ -130,10 +160,9 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     assert.equal(await tools.getByRole('button', { name: /Топор/ }).count(), 0);
     await tools.getByRole('button', { name: /лопата/i }).click();
     await hitSelected();
-    await page.frameLocator('iframe[title="Мир от первого лица"]').locator('#feedback').filter({ hasText: /В рюкзаке: Торф ×1/ }).waitFor();
+    await received('Торф ×1').waitFor();
     assert.equal(resources.get('peat'), 1); assert.deepEqual(world!.gatherers[0].cargo, []);
-    await page.frameLocator('iframe[title="Мир от первого лица"]').locator('#feedback').filter({ hasText: /Торф ×1/ }).waitFor();
-    await page.frameLocator('iframe[title="Мир от первого лица"]').locator('#cargo-info').filter({ hasText: /поступают в общий инвентарь сразу/ }).waitFor();
+    assert.equal(await page.frameLocator('iframe[title="Мир от первого лица"]').locator('#feedback, #cargo-info, #hint small').count(), 0);
     await shot('world-desktop.png');
 
     await page.getByRole('button', { name: 'Инвентарь · I', exact: true }).click();
@@ -150,7 +179,7 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     assert.equal(await buildings.getByRole('button', { name: /Топор/ }).count(), 0);
     await page.keyboard.press('Escape'); await buildings.waitFor({ state: 'detached' });
 
-    // Tree and stone rewards appear inside the scene and in the shared backpack before the expedition ends.
+    // Tree and stone rewards appear once in the delivery list and reach the shared backpack before the expedition ends.
     for (const [blockId, blockName, itemId, quantity] of [
       ['stone', 'Каменная порода', 'flint', 1], ['pine-trunk', 'Сосновый ствол', 'pine-wood', 2],
     ] as const) {
@@ -168,7 +197,7 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
       await options.getByRole('button', { name: blockId === 'stone' ? /кирка/i : /топор/i }).click();
       await hitSelected();
       const itemName = seedContent.items.find(item => item.id === itemId)!.name;
-      await page.frameLocator('iframe[title="Мир от первого лица"]').locator('#feedback').filter({ hasText: `В рюкзаке: ${itemName} ×${quantity}` }).waitFor();
+      await received(`${itemName} ×${quantity}`).waitFor();
       assert.equal(itemId === 'flint' ? flint : resources.get(itemId), itemId === 'flint' ? 8 + quantity : quantity);
       assert.deepEqual(world!.gatherers[0].cargo, []);
     }
@@ -185,19 +214,48 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     const movementFrame = page.frames().find(frame => frame.url().endsWith('/world.html'))!;
     await movementFrame.waitForFunction(() => !!document.pointerLockElement);
     const startPosition = { ...world!.location!.position! }, inventoryBeforeWalk = inventoryReads;
-    await page.keyboard.down('w'); await page.keyboard.down('d'); await page.waitForTimeout(350);
-    await page.keyboard.up('w'); await page.keyboard.up('d');
-    await page.waitForTimeout(500);
+    const scale = world!.settings.blockSizeMeters;
+    const settled = async () => {
+      const until = Date.now() + 12000;
+      while (Date.now() < until) {
+        const hud = await movementFrame.locator('#position-info').evaluate(el => ({ x: Number((el as HTMLElement).dataset.x), y: Number((el as HTMLElement).dataset.y), z: Number((el as HTMLElement).dataset.z), grounded: (el as HTMLElement).dataset.grounded }));
+        const unlocked = await movementFrame.evaluate(() => !(window as unknown as { worldInputTrace: { type: string; locked?: boolean }[] }).worldInputTrace.filter(event => event.type === 'snapshot').at(-1)?.locked);
+        const p = world!.location!.position!;
+        if (unlocked && Math.abs(hud.x - p.x * scale) < .05 && Math.abs(hud.y - p.y * scale) < .05 && Math.abs(hud.z - p.z * scale) < .05 && hud.grounded === String(world!.location!.motion!.grounded)) return;
+        await page.waitForTimeout(30);
+      }
+      assert.fail('movement acknowledgement did not catch up with the rendered position');
+    };
+    await page.keyboard.down('w'); await page.keyboard.down('d');
+    await movementFrame.waitForFunction(start => {
+      const hud = document.querySelector<HTMLElement>('#position-info')!;
+      return Number(hud.dataset.x) > start.x && Number(hud.dataset.z) > start.z;
+    }, { x: (startPosition.x + .5) * scale, z: (startPosition.z + .5) * scale });
+    await page.keyboard.up('w'); await page.keyboard.up('d'); await settled();
     const walked = { ...world!.location!.position! };
     assert.ok(walked.x > startPosition.x + .4 && walked.z > startPosition.z + .4, 'W+D moves diagonally in the continuous world');
     assert.ok(Math.abs(walked.x % 1 - .5) > .01, 'server position is not pinned to voxel centres');
-    const jumpStart = { ...walked };
-    await page.keyboard.down('Space'); await page.keyboard.down('a'); await page.waitForTimeout(160);
-    await page.keyboard.up('Space'); await page.keyboard.up('a');
-    const airborne = await movementFrame.locator('#position-info').evaluate(el => ({ y: Number((el as HTMLElement).dataset.y), grounded: (el as HTMLElement).dataset.grounded }));
-    assert.equal(airborne.grounded, 'false'); assert.ok(airborne.y > jumpStart.y * .5 + .1);
-    await page.keyboard.down('s'); await page.waitForTimeout(160); await page.keyboard.up('s');
-    await page.waitForTimeout(1100);
+    await movementFrame.waitForFunction(() => document.querySelector<HTMLElement>('#position-info')?.dataset.grounded === 'true');
+    const jumpStart = { ...world!.location!.position! };
+    // Schedule the airborne turn in the frame: CDP round trips can outlast the whole jump on a software renderer.
+    const airborne = await movementFrame.evaluate(({ x, z, y }) => new Promise<{ y: number; grounded: string }>((resolve, reject) => {
+      const key = (type: string, code: string, value: string) => window.dispatchEvent(new KeyboardEvent(type, { code, key: value }));
+      const release = () => { key('keyup', 'KeyA', 'a'); key('keyup', 'KeyS', 's'); key('keyup', 'Space', ' '); };
+      const timeout = setTimeout(() => { release(); reject(new Error('airborne turn did not render')); }, 10000);
+      let phase = 0, airborne: { y: number; grounded: string };
+      const step = () => {
+        const hud = document.querySelector<HTMLElement>('#position-info')!;
+        if (phase === 0 && hud.dataset.grounded === 'false' && Number(hud.dataset.x) < x - .11 && Number(hud.dataset.y) > y + .1) {
+          airborne = { y: Number(hud.dataset.y), grounded: hud.dataset.grounded };
+          key('keydown', 'KeyS', 's'); key('keyup', 'KeyA', 'a'); key('keyup', 'Space', ' '); phase = 1;
+        } else if (phase === 1 && hud.dataset.grounded === 'false' && Number(hud.dataset.z) < z - .11) { release(); phase = 2; }
+        else if (phase === 2 && hud.dataset.grounded === 'true') { clearTimeout(timeout); resolve(airborne); return; }
+        requestAnimationFrame(step);
+      };
+      key('keydown', 'KeyA', 'a'); key('keydown', 'Space', ' '); requestAnimationFrame(step);
+    }), { x: jumpStart.x * scale, z: jumpStart.z * scale, y: jumpStart.y * scale });
+    assert.equal(airborne.grounded, 'false'); assert.ok(airborne.y > jumpStart.y * scale + .1);
+    await settled();
     const landed = { ...world!.location!.position! };
     assert.ok(landed.x < jumpStart.x - .2 && landed.z < jumpStart.z - .2, 'direction can change during the jump');
     assert.equal(world!.location!.motion!.grounded, true);
@@ -217,14 +275,14 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     // Browser blocks immediate pointer recapture after Escape.
     await page.waitForTimeout(1200); await canvas.click();
     await frame.waitForFunction(() => !!document.pointerLockElement);
-    await canvas.evaluate(async canvas => { for (let i = 0; i < 9; i++) { canvas.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, movementY: 100, bubbles: true })); await new Promise(resolve => setTimeout(resolve, 35)); } });
+    await canvas.evaluate(async canvas => { for (let i = 0; i < 9; i++) { canvas.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, movementY: 100, bubbles: true })); await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); } });
     await page.waitForTimeout(150);
     const floorLabel = `Блок ${player.x}, ${player.y - 1}, ${player.z + 2}`;
-    for (let i = 0; i < 10 && !(await page.locator('.world-target > p').filter({ hasText: /^Блок / }).first().textContent())?.includes(floorLabel); i++) {
+    for (let i = 0; i < 10 && !(await page.locator('.world-target > p').first().textContent())?.includes(floorLabel); i++) {
       await canvas.evaluate(canvas => canvas.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, movementY: 70, bubbles: true })));
       await page.waitForTimeout(100);
     }
-    assert.ok((await page.locator('.world-target > p').filter({ hasText: /^Блок / }).first().textContent())?.includes(floorLabel));
+    assert.ok((await page.locator('.world-target > p').first().textContent())?.includes(floorLabel));
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Выбрать инструмент', exact: true }).click();
     await page.getByRole('dialog', { name: 'Выбор инструмента', exact: true }).getByRole('button', { name: /кирка/i }).click();
@@ -235,11 +293,13 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     await page.waitForFunction(() => !document.querySelector('.world-pending'));
     assert.equal(world!.revision, beforeBuild + 1); assert.equal(flint, beforeFlint - 4); assert.equal(resin, beforeResin - 1);
     await page.waitForTimeout(250);
-    await page.mouse.down(); await page.waitForTimeout(2200); await page.mouse.up();
+    await page.mouse.down();
+    try { await received('Кремень ×2').waitFor(); } finally { await page.mouse.up(); }
     assert.ok(actions.some(action => action.expectedRevision > beforeBuild && action.action.type === 'harvest')); // LMB still hits while a building is assigned.
-    await page.frameLocator('iframe[title="Мир от первого лица"]').locator('#feedback').filter({ hasText: /В рюкзаке: Кремень ×2/ }).waitFor();
     await page.keyboard.press('Escape');
 
+    await showButtons();
+    await page.waitForFunction(() => [...document.querySelectorAll<HTMLButtonElement>('.world-step')].some(button => !button.disabled));
     const keyboardDirections = [{ name: 'На север', key: 'ArrowUp' }, { name: 'На запад', key: 'ArrowLeft' }, { name: 'На юг', key: 'ArrowDown' }, { name: 'На восток', key: 'ArrowRight' }];
     let keyboardMove: typeof keyboardDirections[number] | undefined;
     for (const entry of keyboardDirections) if (await page.getByRole('button', { name: entry.name, exact: true }).isEnabled()) { keyboardMove = entry; break; }
@@ -256,12 +316,14 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     await page.getByRole('button', { name: 'Повторить действие' }).waitFor();
     const pending = actions.at(-1)!, revision = world!.revision; assert.equal(pending.action.type, 'move');
     await page.reload(); await page.getByRole('button', { name: 'Повторить действие' }).click();
+    await showButtons();
     await page.waitForFunction(() => !document.querySelector('.world-pending'));
     assert.deepEqual(actions.at(-1), pending); assert.equal(world!.revision, revision); hideReceipts = false;
     await page.getByRole('button', { name: '← Вернуться на карту' }).click();
     await page.getByRole('button', { name: /отряд здесь/ }).click();
     await page.frameLocator('iframe[title="Мир от первого лица"]').locator('canvas').waitFor();
     assert.equal(resources.get('peat'), 1); assert.deepEqual(world!.gatherers[0].cargo, []);
+    await showButtons();
 
     offline = true; await page.getByRole('button', { name: 'Обновить', exact: true }).first().click();
     await page.getByText('Сервис мира недоступен', { exact: true }).waitFor();
@@ -281,6 +343,7 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     party.leaderPlayerId = randomUUID(); party.revision++;
     party.members.push({ playerId: party.leaderPlayerId, characterId: randomUUID(), membershipId: randomUUID(), characterName: 'Лесник', joinedAt: Date.now(), level: 1 });
     await page.reload(); await page.frameLocator('iframe[title="Мир от первого лица"]').locator('canvas').waitFor();
+    await showButtons();
     assert.equal(await page.getByRole('button', { name: 'На север', exact: true }).isDisabled(), true);
     assert.equal(await page.getByRole('button', { name: 'Завершить экспедицию', exact: true }).isDisabled(), true);
     await page.setViewportSize({ width: 390, height: 844 });
@@ -293,8 +356,9 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
       HTMLCanvasElement.prototype.getContext = function (kind: string, ...args: unknown[]) { return /^(webgl|experimental-webgl)/.test(kind) ? null : Reflect.apply(original, this, [kind, ...args]); } as typeof original;
     });
     await fallback.goto(origin + '/#world'); await fallback.getByText('3D-сцена недоступна', { exact: true }).waitFor();
+    await showButtons(fallback);
     await fallback.getByText(/Блоки рядом/).click(); assert.ok(await fallback.locator('.world-nearby button').count() > 0);
     await fallback.close();
-  } catch (error) { await shot('world-failure.png'); for (const frame of page.frames()) if (frame.url().includes('world.html')) console.error(await frame.evaluate(() => (window as unknown as { worldInputTrace: unknown[] }).worldInputTrace)); throw error; }
+  } catch (error) { await shot('world-failure.png'); for (const frame of page.frames()) if (frame.url().includes('world.html')) console.error({ trace: await frame.evaluate(() => (window as unknown as { worldInputTrace: unknown[] }).worldInputTrace), hud: await frame.locator('#position-info').getAttribute('data-grounded'), position: world?.location?.position, motion: world?.location?.motion, recentInputs: actions.filter(action => action.action.type === 'move').slice(-3).map(action => action.action) }); throw error; }
   finally { await context.close(); }
 });

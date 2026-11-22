@@ -132,9 +132,6 @@ function sync(next) {
   document.querySelector('#hp-readout').textContent = next.targetMaxHp ? `HP ${next.targetHp} / ${next.targetMaxHp}` : '';
   const bar = document.querySelector('#block-hp'); bar.hidden = !next.targetMaxHp; bar.max = next.targetMaxHp ?? 100; bar.value = next.targetHp ?? 0;
   document.querySelector('#target-info').textContent = next.targetInfo ?? '';
-  document.querySelector('#feedback').textContent = next.feedback ?? '';
-  document.querySelector('#cargo-info').textContent = next.cargoInfo ?? '';
-  document.querySelector('#feedback').classList.toggle('error', !!next.error);
   if (next.paused !== paused) pause(next.paused);
 }
 window.addEventListener('message', event => {
