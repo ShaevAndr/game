@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
@@ -152,36 +153,55 @@ test('fantasy interface: all screens, responsive battle, target selection and a 
     hero = allocateAttributes(learner, { intelligence: 10 }, content); hero.accountId = account.id;
     await page.goto(`${origin}/#skills`); await page.reload();
     const card = (id: string) => page.locator(`.skill-tree-card[data-skill-id="${id}"]`);
+    const selectSkill = async (id: string) => { await page.locator(`[data-skill-seal="${id}"]`).click(); await card(id).waitFor(); };
+    await selectSkill('phoenix-warmth');
     await card('phoenix-warmth').waitFor();
     assert.equal(await page.getByRole('tab').count(), 5);
     assert.equal(await page.getByRole('tabpanel').count(), 1);
     assert.ok(await page.locator('.skill-tree-connections path').count() > 0);
+    await selectSkill('inferno');
     assert.equal(await card('inferno').getByRole('button').isDisabled(), true);
+    await selectSkill('phoenix-warmth');
     await card('phoenix-warmth').getByRole('button').click();
+    await selectSkill('phoenix-warmth');
     await card('phoenix-warmth').getByText('ИЗУЧЕНО · 1/10', { exact: true }).waitFor();
+    await selectSkill('burning-brand');
     assert.equal(await card('burning-brand').getByRole('button').isEnabled(), true);
+    await selectSkill('burning-brand');
     await card('burning-brand').getByRole('button').click();
+    await selectSkill('burning-brand');
     await card('burning-brand').getByText('ИЗУЧЕНО · 1/10', { exact: true }).waitFor();
+    await selectSkill('inferno');
     await card('inferno').getByRole('button').click();
+    await selectSkill('inferno');
     await card('inferno').getByText('ИЗУЧЕНО · 1/10', { exact: true }).waitFor();
     assert.ok(!hero.learnedSkillIds.includes('ember')); assert.ok(!hero.learnedSkillIds.includes('fireball'));
+    await selectSkill('phoenix-heart');
     assert.equal(await card('phoenix-heart').getByRole('button').isDisabled(), true);
+    await selectSkill('burning-brand');
     await card('burning-brand').getByRole('button').click();
+    await selectSkill('burning-brand');
     await card('burning-brand').getByText('ИЗУЧЕНО · 2/10', { exact: true }).waitFor();
+    await selectSkill('phoenix-heart');
     assert.equal(await card('phoenix-heart').getByRole('button').isDisabled(), true);
     await shot('skills-tree-fire.png');
-    await page.getByRole('tab', { name: /Вода/ }).click(); await card('spring').waitFor();
+    await page.getByRole('tab', { name: /Вода/ }).click(); await selectSkill('spring');
     assert.equal(await card('ember').count(), 0);
     await shot('skills-tree-water.png');
     await page.getByRole('tab', { name: /Вода/ }).press('ArrowRight');
     assert.equal(await page.getByRole('tab', { name: /Земля/ }).getAttribute('aria-selected'), 'true');
-    await page.getByRole('tab', { name: /Земля/ }).press('Home'); await card('ember').waitFor();
+    await page.getByRole('tab', { name: /Земля/ }).press('Home'); await selectSkill('ember');
+    await selectSkill('healing-flame');
     await card('healing-flame').getByRole('button').click();
+    await selectSkill('healing-flame');
     await card('healing-flame').getByText('ИЗУЧЕНО · 1/10', { exact: true }).waitFor();
+    await selectSkill('phoenix-heart');
     await card('phoenix-heart').getByRole('button').click();
+    await selectSkill('phoenix-heart');
     await card('phoenix-heart').getByText('ИЗУЧЕНО · 1/10', { exact: true }).waitFor();
     assert.equal(hero.skillPoints, 0);
     await page.setViewportSize({ width: 390, height: 844 }); await noOverflow('skill tree mobile');
+    await selectSkill('burning-brand');
     await card('burning-brand').getByText('Требования и действие').click();
     await shot('skills-tree-mobile.png');
     await page.setViewportSize({ width: 1440, height: 1120 });
@@ -245,7 +265,20 @@ test('fantasy interface: all screens, responsive battle, target selection and a 
 test('arena: both accounts enter an accepted duel, restore it after reload and can leave its screen', { timeout: 90000 }, async t => {
   const { preview } = await import('vite');
   const vite = await preview({ configFile: false, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
-  t.after(() => new Promise<void>((resolve, reject) => { vite.httpServer.closeAllConnections(); vite.httpServer.close(error => error ? reject(error) : resolve()); }));
+  const { Server } = createRequire(join(process.cwd(), '../server/package.json'))('socket.io');
+  const transport = new Server(vite.httpServer);
+  const updates = transport.of('/updates');
+  updates.on('connection', (socket: any) => {
+    socket.on('subscribe', (_topics: unknown, ack: (value: unknown) => void) => ack({ ok: true }));
+    socket.on('heartbeat', (ack: (value: unknown) => void) => ack({ ok: true }));
+  });
+  transport.of('/chat').on('connection', (socket: any) => socket.on('subscribe', (ack: (value: unknown) => void) => ack({ ok: true })));
+  transport.on('connection', (socket: any) => {
+    socket.on('watch', (id: string, ack: (value: unknown) => void) => { socket.join(id); ack({ ok: true }); });
+    socket.on('unwatch', (ack: (value: unknown) => void) => { for (const room of socket.rooms) if (room !== socket.id) socket.leave(room); ack?.({ ok: true }); });
+  });
+  const notify = () => updates.emit('state.changed', { topics: ['rooms', 'arena'] });
+  t.after(() => new Promise<void>(resolve => transport.close(() => resolve())));
   const address = vite.httpServer!.address(); assert.ok(address && typeof address !== 'string');
   const origin = `http://127.0.0.1:${address.port}`;
   const ownerBrowser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined, args: ['--no-sandbox'] });
@@ -265,7 +298,6 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
     let selected: string | null = null;
     const token = `arena-session-${i}`;
     const session = () => ({ account: accounts[i], characterId: selected, expiresAt: Date.now() + 3600000 });
-    await context.route('**/socket.io/**', route => route.fulfill({ status: 503, body: '' }));
     await context.route('https://fonts.googleapis.com/**', route => route.abort());
     await context.route('**/api/v1/**', async route => {
       const request = route.request(), path = new URL(request.url()).pathname.replace('/api/v1', ''), body = request.postDataJSON();
@@ -290,7 +322,7 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
         if (request.method() === 'GET') return send(rooms.filter(room => room.status === 'waiting'));
         assert.equal(body.characterId, heroes[i].id);
         const room = newBattle(randomUUID(), body.name, body.kind, 'on-match', heroes[i], seedContent, body.battlefield);
-        rooms.push(room); return send(room, 201);
+        rooms.push(room); notify(); return send(room, 201);
       }
       const room = rooms.find(value => value.id === path.split('/')[2]);
       if (room && path.endsWith('/cancel')) {
@@ -299,18 +331,20 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
         if (rejectCancellation) { rejectCancellation = false; return send({ message: 'Не удалось отменить комнату' }, 503); }
         rooms.splice(rooms.indexOf(room), 1);
         for (let index = offers.length - 1; index >= 0; index--) if (offers[index].battleId === room.id) offers.splice(index, 1);
+        notify(); transport.to(room.id).emit('battle.removed', { id: room.id });
         return send({ ok: true }, 201);
       }
       if (room && path.endsWith('/challenges')) {
         const offer: ArenaChallenge = { id: randomUUID(), battleId: room.id, roomName: room.name, challengerId: heroes[i].id,
           challengerName: heroes[i].name, recipientId: room.fighters[0].characterId!, recipientName: room.fighters[0].name, status: 'pending', createdAt: new Date().toISOString() };
-        offers.push(offer); return send(offer, 201);
+        offers.push(offer); notify(); return send(offer, 201);
       }
       if (room && path.endsWith('/accept')) {
         const offer = offers.find(value => value.id === path.split('/').at(-2))!;
         assert.equal(offer.recipientId, heroes[i].id);
         joinBattle(room, heroes.find(hero => hero.id === offer.challengerId)!, 1); startBattle(room, () => 0); room.version++;
         for (const value of offers) value.status = value.id === offer.id ? 'accepted' : 'cancelled';
+        notify(); transport.to(room.id).emit('battle', { ...room, serverTime: Date.now() });
         return send({ ...room, serverTime: Date.now() }, 201);
       }
       if (room && path === `/battles/${room.id}`) {
@@ -383,7 +417,7 @@ test('arena: both accounts enter an accepted duel, restore it after reload and c
   for (const page of pages) assert.equal(await page.locator('.combatant-card').count(), 2);
   for (const page of pages) assert.equal(await page.getByRole('button', { name: 'Отменить комнату', exact: true }).count(), 0);
   assert.deepEqual(new Set(room.fighters.map(fighter => fighter.characterId)), new Set(heroes.map(hero => hero.id)));
-  // Subsequent polls must preserve deliberate navigation away from the same battle.
+  // Subsequent updates must preserve deliberate navigation away from the same battle.
   await opponent.getByRole('button', { name: 'Навыки', exact: true }).click();
   await opponent.locator('.skill-branches').waitFor();
   const resumed = opponent.waitForResponse(response => response.url().endsWith(`/battles/arena/${heroes[1].id}`));

@@ -16,12 +16,10 @@ export function useSkillConnections(nodes: SkillTreeNode[], learnedIds: string[]
       for (const node of nodes) for (const id of node.parents) {
         const from = boxes.get(id), to = boxes.get(node.id);
         if (!from || !to) continue;
-        const x1 = from.left + from.width / 2 - bounds.left, y1 = from.bottom - bounds.top;
-        const x2 = to.left + to.width / 2 - bounds.left, y2 = to.top - bounds.top;
-        const mid = y1 + (y2 - y1) / 2;
-        edges.push({ id: `${id}:${node.id}`, path: bounds.width < 650
-            ? `M ${from.left - bounds.left} ${y1 - 12} H ${8 + edges.length % 3 * 5} V ${y2 + 16} H ${to.left - bounds.left}`
-            : `M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`,
+        const x1 = from.right - bounds.left, y1 = from.top + from.height / 2 - bounds.top;
+        const x2 = to.left - bounds.left, y2 = to.top + to.height / 2 - bounds.top;
+        const mid = x1 + (x2 - x1) / 2;
+        edges.push({ id: `${id}:${node.id}`, path: `M ${x1} ${y1} H ${mid} V ${y2} H ${x2}`,
           open: nodes.find(parent => parent.id === id)!.skills.some(skill => learnedIds.includes(skill.id)) });
       }
       setDrawing({ width: bounds.width, height: bounds.height, edges });

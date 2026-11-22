@@ -1,3 +1,4 @@
+import { useLiveRefresh } from '../../../shared/model/useLiveRefresh';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { partyCommandSchema, type AccountSession, type PartyAction, type PartyCommand, type PartyState } from '@game/core';
 import { ApiError } from '../../../shared/api/http';
@@ -27,17 +28,13 @@ export function useParty(session: AccountSession | null) {
   useEffect(() => {
     setState(null); current.current = null; setError(''); setLoadError(''); setMessage(''); setClientNow(Date.now());
     const restored = enabled ? restore(key) : null; setPending(restored); pendingRef.current = restored;
+  }, [key, enabled]);
+  useLiveRefresh('parties', enabled, refresh, reason => setLoadError(reason.message), key);
+  useEffect(() => {
     if (!enabled) return;
-    let loading = false; const controller = new AbortController();
-    const load = async () => {
-      if (loading) return; loading = true;
-      try { await refresh(controller.signal); } catch (reason) { if (!controller.signal.aborted) setLoadError((reason as Error).message); }
-      finally { loading = false; }
-    };
-    void load(); const timer = setInterval(() => { void load(); }, 2000), clock = setInterval(() => setClientNow(Date.now()), 1000);
-    window.addEventListener('focus', load);
-    return () => { controller.abort(); clearInterval(timer); clearInterval(clock); window.removeEventListener('focus', load); };
-  }, [key, enabled, refresh]);
+    const clock = setInterval(() => setClientNow(Date.now()), 1000);
+    return () => clearInterval(clock);
+  }, [enabled]);
 
   const send = async (command: PartyCommand) => {
     if (!enabled || sending.current) return;
@@ -61,7 +58,8 @@ export function useParty(session: AccountSession | null) {
     await send({ operationId: operationId(), expectedPartyId: current.current.party?.id ?? null, expectedRevision: current.current.party?.revision ?? 0, action });
   };
   const incoming = state?.incoming.filter(invitation => invitation.expiresAt > clientNow + offset.current) ?? [];
-  return { state, busy, pending: !!pending, error: error || loadError, message, incoming, serverNow: clientNow + offset.current,
+  const visibleState = state ? { ...state, incoming, outgoing: state.outgoing.filter(invitation => invitation.expiresAt > clientNow + offset.current) } : null;
+  return { state: visibleState, busy, pending: !!pending, error: error || loadError, message, incoming, serverNow: clientNow + offset.current,
     act, invite: (targetPlayerId: string) => { void act({ type: 'invite', targetPlayerId }); }, retry: () => { if (pendingRef.current) void send(pendingRef.current); },
     refresh: () => { void refresh().catch(reason => setLoadError((reason as Error).message)); } };
 }

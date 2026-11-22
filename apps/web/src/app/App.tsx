@@ -1,3 +1,4 @@
+import { LiveUpdatesProvider } from '../features/updates/model/LiveUpdatesProvider';
 import { CharacterSelectionPage } from '../features/characters/CharacterSelectionPage';
 import { AccountSelectionPage } from '../features/identity/AccountSelectionPage';
 import { useAccountSession } from '../features/identity/model/useAccountSession';
@@ -7,9 +8,14 @@ import { GameApp } from './GameApp';
 
 export function App() {
   const identity = useAccountSession();
-  const party = useParty(identity.session);
   const { session } = identity;
   if (!session) return <AccountSelectionPage identity={identity}/>;
+  return <LiveUpdatesProvider key={session.account.id} characterId={session.characterId}><AuthenticatedApp identity={identity}/></LiveUpdatesProvider>;
+}
+
+function AuthenticatedApp({ identity }: { identity: ReturnType<typeof useAccountSession> }) {
+  const session = identity.session!;
+  const party = useParty(session);
 
   const chooseCharacters = () => void identity.selectCharacter(null).then(ok => {
     if (ok) location.hash = '';

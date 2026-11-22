@@ -32,7 +32,6 @@ services:
       timeout: 3s
       retries: 20
   rabbitmq:
-    profiles: [world]
     image: rabbitmq:4-management
     hostname: game-rabbitmq
     environment:
@@ -64,6 +63,7 @@ services:
       postgres: { condition: service_healthy }
       mongo: { condition: service_healthy }
       redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/v1/accounts').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 3s

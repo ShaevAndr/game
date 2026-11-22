@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import { StateChanges } from '../../../shared/application/state-changes';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Optional } from '@nestjs/common';
 import { SocialPair, SocialState, socialCommandSchema, socialRelationship } from '@game/core';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
 import { IdentityService } from '../../identity/application/identity.service';
@@ -10,7 +11,8 @@ const unavailable = () => new ForbiddenException({ code: 'SOCIAL_NOT_ALLOWED', m
 export class SocialService {
   constructor(@Inject(UnitOfWork) private readonly transactions: UnitOfWork,
     @Inject(SocialRepository) private readonly repository: SocialRepository,
-    @Inject(IdentityService) private readonly identity: IdentityService) {}
+    @Inject(IdentityService) private readonly identity: IdentityService,
+    @Optional() @Inject(StateChanges) private readonly changes?: StateChanges) {}
 
   async state(playerId: string): Promise<SocialState> {
     const names = new Map((await this.identity.list()).map(account => [account.id, account.name]));
@@ -96,6 +98,7 @@ export class SocialService {
       }
       const relationship = socialRelationship(pair, playerId);
       await this.repository.complete(playerId, input.operationId, relationship, context);
+      this.changes?.publish({ topics: ['social', 'parties'], accountIds: [playerId, target.id] }, context);
       return { relationship, replayed: false };
     });
   }

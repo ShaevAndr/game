@@ -122,3 +122,43 @@
   .skill-emblem { width: 51px; height: 57px; }
   .tree-rule { align-items: flex-start; }
 }
+
+/* The school atlas: engraved seals and a separate page for the selected skill. */
+.skill-study-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; border: 1px solid #8c785249; border-radius: 5px; background: #0c1d23; overflow: hidden; }
+.skill-map-scroll { min-width: 0; overflow-x: auto; scrollbar-color: #8d7952 #102126; background: radial-gradient(ellipse at 40% 45%, #59765b20, transparent 65%), repeating-linear-gradient(0deg, transparent 0 39px, #a5bda504 39px 40px), repeating-linear-gradient(90deg, transparent 0 39px, #a5bda504 39px 40px), linear-gradient(130deg, #1c3031, #10232a); }
+.skill-map-caption { display: flex; justify-content: space-between; gap: 20px; padding: 20px 22px; color: #b8a575; font-size: 9px; letter-spacing: .13em; white-space: nowrap; }
+.skill-map-caption > span:last-child { color: #94a69b; letter-spacing: 0; }
+.skill-grimoire .skill-graph { display: flex; flex-direction: row; align-items: stretch; gap: 68px; width: max-content; min-width: 100%; min-height: 470px; padding: 16px 30px 40px; }
+.skill-grimoire .skill-tree-stage { display: flex; flex-direction: column; justify-content: space-around; align-items: center; gap: 32px; width: 145px; flex: 0 0 145px; padding-top: 32px; }
+.skill-stage-label { position: absolute; top: 0; color: #8d9d8e; font-size: 8px; letter-spacing: .2em; }
+.skill-map-branch { position: relative; z-index: 1; width: 145px; padding: 12px 3px; border-top: 1px solid #b59b5b26; border-bottom: 1px solid #b59b5b26; background: linear-gradient(90deg, transparent, #15292be8 15% 85%, transparent); }
+.skill-map-branch h4 { margin: 0 0 18px; text-align: center; color: #b7b9a2; font-size: 13px; font-weight: normal; }
+.skill-map-seals { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+.skill-grimoire .skill-seal { display: flex; flex-direction: column; align-items: center; gap: 11px; width: 130px; padding: 6px; border: 0; background: transparent; box-shadow: none; color: #a3b0a4; }
+.skill-seal-icon { position: relative; display: block; border-radius: 50%; }
+.skill-seal .skill-emblem { width: 60px; height: 60px; border-radius: 50%; border: 2px solid #66716a; background: radial-gradient(circle at 40% 30%, #354848, #101e25 80%); box-shadow: inset 0 0 0 4px #0b1c21, 0 0 0 1px #0a171b, 0 5px 12px #0008; }
+.skill-seal .skill-emblem::before, .skill-seal .skill-emblem::after { display: none; }
+.skill-seal.locked .skill-emblem { filter: saturate(.35); opacity: .65; }
+.skill-seal.available .skill-emblem { border-color: #c4a46b; box-shadow: inset 0 0 0 4px #13272a, 0 0 16px #c3a05720; }
+.skill-seal.learned .skill-emblem { border-color: #84c5ac; background: radial-gradient(circle at 40% 30%, #365e50, #10272b 80%); }
+.skill-seal.selected .skill-seal-icon { outline: 2px solid #f0d293; outline-offset: 5px; box-shadow: 0 0 25px #e5bd5f30; }
+.skill-seal.selected .skill-seal-name { color: #f1d8a2; }
+.skill-seal:hover .skill-emblem { border-color: #eed49b; }
+.skill-seal:focus-visible { outline: 2px solid #e9cf91; outline-offset: 4px; border-radius: 5px; }
+.skill-seal-rank { position: absolute; bottom: -5px; right: -8px; font-size: 9px; color: #e5d5ad; padding: 3px 5px; background: #102328; border: 1px solid #8d7952; border-radius: 3px; }
+.skill-seal-name { font-family: Georgia, serif; font-size: 13px; line-height: 1.4; text-align: center; }
+.skill-grimoire .skill-tree-connections { max-width: none; }
+.skill-tree-connections path { stroke: #71817580; stroke-dasharray: none; stroke-width: 1.5; }
+.skill-inspector { min-width: 0; padding: 20px; border-left: 1px solid #9c83524d; background: linear-gradient(145deg, #263635, #102229 75%); box-shadow: -8px 0 22px #0002; }
+.skill-inspector-label { display: flex; justify-content: space-between; align-items: center; color: #bba574; font-size: 9px; letter-spacing: .17em; padding: 0 0 18px; }
+.skill-inspector-label span { font-size: 22px; }
+.skill-grimoire .skill-inspector .skill-tree-card { padding: 0; border: 0; background: transparent; box-shadow: none; }
+.skill-inspector .skill-card-heading { padding-bottom: 20px; border-bottom: 1px solid #ab91513d; }
+.skill-inspector .skill-card-heading h4 { font-size: 25px; }
+.skill-grimoire .skill-inspector .node-description { font-family: Georgia, serif; font-size: 14px; line-height: 1.85; }
+.skill-grimoire .school-introduction { padding: 16px 20px; background: linear-gradient(100deg, #30453870, #10242a); }
+.skill-grimoire .school-introduction h3 { font-size: 24px; }
+.skill-grimoire .tree-rule { padding: 13px 4px; }
+.skill-grimoire .tree-state-key { padding-bottom: 15px; }
+@media (max-width: 1100px) { .skill-study-layout { grid-template-columns: minmax(0, 1fr) 285px; } .skill-inspector { padding: 17px; } }
+@media (max-width: 800px) { .skill-study-layout { grid-template-columns: minmax(0, 1fr); } .skill-inspector { border-left: 0; border-top: 1px solid #9c83524d; } .skill-grimoire .skill-graph { min-height: 400px; padding: 16px 24px 32px; gap: 52px; } }

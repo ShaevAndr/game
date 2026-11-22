@@ -1,3 +1,5 @@
+import { StateChangesModule } from './infrastructure/updates/state-changes.module';
+import { UpdatesModule } from './modules/updates/updates.module';
 import { Module } from '@nestjs/common';
 import { CharactersModule } from './modules/characters/characters.module';
 import { CharacterCreationModule } from './modules/characters/character-creation.module';
@@ -14,5 +16,5 @@ import { PartiesModule } from './modules/parties/parties.module';
 import { WorldGatewayModule } from './modules/world-gateway/world-gateway.module';
 import { WorldCargoModule } from './modules/world-cargo/world-cargo.module';
 
-@Module({ imports: [IdentityAccessModule, ContentModule, CharactersModule, CharacterCreationModule, SkillsModule, ItemsModule, InventoryModule, CraftingModule, GatheringModule, PartiesModule, BattlesModule, ChatModule, WorldGatewayModule, WorldCargoModule] })
+@Module({ imports: [StateChangesModule, UpdatesModule, IdentityAccessModule, ContentModule, CharactersModule, CharacterCreationModule, SkillsModule, ItemsModule, InventoryModule, CraftingModule, GatheringModule, PartiesModule, BattlesModule, ChatModule, WorldGatewayModule, WorldCargoModule] })
 export class AppModule {}

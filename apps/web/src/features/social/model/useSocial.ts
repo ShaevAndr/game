@@ -1,3 +1,4 @@
+import { useLiveRefresh } from '../../../shared/model/useLiveRefresh';
 import { useEffect, useRef, useState } from 'react';
 import type { SocialAction, SocialCommand, SocialState } from '@game/core';
 import { ApiError } from '../../../shared/api/http';
@@ -11,20 +12,15 @@ export function useSocial(enabled: boolean) {
   current.current = state;
   const refresh = async (signal?: AbortSignal) => {
     const next = await socialApi.state(signal);
-    if (active.current && !signal?.aborted) setState(previous => previous && previous.revision >= next.revision ? previous : next);
+    if (active.current && !signal?.aborted) { setState(previous => previous && previous.revision >= next.revision ? previous : next); setLoadError(''); }
   };
   useEffect(() => {
     if (!enabled) return;
-    active.current = true; const controller = new AbortController(); let loading = false;
-    const load = async () => {
-      if (loading) return; loading = true;
-      try { await refresh(controller.signal); if (!controller.signal.aborted) setLoadError(''); }
-      catch (reason) { if (!controller.signal.aborted) setLoadError((reason as Error).message); }
-      finally { loading = false; }
-    };
-    void load(); const timer = setInterval(() => void load(), 5000);
-    return () => { active.current = false; controller.abort(); clearInterval(timer); };
+    active.current = true;
+    return () => { active.current = false; };
   }, [enabled]);
+  useLiveRefresh('social', enabled, refresh, reason => setLoadError(reason.message));
+
   const act = async (action: SocialAction, targetPlayerId: string) => {
     if (commandPending.current || !enabled) return;
     const signature = JSON.stringify({ action, targetPlayerId });

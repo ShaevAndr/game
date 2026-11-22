@@ -1,3 +1,4 @@
+import { useLiveRefresh } from '../../../shared/model/useLiveRefresh';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { InventoryView, Party, WorldAction, WorldCargoDocument, WorldCommandResult, WorldExpeditionView } from '@game/core';
 import { ApiError } from '../../../shared/api/http';
@@ -85,13 +86,10 @@ export function useWorld(playerId: string, characterId: string, party: Party | n
   const membership = party?.members.find(member => member.playerId === playerId)?.membershipId;
   useEffect(() => {
     mounted.current = true; setView(null); setStale(true); setReady(false);
-    const controller = new AbortController(); let loading = false;
-    const load = async () => { if (loading || sending.current) return; loading = true;
-      try { await refresh(controller.signal); } finally { loading = false; } };
-    void load(); const timer = setInterval(() => { void load(); }, 2000);
-    window.addEventListener('focus', load);
-    return () => { controller.abort(); clearInterval(timer); window.removeEventListener('focus', load); sequence.current++; };
+    return () => { sequence.current++; };
   }, [refresh, party?.id, party?.revision, membership]);
+  useLiveRefresh('world', true, refresh, reason => setLoadError(reason.message), `${party?.id}:${party?.revision}:${membership}`);
+
   useEffect(() => () => { mounted.current = false; sequence.current++; }, []);
 
   const send = async (command: PendingWorldCommand) => {
@@ -128,7 +126,7 @@ export function useWorld(playerId: string, characterId: string, party: Party | n
       if (mounted.current) setError(reason instanceof DOMException && reason.name === 'TimeoutError' ? 'Ответ задерживается. Действие сохранено; можно безопасно повторить запрос.' : (reason as Error).message);
     } finally {
       sending.current = false;
-      if (mounted.current) { setBusy(false); if (!motionApplied) { setStale(true); void refresh(); } }
+      if (mounted.current) { setBusy(false); if (!motionApplied) setStale(true); void refresh(); }
     }
   };
   useEffect(() => {

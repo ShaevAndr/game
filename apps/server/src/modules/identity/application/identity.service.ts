@@ -1,4 +1,5 @@
-import { ConflictException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { StateChanges } from '../../../shared/application/state-changes';
+import { ConflictException, Inject, Injectable, Optional, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Account, AccountLogin, AccountSession } from '@game/core';
 import { z } from 'zod';
@@ -14,7 +15,8 @@ const hash = (token: string) => createHash('sha256').update(token).digest('hex')
 export class IdentityService {
   constructor(@Inject(IdentityRepository) private readonly repository: IdentityRepository,
     @Inject(CharactersService) private readonly characters: CharactersService,
-    @Inject(SessionPresence) private readonly presence: SessionPresence) {}
+    @Inject(SessionPresence) private readonly presence: SessionPresence,
+    @Optional() @Inject(StateChanges) private readonly changes?: StateChanges) {}
   onlineCharacterIds() { return this.presence.onlineCharacterIds(Date.now()); }
   list() { return this.repository.list(); }
   async getAccount(id: string) {
@@ -49,10 +51,13 @@ export class IdentityService {
     const session = await this.authenticate(token);
     if (characterId) await this.characters.assertOwned(session.account.id, characterId);
     await this.repository.selectCharacter(hash(token), characterId, Date.now());
-    return this.authenticate(token);
+    const selected = await this.authenticate(token);
+    this.changes?.publish({ topics: ['rooms'] });
+    return selected;
   }
   async logout(token: string) {
     await this.repository.revoke(hash(token));
     await this.presence.refresh(hash(token), null, 0);
+    this.changes?.publish({ topics: ['rooms'] });
   }
 }

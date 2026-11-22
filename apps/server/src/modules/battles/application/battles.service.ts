@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { StateChanges } from '../../../shared/application/state-changes';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Optional, NotFoundException } from '@nestjs/common';
 import { randomInt, randomUUID } from 'node:crypto';
 import { ArenaChallenge, Battle, BattleFrame, DEFAULT_TURN_SECONDS, applyAction, battleBelt, characterFighter, commandSchema, createBattleSchema, expireMatchedTurn, joinBattle, joinBattleSchema, newBattle, runNpcTurns, startBattle } from '@game/core';
 import { z } from 'zod';
@@ -33,6 +34,7 @@ export class BattlesService {
     @Inject(InventoryService) private readonly inventory: InventoryService,
     @Inject(BattleRuntime) private readonly runtime: BattleRuntime,
     @Inject(IdentityService) private readonly identity: IdentityService,
+    @Optional() @Inject(StateChanges) private readonly changes?: StateChanges,
   ) {}
 
   async list() { return this.repository.list(await this.identity.onlineCharacterIds()); }
@@ -49,6 +51,7 @@ export class BattlesService {
     const battle = domainAction(() => newBattle(randomUUID(), input.name, input.kind, input.rule, character, content, input.battlefield, this.battlefield));
     await this.repository.create(battle);
     this.events.publish(battle);
+    this.changes?.publish({ topics: ['rooms'] });
     return battle;
   }
 
@@ -60,7 +63,12 @@ export class BattlesService {
       if (!row) return; // A retry after a committed cancellation is safe.
       if (row.battle.fighters[0]?.characterId !== characterId) throw new ForbiddenException('Отменить комнату может только её создатель');
       if (row.battle.status !== 'waiting') throw new ConflictException('Бой уже начался. Отменить комнату нельзя');
+      const participant = row.battle.fighters[0]!.characterId!;
+      const arena = await this.repository.arenaState(participant, context);
+      this.changes?.publish({ topics: ['arena'], characterIds: [participant, ...arena.incoming.map(offer => offer.challengerId)] }, context);
       await this.repository.removeRoom(id, context);
+      context.afterCommit?.(() => this.events.removed(id));
+      this.changes?.publish({ topics: ['rooms'] }, context);
     });
   }
 
@@ -100,6 +108,10 @@ export class BattlesService {
       state.version = row.version + 1;
       await this.repository.save(state, context);
       if (finished) await this.history.stage(state, context);
+      if (previousStatus !== state.status || previousStatus === 'waiting' || state.fighters.some(fighter => fighter.surrendered)) {
+        this.changes?.publish({ topics: ['rooms'] }, context);
+        this.changes?.publish({ topics: ['arena'], characterIds: state.fighters.filter(fighter => !fighter.npc).map(fighter => fighter.id) }, context);
+      }
       return { battle: state, changed: true };
     });
     if (result.changed) this.events.publish(result.battle);
@@ -146,7 +158,14 @@ export class BattlesService {
     }
     state.turnDurationSeconds = DEFAULT_TURN_SECONDS;
     domainAction(() => startBattle(state, () => this.runtime.random()));
-    await this.repository.cancelChallenges(state.fighters.filter(f => !f.npc).map(f => f.id), context);
+    const participants = state.fighters.filter(f => !f.npc).map(f => f.id);
+    const affected = new Set(participants);
+    for (const participant of participants) {
+      const arena = await this.repository.arenaState(participant, context);
+      for (const offer of [...arena.incoming, ...arena.outgoing]) { affected.add(offer.challengerId); affected.add(offer.recipientId); }
+    }
+    await this.repository.cancelChallenges(participants, context);
+    this.changes?.publish({ topics: ['arena'], characterIds: [...affected] }, context);
   }
 
   async arenaState(characterId: string) {
@@ -176,6 +195,7 @@ export class BattlesService {
         challengerId: characterId, challengerName: character.name, recipientId: host.characterId,
         recipientName: host.name, status: 'pending', createdAt: new Date(this.runtime.now()).toISOString() };
       await this.repository.saveChallenge(offer, context);
+      this.changes?.publish({ topics: ['arena'], characterIds: [offer.challengerId, offer.recipientId] }, context);
       return offer;
     });
   }
@@ -204,6 +224,7 @@ export class BattlesService {
       if (offer.recipientId !== characterId && offer.challengerId !== characterId) throw new ForbiddenException('Это чужой вызов');
       if (offer.status === 'pending') await this.repository.saveChallenge({ ...offer,
         status: offer.recipientId === characterId ? 'declined' : 'cancelled' }, context);
+      this.changes?.publish({ topics: ['arena'], characterIds: [offer.challengerId, offer.recipientId] }, context);
     });
   }
 

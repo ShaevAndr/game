@@ -30,6 +30,8 @@ export class BattlesGateway extends BattleEvents {
     return { ok: true };
   }
 
+  removed(id: string) { this.server?.to(id).emit('battle.removed', { id }); }
+
   publish(battle: Battle) {
     try { this.server?.to(battle.id).emit('battle', battleView(battle)); }
     catch { this.logger.warn(`Battle ${battle.id}: realtime delivery failed; snapshot is available via REST`); }

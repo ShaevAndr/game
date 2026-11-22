@@ -1,4 +1,4 @@
-import { Injectable, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import { Kysely, Migrator, PostgresDialect, Transaction } from 'kysely';
 import { Pool } from 'pg';
 import { TransactionContext, UnitOfWork } from '../../shared/application/unit-of-work';
@@ -19,12 +19,17 @@ export class Database extends UnitOfWork implements OnModuleInit, OnApplicationS
     return session;
   }
 
-  run<T>(work: (context: TransactionContext) => Promise<T>): Promise<T> {
-    return this.sql.transaction().execute(async transaction => {
-      const context: TransactionContext = { id: Symbol('transaction') };
+  async run<T>(work: (context: TransactionContext) => Promise<T>): Promise<T> {
+    const effects: (() => void)[] = [];
+    const result = await this.sql.transaction().execute(async transaction => {
+      const context: TransactionContext = { id: Symbol('transaction'), afterCommit: effect => effects.push(effect) };
       this.sessions.set(context, transaction);
       try { return await work(context); } finally { this.sessions.delete(context); }
     });
+    for (const effect of effects) {
+      try { effect(); } catch { new Logger(Database.name).warn('Post-commit notification failed; transaction remains committed'); }
+    }
+    return result;
   }
 
   async onModuleInit() {

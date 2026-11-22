@@ -25,13 +25,14 @@ export function useChat(session: AccountSession, enabled: boolean, visibilityRev
 
   useEffect(() => {
     if (!enabled) { setConnected(false); return; }
-    let cancelled = false, pending = false, again = false, olderPending = false;
+    let cancelled = false, pending = false, again = false, olderPending = false, subscribed = false;
     let after = '', before = '';
     const controller = new AbortController();
     setLoading(true); setMessages([]); setFeedPartyAccess(null); setHasOlder(false); setLoadingOlder(false); setFeedError('');
     const update = (incoming: ChatMessage[]) => { if (!cancelled) setMessages(current => merge(current, incoming)); };
     const load = async (): Promise<void> => {
       if (cancelled) return;
+      if (document.hidden) { again = true; return; }
       if (pending) { again = true; return; }
       pending = true;
       try {
@@ -55,7 +56,7 @@ export function useChat(session: AccountSession, enabled: boolean, visibilityRev
         pending = false;
         if (!cancelled) {
           setLoading(false);
-          if (again) { again = false; void load(); }
+          if (again && !document.hidden) { again = false; void load(); }
         }
       }
     };
@@ -77,18 +78,21 @@ export function useChat(session: AccountSession, enabled: boolean, visibilityRev
     socket.on('connect', () => {
       socket.timeout(5000).emit('subscribe', (failure: Error | null, result?: { ok?: boolean; error?: string }) => {
         if (cancelled) return;
-        setConnected(!failure && !!result?.ok);
+        subscribed = !failure && !!result?.ok;
+        setConnected(subscribed);
         void load();
       });
     });
     socket.on('message.created', () => { void load(); });
-    socket.on('disconnect', () => { if (!cancelled) setConnected(false); });
-    socket.on('connect_error', () => { if (!cancelled) setConnected(false); });
+    socket.on('disconnect', () => { subscribed = false; if (!cancelled) setConnected(false); });
+    socket.on('connect_error', () => { subscribed = false; if (!cancelled) setConnected(false); });
     void load();
     void identityApi.list(controller.signal).then(list => { if (!cancelled) setAccounts(list); }).catch(() => {});
     socket.connect();
-    const timer = setInterval(() => { void load(); }, 5000);
-    return () => { cancelled = true; controller.abort(); clearInterval(timer); socket.removeAllListeners(); socket.disconnect(); older.current = async () => {}; };
+    const resume = () => { if (!document.hidden) void load(); };
+    window.addEventListener('focus', resume); document.addEventListener('visibilitychange', resume);
+    const timer = setInterval(() => { if (!subscribed && !document.hidden) void load(); }, 30_000);
+    return () => { cancelled = true; controller.abort(); clearInterval(timer); window.removeEventListener('focus', resume); document.removeEventListener('visibilitychange', resume); socket.removeAllListeners(); socket.disconnect(); older.current = async () => {}; };
   }, [session.account.id, enabled, view, visibilityRevision, partyAccess]);
 
   const chooseRecipient = (id: string) => { setRecipientId(id); setView('direct'); setOpen(true); };

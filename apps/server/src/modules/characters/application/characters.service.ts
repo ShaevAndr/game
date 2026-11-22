@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { StateChanges } from '../../../shared/application/state-changes';
+import { BadRequestException, ForbiddenException, Inject, Injectable, Optional, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Character, Content, createCharacter, createCharacterSchema, normalizeCharacter, projectCharacterAttributes } from '@game/core';
 import { TransactionContext } from '../../../shared/application/unit-of-work';
@@ -10,6 +11,7 @@ export class CharactersService {
   constructor(
     @Inject(CharactersRepository) private readonly repository: CharactersRepository,
     @Inject(ContentService) private readonly content: ContentService,
+    @Optional() @Inject(StateChanges) private readonly changes?: StateChanges,
   ) {}
 
   async list(accountId?: string) {
@@ -30,6 +32,7 @@ export class CharactersService {
     catch (error) { throw new BadRequestException((error as Error).message); }
     character.accountId = accountId;
     await this.repository.create(character, context);
+    this.changes?.publish({ topics: ['characters'], accountIds: [accountId] }, context);
     return character;
   }
 
@@ -51,6 +54,7 @@ export class CharactersService {
     change(character);
     Object.assign(character, projectCharacterAttributes(character, content));
     await this.repository.save(character, context);
+    if (character.accountId) this.changes?.publish({ topics: ['characters', 'world'], accountIds: [character.accountId] }, context);
     return character;
   }
 }

@@ -22,7 +22,7 @@ export function SkillTree({ character, content, busy, onLearn, onUpgrade }: Skil
     <section role="tabpanel" id={`school-panel-${element}`} aria-labelledby={`school-tab-${element}`} tabIndex={0} className={`skill-school-panel school-${element}`}>
       <div className="school-introduction"><SkillEmblem element={element} icon={current.icon}/><div><h3>{current.title}</h3><p>{current.motto}</p></div><div className="school-mastery"><b>{learned}<span> / {skills.length}</span></b><small>навыков изучено</small></div></div>
       <div className="tree-rule"><span aria-hidden="true">◇</span><p>Изучи <strong>любой один навык</strong> предыдущего узла, чтобы открыть следующий. Соседние навыки можно выбирать независимо. Уровень героя, характеристики и очки также учитываются.</p></div>
-      {character && learnedIds.length === 0 && <p className="grimoire-empty-note">Начни с верхнего узла. Все пять школ открыты для изучения; выбирать только одну не обязательно.</p>}
+      {character && learnedIds.length === 0 && <p className="grimoire-empty-note">Начни с узла «Исток» слева. Все пять школ открыты для изучения; выбирать только одну не обязательно.</p>}
       <div className="tree-state-key"><span><i className="key-learned"/>Изучено</span><span><i className="key-available"/>Можно изучить</span><span><i className="key-locked"/>Нужны требования</span></div>
       <SkillGraph character={character} content={content} busy={busy} onLearn={onLearn} onUpgrade={onUpgrade}
         element={element} learnedIds={learnedIds}/>

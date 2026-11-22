@@ -1,4 +1,5 @@
-import { ConflictException, ForbiddenException, HttpException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { StateChanges } from '../../../shared/application/state-changes';
+import { ConflictException, ForbiddenException, HttpException, Inject, Injectable, Logger, Optional, NotFoundException, ServiceUnavailableException, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { canonicalJson, normalizedWorldCommandSchema, publicWorldStartSchema, worldIdSchema, type AccountSession, type Party, type WorldIdentity, cargoOfferSchema } from '@game/core';
 import { UnitOfWork } from '../../../shared/application/unit-of-work';
@@ -26,7 +27,8 @@ export class WorldGatewayService implements OnModuleInit, OnModuleDestroy {
   constructor(@Inject(UnitOfWork) private readonly transactions: UnitOfWork,
     @Inject(PartiesService) private readonly parties: PartiesService, @Inject(InventoryService) private readonly inventory: InventoryService,
     @Inject(ContentService) private readonly content: ContentService, @Inject(CharactersService) private readonly characters: CharactersService,
-    @Inject(WorldJournalService) private readonly journal: WorldJournalService, @Inject(WorldRemote) private readonly remote: WorldRemote, @Inject(WorldCargoService) private readonly cargo: WorldCargoService) {}
+    @Inject(WorldJournalService) private readonly journal: WorldJournalService, @Inject(WorldRemote) private readonly remote: WorldRemote, @Inject(WorldCargoService) private readonly cargo: WorldCargoService,
+    @Optional() @Inject(StateChanges) private readonly changes?: StateChanges) {}
   private enabled() {
     if (this.stopping) throw new ServiceUnavailableException('Сервер завершает работу');
     if (!this.remote.enabled()) throw new ServiceUnavailableException('Сервис мира не настроен');
@@ -153,6 +155,10 @@ export class WorldGatewayService implements OnModuleInit, OnModuleDestroy {
           if (payload.kind === 'action' && payload.request.tool)
             await this.inventory.releaseWorldTool(entry.delivery.id, payload.request.tool.ownerCharacterId, context);
           await this.journal.complete(entry, result, context);
+          const party = payload.party;
+          this.changes?.publish({ topics: ['world'], accountIds: [...new Set([
+            ...(party?.members.map(member => member.playerId) ?? []), ...(entry.playerId ? [entry.playerId] : []),
+          ])] }, context);
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'World delivery failed';

@@ -88,6 +88,7 @@ function fixture(kind: 'duel' | 'bot' = 'duel', battlefield: BattlefieldOptions 
   battles.hasActiveCharacter = async id => Object.values(state.battles).some(row => row.data.status === 'active' && row.data.fighters.some(f => f.characterId === id));
   battles.lockMatchmaking = async () => {};
   battles.cancelChallenges = async () => {};
+  battles.arenaState = async () => ({ incoming: [], outgoing: [], activeBattleId: null });
   let time = 100000;
   battles.expired = async now => Object.values(state.battles).filter(row => row.data.status === 'active' && row.data.turnDeadlineAt !== undefined && row.data.turnDeadlineAt <= now).map(row => row.data.id);
   const inventory = { state: async (ownerId: string) => ({ ownerId, inventories: [], items: [] }) } as unknown as InventoryService;

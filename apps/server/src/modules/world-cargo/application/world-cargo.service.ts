@@ -1,4 +1,5 @@
-import { ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
+import { StateChanges } from '../../../shared/application/state-changes';
+import { ConflictException, ForbiddenException, Inject, Injectable, Logger, Optional, NotFoundException, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { canonicalJson, cargoOfferSchema, cargoManifestIdSchema, publicCargoClaimSchema, worldIdSchema, type AccountSession, type CargoOffer, type CargoImportResult, type CargoImportProof } from '@game/core';
 import { UnitOfWork, type TransactionContext } from '../../../shared/application/unit-of-work';
@@ -16,7 +17,8 @@ export class WorldCargoService implements OnModuleInit, OnModuleDestroy {
   constructor(@Inject(UnitOfWork) private readonly transactions: UnitOfWork, @Inject(WorldCargoRepository) private readonly repository: WorldCargoRepository,
     @Inject(InventoryService) private readonly inventory: InventoryService, @Inject(ContentService) private readonly content: ContentService,
     @Inject(CharactersService) private readonly characters: CharactersService, @Inject(WorldJournalService) private readonly journal: WorldJournalService,
-    @Inject(MessageBus) private readonly bus: MessageBus) {}
+    @Inject(MessageBus) private readonly bus: MessageBus,
+    @Optional() @Inject(StateChanges) private readonly changes?: StateChanges) {}
   async accept(raw: unknown): Promise<CargoImportResult> {
     const offer = cargoOfferSchema.parse(raw), manifest = offer.manifest;
     if (hash(manifest) !== offer.hash) throw new ConflictException('Хэш груза не совпадает с документом');
@@ -38,11 +40,14 @@ export class WorldCargoService implements OnModuleInit, OnModuleDestroy {
     const identity = { manifestId: manifest.id, worldId: manifest.worldId, playerId: manifest.playerId, characterId: manifest.characterId, hash: digest };
     if (!result.received) {
       const available: CargoImportResult = { ...identity, status: 'available', reason: result.reason.slice(0, 1000) };
-      await this.repository.result(manifest.id, available, context); return available;
+      await this.repository.result(manifest.id, available, context);
+      this.changes?.publish({ topics: ['world'], accountIds: [manifest.playerId] }, context);
+      return available;
     }
     const proof: CargoImportProof = { ...identity, status: 'imported', importedAt: new Date().toISOString() };
     await this.repository.result(manifest.id, proof, context);
     await this.repository.acknowledge(proof, context);
+    this.changes?.publish({ topics: ['world', 'characters'], accountIds: [manifest.playerId] }, context);
     return proof;
   }
   async claim(session: AccountSession, manifestId: string, raw: unknown) {

@@ -33,11 +33,13 @@ export function useBattle(roomId: string, onError: (message: string) => void) {
     if (!roomId) return;
     let cancelled = false;
     let pending = false;
+    let subscribed = false;
     let reloadRequested = false;
     const controller = new AbortController();
     const socket = io({ autoConnect: false, auth: { token: getSessionToken() } });
     const load = async (afterSubscription = false) => {
       if (cancelled) return;
+      if (document.hidden) { reloadRequested = true; return; }
       if (pending) { reloadRequested ||= afterSubscription; return; }
       pending = true;
       try { const battle = await battlesApi.get(roomId, controller.signal); if (!cancelled) updateBattle(battle); }
@@ -49,31 +51,35 @@ export function useBattle(roomId: string, onError: (message: string) => void) {
       }
       finally {
         pending = false;
-        if (reloadRequested && !cancelled) { reloadRequested = false; void load(); }
+        if (reloadRequested && !cancelled && !document.hidden) { reloadRequested = false; void load(); }
       }
     };
     const receive = (battle: Battle) => { if (!cancelled) updateBattle(battle); };
     socket.on('battle', receive);
+    socket.on('battle.removed', (event: { id?: string }) => { if (!cancelled && event?.id === roomId) setMissingRoomId(roomId); });
     socket.on('connect', () => {
       if (cancelled) return;
-      setConnected(true);
       socket.timeout(5000).emit('watch', roomId, (error: Error | null, result: { ok?: boolean; error?: string }) => {
         if (cancelled) return;
+        subscribed = !error && !!result?.ok;
+        setConnected(subscribed);
         if (error || !result?.ok) { setConnected(false); onError(result?.error ?? 'Не удалось подписаться на бой'); }
         void load(true);
       });
     });
-    socket.on('disconnect', () => { if (!cancelled) setConnected(false); });
-    socket.on('connect_error', () => { if (!cancelled) setConnected(false); });
+    socket.on('disconnect', () => { subscribed = false; if (!cancelled) setConnected(false); });
+    socket.on('connect_error', () => { subscribed = false; if (!cancelled) setConnected(false); });
     // Initial REST loading never waits for a working WebSocket connection.
     void load();
     socket.connect();
-    // Reconciliation also repairs a missed last event; all commands remain HTTP.
-    const timer = setInterval(() => { void load(); }, 5000);
+    const resume = () => { if (!document.hidden) void load(true); };
+    window.addEventListener('focus', resume); document.addEventListener('visibilitychange', resume);
+    const timer = setInterval(() => { if (!subscribed && !document.hidden) void load(); }, 30_000);
     return () => {
       cancelled = true;
       controller.abort();
       clearInterval(timer);
+      window.removeEventListener('focus', resume); document.removeEventListener('visibilitychange', resume);
       socket.emit('unwatch');
       socket.removeAllListeners();
       socket.disconnect();

@@ -19,7 +19,7 @@ export function SkillCard({ skill, content, character, busy, onLearn, onUpgrade 
     </div>
     <p className="node-description">{skill.description}</p>
     <div className="skill-card-metrics"><span title="Цена применения в бою">⚡ <b>{skill.cost}</b> энергии</span><span>◷ <b>{skill.cooldown}</b> КД</span><span>Ур. <b>{skill.learning.level}</b></span></div>
-    <details className="skill-card-details"><summary>Требования и действие <span>⌄</span></summary>
+    <details className="skill-card-details" open><summary>Требования и действие <span>⌄</span></summary>
       <ul className="skill-requirements">
         <li className={character && character.skillPoints >= skill.learning.pointCost ? 'met' : ''}>Изучение: {skill.learning.pointCost} ОН · есть {character?.skillPoints ?? '—'}</li>
         <li className={character && character.level >= skill.learning.level ? 'met' : ''}>Уровень героя: {skill.learning.level}</li>

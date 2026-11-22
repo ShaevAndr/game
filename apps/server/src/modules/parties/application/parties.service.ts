@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import { StateChanges } from '../../../shared/application/state-changes';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, Optional, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { addPartyMember, applyPartyManagement, invitationView, partyCommandSchema, PARTY_CAPACITY, PARTY_DECLINE_COOLDOWN, PARTY_INVITATION_LIMIT, PARTY_INVITATION_TTL,
   type AccountSession, type Party, type PartyChatAccess, type PartyCommandResult, type PartyInvitation, type PartyMember, type PartyState } from '@game/core';
@@ -15,14 +16,35 @@ const changed = (message = 'Группа изменилась. Обновите 
 const notAllowed = () => new ForbiddenException({ code: 'SOCIAL_NOT_ALLOWED', message: 'Действие недоступно для этого игрока' });
 
 @Injectable()
-export class PartiesService {
+export class PartiesService implements OnModuleInit, OnModuleDestroy {
+  private stopUpdates?: () => void;
+  private readonly metadataUpdates = new Set<Promise<void>>();
+  onModuleInit() {
+    this.stopUpdates = this.changes?.subscribe(change => {
+      if (!change.topics.includes('characters') || !change.accountIds?.length) return;
+      const work = this.refreshMemberMetadata(change.accountIds).catch(() => {
+        new Logger(PartiesService.name).warn('Party metadata notification failed; REST can recover the roster');
+      });
+      this.metadataUpdates.add(work); void work.finally(() => this.metadataUpdates.delete(work));
+    });
+  }
+  async onModuleDestroy() { this.stopUpdates?.(); await Promise.all(this.metadataUpdates); }
+  private async refreshMemberMetadata(accountIds: string[]) {
+    const recipients = await this.transactions.run(async context => {
+      await this.repository.lock(context);
+      const parties = await Promise.all(accountIds.map(id => this.repository.partyOf(id, context)));
+      return [...new Set(parties.flatMap(party => party?.members.map(member => member.playerId) ?? []))];
+    });
+    if (recipients.length) this.changes?.publish({ topics: ['parties'], accountIds: recipients });
+  }
   constructor(@Inject(UnitOfWork) private readonly transactions: UnitOfWork,
     @Inject(PartiesRepository) private readonly repository: PartiesRepository,
     @Inject(CharactersService) private readonly characters: CharactersService,
     @Inject(IdentityService) private readonly identity: IdentityService,
     @Inject(SocialService) private readonly social: SocialService,
     @Inject(PartyClock) private readonly clock: PartyClock,
-    @Inject(WorldJournalService) private readonly worlds: WorldJournalService) {}
+    @Inject(WorldJournalService) private readonly worlds: WorldJournalService,
+    @Optional() @Inject(StateChanges) private readonly changes?: StateChanges) {}
 
   /** Keeps the party lock through admission; session selection never silently changes the party hero. */
   async worldAccess(session: AccountSession, context: TransactionContext, createSolo = false): Promise<Party> {
@@ -34,6 +56,7 @@ export class PartiesService {
       party = { id: randomUUID(), revision: 1, leaderPlayerId: session.account.id, members: [{ playerId: session.account.id,
         characterId: hero.id, membershipId: randomUUID(), characterName: hero.name, level: hero.level, joinedAt: this.clock.now() }] };
       await this.repository.save(party, context);
+      this.changes?.publish({ topics: ['parties'], accountIds: [session.account.id] }, context);
     }
     if (!party) throw new ForbiddenException('Вы не состоите в группе экспедиции');
     return party;
@@ -66,7 +89,7 @@ export class PartiesService {
     const [players, initialInvitations] = await Promise.all([this.identity.list(), this.repository.invitationsFor(playerId, this.clock.now())]);
     return this.transactions.run(async context => {
       // Lock social participants before the graph. Invitations arriving after this
-      // preliminary read are withheld until the next poll if their policy is unknown.
+      // preliminary read are withheld until the next refresh if their policy is unknown.
       const policies = await this.social.interactionPolicies(playerId, initialInvitations.map(invitation => invitation.inviterPlayerId === playerId ? invitation.targetPlayerId : invitation.inviterPlayerId), context);
       await this.repository.lock(context);
       const now = this.clock.now(), stored = await this.repository.partyOf(playerId, context);
@@ -112,6 +135,11 @@ export class PartiesService {
       await this.repository.lock(context);
       const now = this.clock.now();
       let party = await this.repository.partyOf(playerId, context);
+      const recipients = new Set([playerId, ...(party?.members.map(member => member.playerId) ?? []),
+        ...(target ? [target.id] : []), ...(preliminary ? [preliminary.inviterPlayerId, preliminary.targetPlayerId] : [])]);
+      if (preliminary) for (const invitation of await this.repository.invitationsInParty(preliminary.partyId, now, context)) recipients.add(invitation.targetPlayerId);
+      if (party) for (const invitation of await this.repository.invitationsInParty(party.id, now, context)) recipients.add(invitation.targetPlayerId);
+      for (const invitation of await this.repository.invitationsFor(playerId, now, context)) recipients.add(invitation.inviterPlayerId);
       let changedPartyId = party?.id;
       if ((party?.id ?? null) !== command.expectedPartyId || (party?.revision ?? 0) !== command.expectedRevision) throw changed();
       const member: PartyMember = { playerId, membershipId: randomUUID(), characterId: character.id, characterName: character.name, level: character.level, joinedAt: now };
@@ -171,6 +199,8 @@ export class PartiesService {
       if (changedPartyId) await this.worlds.partyChanged(changedPartyId, await this.repository.party(changedPartyId, context), context);
       const result: PartyCommandResult = { party, ...(invitationId ? { invitationId } : {}), replayed: false };
       await this.repository.complete(playerId, command.operationId, result, context);
+      for (const member of party?.members ?? []) recipients.add(member.playerId);
+      this.changes?.publish({ topics: ['parties', 'world'], accountIds: [...recipients] }, context);
       return result;
     });
   }

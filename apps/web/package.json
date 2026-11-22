@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --require tsx/cjs --eval \"require('./tests/world.test.cts')\"",
     "test:browser": "pnpm build && node --require tsx/cjs --eval \"require('./tests/world.browser.cts')\"",
-    "test:ui": "pnpm build && node --require tsx/cjs --eval \"require('./tests/fantasy.browser.cts')\""
+    "test:ui": "pnpm build && node --require tsx/cjs --eval \"require('./tests/fantasy.browser.cts')\"",
+    "test:updates": "pnpm build && node --require tsx/cjs --eval \"require('./tests/updates.browser.cts')\""
   },
   "dependencies": {
     "@babylonjs/core": "6.49.0",

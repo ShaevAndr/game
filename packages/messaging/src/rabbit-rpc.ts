@@ -17,6 +17,7 @@ export class RabbitRpc {
   private session?: Session;
   private opening?: Promise<Session>;
   private stopped = false;
+  private reconnectAfter = 0;
   private timer?: ReturnType<typeof setInterval>;
   private checking?: Promise<void>;
   private readonly handlers = new Map<string, { producer: MessagePeer; handle: MessageHandler }>();
@@ -70,6 +71,9 @@ export class RabbitRpc {
     if (this.stopped || !this.enabled()) throw new MessageFailure('RabbitMQ transport is not configured');
     if (this.session) return this.session;
     if (this.opening) return this.opening;
+    // Socket timeouts do not cancel native DNS lookups. Avoid filling the shared
+    // worker pool with unresolved broker names while the broker is unavailable.
+    if (Date.now() < this.reconnectAfter) throw new MessageFailure('RabbitMQ reconnect delayed; retry through the durable journal');
     this.opening = this.open().finally(() => { this.opening = undefined; });
     return this.opening;
   }
@@ -112,8 +116,10 @@ export class RabbitRpc {
         this.work.add(work); void work.finally(() => this.work.delete(work));
       }, { noAck: false })).consumerTag;
       if (this.stopped) { await connection.close(); throw new MessageFailure('Transport stopped'); }
+      this.reconnectAfter = 0;
       this.session = session; return session;
     } catch {
+      this.reconnectAfter = Date.now() + 30_000;
       if (connection) await connection.close().catch(() => {});
       this.options.log?.('RabbitMQ unavailable; retrying through the durable journal');
       throw new MessageFailure('RabbitMQ unavailable');
