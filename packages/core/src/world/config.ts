@@ -33,13 +33,18 @@ export const worldCatalogSchema = z.object({
   toolClasses: z.array(z.object({ id: contentId, name: z.string().min(1).max(80) }).strict()).min(1).max(64),
   foundationBlockId: contentId,
   blocks: z.array(z.object({
-    id: contentId, name: z.string().min(1).max(80), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), maxHp: positive.max(1000000).optional(), harvest: harvestSchema.optional(),
+    id: contentId, name: z.string().min(1).max(80), color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    maxHp: positive.max(1000000).optional(), liquid: z.literal(true).optional(), harvest: harvestSchema.optional(),
   }).strict()).min(1).max(256),
   biomes: z.array(z.object({
     id: contentId, name: z.string().min(1).max(80), weight: positive.max(10000),
     surfaceBlockId: contentId, soilBlockId: contentId, stoneBlockId: contentId,
     trees: z.array(z.object({ trunkBlockId: contentId, crownBlockId: contentId, height: positive.max(8) }).strict()).max(32),
     veins: z.array(z.object({ blockId: contentId, minDepth: positive.max(64), maxDepth: positive.max(64), chanceBps: bps }).strict()).max(32),
+    relief: z.object({
+      waterBlockId: contentId, sandBlockId: contentId, clayBlockId: contentId,
+      graniteBlockId: contentId, snowBlockId: contentId, screeBlockId: contentId,
+    }).strict().optional(),
   }).strict()).min(1).max(64),
 }).strict();
 
@@ -51,6 +56,7 @@ export const worldActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('move'), frames: z.array(worldInputFrameSchema).min(1).max(4) }).strict(),
   z.object({ type: z.literal('harvest'), position: voxelPositionSchema, toolInstanceId: z.string().uuid() }).strict(),
   z.object({ type: z.literal('build'), position: voxelPositionSchema, recipeId: contentId }).strict(),
+  z.object({ type: z.literal('fill'), position: voxelPositionSchema }).strict(),
   z.object({ type: z.literal('collect') }).strict(),
   z.object({ type: z.literal('close') }).strict(),
 ]);
@@ -68,11 +74,13 @@ export function validateWorldCatalog(input: WorldCatalog, settingsInput: WorldSe
   const unique = (ids: string[]) => new Set(ids).size === ids.length;
   if (!unique(catalog.blocks.map(block => block.id)) || !unique(catalog.biomes.map(biome => biome.id)) || !unique(catalog.toolClasses.map(tool => tool.id))) fail('повтор ID');
   const blockIds = new Set(catalog.blocks.map(block => block.id));
+  const liquids = new Set(catalog.blocks.filter(block => block.liquid).map(block => block.id));
   const toolIds = new Set(catalog.toolClasses.map(tool => tool.id));
   const foundation = catalog.blocks.find(block => block.id === catalog.foundationBlockId);
-  if (!foundation || foundation.harvest) fail('основание должно быть неразрушаемым');
+  if (!foundation || foundation.harvest || foundation.liquid) fail('основание должно быть неразрушаемым и твёрдым');
   for (const item of items) if (item.toolClassId && !toolIds.has(item.toolClassId)) fail(`неизвестный класс ${item.toolClassId}`);
   for (const block of catalog.blocks) {
+    if (block.liquid && (block.harvest || block.maxHp)) fail(`жидкость нельзя разрушить: ${block.id}`);
     const harvest = block.harvest;
     if (!harvest) continue;
     if (!unique(harvest.allowedToolClassIds) || harvest.allowedToolClassIds.some(id => !toolIds.has(id))) fail(`классы инструмента ${block.id}`);
@@ -81,7 +89,12 @@ export function validateWorldCatalog(input: WorldCatalog, settingsInput: WorldSe
   }
   for (const biome of catalog.biomes) {
     const references = [biome.surfaceBlockId, biome.soilBlockId, biome.stoneBlockId, ...biome.trees.flatMap(tree => [tree.trunkBlockId, tree.crownBlockId]), ...biome.veins.map(vein => vein.blockId)];
-    if (references.some(id => !blockIds.has(id))) fail(`блоки биома ${biome.id}`);
+    if (biome.relief) {
+      const { waterBlockId, ...land } = biome.relief;
+      if (!liquids.has(waterBlockId)) fail(`вода биома ${biome.id}`);
+      references.push(...Object.values(land));
+    }
+    if (references.some(id => !blockIds.has(id) || liquids.has(id))) fail(`твёрдые блоки биома ${biome.id}`);
     if (biome.trees.some(tree => settings.maxGroundHeight + tree.height + 2 >= settings.regionSize.y)) fail(`деревья не помещаются в ${biome.id}`);
     if (biome.veins.some(vein => vein.minDepth > vein.maxDepth)) fail(`глубина жил ${biome.id}`);
   }

@@ -1,9 +1,8 @@
 import type { WorldCatalog, WorldSettings } from './types';
 
-/** Small initial settings; dimensions belong to the world, never to the battle grid. */
 export const defaultWorldSettings: WorldSettings = {
-  mapWidth: 5, mapDepth: 5, regionSize: { x: 16, y: 16, z: 16 }, chunkSize: { x: 8, y: 8, z: 8 },
-  blockSizeMeters: .5, minGroundHeight: 3, maxGroundHeight: 5, treeChanceBps: 800, cargoCapacity: 24,
+  mapWidth: 5, mapDepth: 5, regionSize: { x: 48, y: 28, z: 48 }, chunkSize: { x: 8, y: 8, z: 8 },
+  blockSizeMeters: .5, minGroundHeight: 4, maxGroundHeight: 20, treeChanceBps: 800, cargoCapacity: 24,
 };
 export const initialWorldCatalog: WorldCatalog = {
   toolClasses: [
@@ -49,6 +48,27 @@ export const initialWorldCatalog: WorldCatalog = {
       resourceId: 'world-leaves', resourceType: 'plant', level: 1, allowedToolClassIds: ['axe', 'sickle'],
       drops: [{ itemId: 'healing-herb', quantity: 1, chanceBps: 2500 }],
     } },
+    { id: 'water', name: 'Пресная вода', color: '#329dc4', liquid: true },
+    { id: 'sand', name: 'Прибрежный песок', color: '#d5bd82', maxHp: 40, harvest: {
+      resourceId: 'world-sand', resourceType: 'mineral', level: 1, allowedToolClassIds: ['shovel', 'pickaxe'],
+      drops: [{ itemId: 'river-sand', quantity: 1, chanceBps: 10000 }],
+    } },
+    { id: 'clay', name: 'Береговая глина', color: '#a96d53', maxHp: 50, harvest: {
+      resourceId: 'world-clay', resourceType: 'mineral', level: 1, allowedToolClassIds: ['shovel', 'pickaxe'],
+      drops: [{ itemId: 'river-clay', quantity: 1, chanceBps: 10000 }],
+    } },
+    { id: 'granite', name: 'Гранит', color: '#696d80', maxHp: 130, harvest: {
+      resourceId: 'world-granite', resourceType: 'mineral', level: 1, allowedToolClassIds: ['pickaxe'],
+      drops: [{ itemId: 'flint', quantity: 2, chanceBps: 10000 }],
+    } },
+    { id: 'scree', name: 'Каменистая осыпь', color: '#9b917f', maxHp: 55, harvest: {
+      resourceId: 'world-scree', resourceType: 'mineral', level: 1, allowedToolClassIds: ['shovel', 'pickaxe'],
+      drops: [{ itemId: 'flint', quantity: 1, chanceBps: 10000 }],
+    } },
+    { id: 'snow', name: 'Горный снег', color: '#e4edf0', maxHp: 25, harvest: {
+      resourceId: 'world-snow', resourceType: 'mineral', level: 1, allowedToolClassIds: ['shovel', 'pickaxe'],
+      drops: [{ itemId: 'snow-chunk', quantity: 1, chanceBps: 10000 }],
+    } },
   ],
   biomes: [{
     id: 'forest', name: 'Шепчущий лес', weight: 1,
@@ -58,5 +78,9 @@ export const initialWorldCatalog: WorldCatalog = {
       { trunkBlockId: 'pine-trunk', crownBlockId: 'leaves', height: 4 },
     ],
     veins: [{ blockId: 'copper-vein', minDepth: 2, maxDepth: 5, chanceBps: 1200 }],
+    relief: {
+      waterBlockId: 'water', sandBlockId: 'sand', clayBlockId: 'clay',
+      graniteBlockId: 'granite', snowBlockId: 'snow', screeBlockId: 'scree',
+    },
   }],
 };

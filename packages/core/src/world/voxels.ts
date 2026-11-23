@@ -21,6 +21,14 @@ export function worldBlockAt(region: WorldRegion, p: VoxelPosition): string | nu
   const { chunk, index } = address(region, p);
   return chunk.palette[chunk.blocks[index]];
 }
+export function isWorldLiquid(region: WorldRegion, blockId: string | null): boolean {
+  return blockId !== null && (region.liquidBlockIds?.includes(blockId) ?? false);
+}
+export function worldVoxelSolid(region: WorldRegion, p: VoxelPosition): boolean {
+  if (!insideRegion(region, p)) return true;
+  const id = worldBlockAt(region, p);
+  return id !== null && !isWorldLiquid(region, id);
+}
 /** Mutates a detached transition draft; callers must not pass the persisted input. */
 export function writeWorldBlock(region: WorldRegion, p: VoxelPosition, blockId: string | null): void {
   const { chunk, index } = address(region, p);
@@ -35,5 +43,5 @@ export function worldBlockHealth(region: WorldRegion, p: VoxelPosition, definiti
 export function canStandInWorld(region: WorldRegion, p: VoxelPosition): boolean {
   const head = { ...p, y: p.y + 1 }, support = { ...p, y: p.y - 1 };
   return insideRegion(region, p) && insideRegion(region, head) && insideRegion(region, support)
-    && worldBlockAt(region, p) === null && worldBlockAt(region, head) === null && worldBlockAt(region, support) !== null;
+    && !worldVoxelSolid(region, p) && !worldVoxelSolid(region, head) && worldVoxelSolid(region, support);
 }

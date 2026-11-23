@@ -9,11 +9,13 @@ interface Props {
 
 export function WorldLoadout({ controls, onInventory }: Props) {
   const { tool, recipe, menu, setMenu, blockType, tools, setToolId, amount, itemName,
-    recipeId, setRecipeId, canBuild } = controls;
+    recipeId, setRecipeId, canBuild, flaskCount } = controls;
   return <>
         <div className="world-hotbar" aria-label="Действия мыши">
           <div><strong><span>ЛКМ</span> Бить</strong><button className="ghost" onClick={() => setMenu('tools')} aria-label="Выбрать инструмент">{tool?.name ?? 'Выбрать инструмент'} <span>⌄</span></button></div>
-          <div><strong><span>ПКМ</span> Строить</strong><button className="ghost" onClick={() => setMenu('buildings')} aria-label="Выбрать строение" title={canBuild ? 'Выбрать строение' : 'Не хватает материалов — открой выбор строения'}>{recipe.name} <span>⌄</span></button></div>
+          <div><strong><span>ПКМ</span> {blockType?.liquid ? 'Набрать воду' : 'Строить'}</strong>{blockType?.liquid
+            ? <small>Пустых фляг в рюкзаке: {flaskCount}</small>
+            : <button className="ghost" onClick={() => setMenu('buildings')} aria-label="Выбрать строение" title={canBuild ? 'Выбрать строение' : 'Не хватает материалов — открой выбор строения'}>{recipe.name} <span>⌄</span></button>}</div>
           <button className="ghost" onClick={onInventory}>Инвентарь · I</button>
         </div>
         {menu === 'tools' && <Modal title="Выбор инструмента" onClose={() => setMenu(null)}><p className="hint">{blockType ? `Для объекта «${blockType.name}»` : 'Инструменты из основного рюкзака. Наведи прицел на объект, чтобы отфильтровать подходящие.'}</p>

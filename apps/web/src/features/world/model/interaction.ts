@@ -1,7 +1,7 @@
 import { worldBlockReachable, type WorldInputFrame } from '@game/core';
 import type { InventoryView, VoxelPosition, WorldExpeditionView } from '@game/core';
 export const voxelKey = (p: VoxelPosition) => `${p.x}:${p.y}:${p.z}`;
-export const sameVoxel = (a: VoxelPosition | null, b: VoxelPosition | null) => a === b || !!a && !!b && voxelKey(a) === voxelKey(b);
+export const sameVoxel = (a: VoxelPosition | null, b: VoxelPosition | null) => a === b || !!a && !!b && a.x === b.x && a.y === b.y && a.z === b.z;
 export function reachableBlock(origin: VoxelPosition, target: VoxelPosition, blockSizeMeters = .5) { return worldBlockReachable(origin, target, blockSizeMeters); }
 export function directionFrames(view: WorldExpeditionView, x: number, z: number, jump = false, count = 2): WorldInputFrame[] {
   const sequence = view.location?.motion?.sequence ?? 0;

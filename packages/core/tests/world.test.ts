@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {
   applyWorldCommand, canStandInWorld, worldVoxel, createVoxelWorld, defaultWorldSettings, generateWorldMap,
   generateWorldRegion, initialWorldCatalog, itemDefinitionSchema, seedContent, validateWorldCatalog,
-  resolveWorldTool, worldBlockAt, worldCommandSchema, worldSettingsSchema, worldView, writeWorldBlock,
-  type InventoryState, type ItemDefinition, type VoxelPosition, type VoxelWorld, type WorldAction, type WorldActor, type WorldTool,
+  resolveWorldTool, worldBlockAt, worldCommandSchema, worldRegionSolid, worldSettingsSchema, worldView, writeWorldBlock, waterFillingRecipe,
+  type InventoryState, type ItemDefinition, type VoxelPosition, type VoxelWorld, type WorldAction, type WorldActor, type WorldRecipePermit, type WorldTool,
 } from '../src';
 
 const actor: WorldActor = { playerId: 'player', characterId: 'hero', partyId: 'party', membershipId: 'membership', isLeader: true };
@@ -14,7 +14,8 @@ const toolId = '00000000-0000-4000-8000-000000000002';
 const axe: WorldTool = { instanceId: toolId, ownerCharacterId: actor.characterId, toolClassId: 'axe', power: 100, usedAt: 0 };
 const shovel: WorldTool = { ...axe, toolClassId: 'shovel' };
 const pickaxe: WorldTool = { ...axe, toolClassId: 'pickaxe' };
-const settings = () => ({ ...structuredClone(defaultWorldSettings), minGroundHeight: 5, maxGroundHeight: 5, treeChanceBps: 0 });
+const settings = () => ({ ...structuredClone(defaultWorldSettings), regionSize: { x: 16, y: 16, z: 16 },
+  minGroundHeight: 5, maxGroundHeight: 5, treeChanceBps: 0 });
 const gatherers = () => [actor, member].map(who => ({ playerId: who.playerId, characterId: who.characterId, xp: 0 }));
 const create = (seed = 31415) => createVoxelWorld({ id: 'world', partyId: actor.partyId, seed, catalog: initialWorldCatalog, settings: settings(), items: seedContent.items, gatherers: gatherers() });
 const command = (state: VoxelWorld, action: WorldAction, who = actor, tool?: WorldTool) =>
@@ -35,15 +36,17 @@ test('world catalog validates references, drops, classes, foundation and generat
     (catalog: typeof initialWorldCatalog) => { catalog.blocks[1].harvest!.drops[0].chanceBps = 10001; },
     (catalog: typeof initialWorldCatalog) => { catalog.blocks[1].harvest!.drops[0].quantity = 25; },
     (catalog: typeof initialWorldCatalog) => { catalog.foundationBlockId = 'soil'; },
+    (catalog: typeof initialWorldCatalog) => { catalog.foundationBlockId = 'water'; },
+    (catalog: typeof initialWorldCatalog) => { catalog.biomes[0].relief!.waterBlockId = 'stone'; },
     (catalog: typeof initialWorldCatalog) => { catalog.biomes[0].trees[0].height = 8; },
     (catalog: typeof initialWorldCatalog) => { catalog.biomes[0].veins[0].minDepth = 6; },
   ]) {
     const catalog = structuredClone(initialWorldCatalog); alter(catalog);
-    assert.throws(() => validateWorldCatalog(catalog, { ...defaultWorldSettings, regionSize: { x: 16, y: 12, z: 16 } }, seedContent.items));
+    assert.throws(() => validateWorldCatalog(catalog, defaultWorldSettings, seedContent.items));
   }
   assert.equal(worldSettingsSchema.safeParse({ ...defaultWorldSettings, regionSize: { x: 64, y: 64, z: 64 } }).success, false);
   assert.equal(worldSettingsSchema.safeParse({ ...defaultWorldSettings, minGroundHeight: 0 }).success, false);
-  assert.equal(worldSettingsSchema.safeParse({ ...defaultWorldSettings, chunkSize: { x: 32, y: 8, z: 8 } }).success, false);
+  assert.equal(worldSettingsSchema.safeParse({ ...defaultWorldSettings, chunkSize: { x: 64, y: 8, z: 8 } }).success, false);
   assert.throws(() => createVoxelWorld({ ...create(), seed: -1, items: seedContent.items }));
 });
 
@@ -108,16 +111,73 @@ test('chunks cover configurable dimensions including partial edge chunks without
   assert.throws(() => worldBlockAt(region, { x: 1.5, y: 1, z: 1 }), /пределами/);
 });
 
-test('forest generation leaves safe entry points and produces both tree species with buried veins', () => {
+test('larger forest regions have dry entries, shallow lakes, alpine peaks, scree and forest resources', () => {
   const encountered = new Set<string>();
   for (let seed = 0; seed < 12; seed++) {
     const world = createVoxelWorld({ id: 'world', partyId: 'party', seed, catalog: initialWorldCatalog, settings: defaultWorldSettings, items: seedContent.items });
     const region = command(world, { type: 'enter' }).state.regions[0];
+    assert.deepEqual(region.size, { x: 48, y: 28, z: 48 });
     assert.ok(canStandInWorld(region, region.spawn));
+    assert.equal(worldBlockAt(region, region.spawn), null);
+    const waterColumns = new Map<string, number[]>();
+    for (let z = 0; z < region.size.z; z++) for (let x = 0; x < region.size.x; x++) {
+      assert.equal(worldBlockAt(region, { x, y: 0, z }), 'bedrock');
+      for (let y = 1; y < region.size.y; y++) {
+        if (worldBlockAt(region, { x, y, z }) !== 'water') continue;
+        const key = `${x}:${z}`;
+        const water = waterColumns.get(key) ?? [];
+        water.push(y); waterColumns.set(key, water);
+      }
+    }
+    assert.ok(waterColumns.size > 120);
+    for (const depths of waterColumns.values()) {
+      assert.ok(depths.length === 1 || depths.length === 2);
+      assert.equal(depths.at(-1), defaultWorldSettings.minGroundHeight + 2);
+    }
+    const blocks = new Set(region.chunks.flatMap(chunk => chunk.palette));
+    for (const id of ['water', 'sand', 'clay', 'snow', 'granite', 'scree']) assert.ok(blocks.has(id), `seed ${seed} contains ${id}`);
     for (const chunk of region.chunks) for (const block of chunk.palette) if (block) encountered.add(block);
-    for (let z = 0; z < region.size.z; z++) for (let x = 0; x < region.size.x; x++) assert.equal(worldBlockAt(region, { x, y: 0, z }), 'bedrock');
   }
   assert.ok(encountered.has('oak-trunk')); assert.ok(encountered.has('pine-trunk')); assert.ok(encountered.has('copper-vein'));
+});
+
+test('filling a flask requires a reachable water block and a matching permit, then adds only personal cargo', () => {
+  const world = enter(), region = currentRegion(world), p = worldVoxel(world.location!.position!);
+  const water = { ...p, x: p.x + 2 }, denied = { ...water, x: p.x + 7 };
+  region.liquidBlockIds = ['water'];
+  writeWorldBlock(region, water, 'water');
+  writeWorldBlock(region, denied, 'water');
+  assert.equal(worldRegionSolid(region)(water), false);
+  const recipe = waterFillingRecipe;
+  const permit: WorldRecipePermit = { ownerCharacterId: member.characterId, recipeId: recipe.id,
+    materials: [{ ...recipe.ingredients[0], instanceId: toolId, reservationId: operationId }] };
+  const fill = (position: VoxelPosition, admission?: WorldRecipePermit) =>
+    applyWorldCommand(world, { operationId, expectedRevision: world.revision, action: { type: 'fill', position } },
+      member, undefined, undefined, admission);
+  assert.throws(() => fill(water), /зарезервированы/);
+  assert.throws(() => fill(water, { ...permit, ownerCharacterId: actor.characterId }), /зарезервированы/);
+  assert.throws(() => fill(floor(world), permit), /блок воды/);
+  assert.throws(() => fill(denied, permit), /недостижима/);
+  const wall = { ...p, x: p.x + 1 };
+  for (let y = p.y; y < p.y + 4; y++) writeWorldBlock(region, { ...wall, y }, 'stone');
+  assert.throws(() => fill(water, permit), /недостижима/);
+  for (let y = p.y; y < p.y + 4; y++) writeWorldBlock(region, { ...wall, y }, null);
+  const memberCargo = world.gatherers.find(gatherer => gatherer.characterId === member.characterId)!.cargo;
+  memberCargo.push({ itemId: 'peat', quantity: world.settings.cargoCapacity });
+  assert.throws(() => fill(water, permit), /места в грузе/);
+  memberCargo.pop();
+  const { state, outcome } = fill(water, permit);
+  assert.deepEqual(outcome.loot, [recipe.output]);
+  assert.equal(outcome.xpGained, 0);
+  assert.deepEqual(currentRegion(state), region);
+  assert.equal(state.rngState, world.rngState);
+  assert.deepEqual(worldView(state, actor).cargo, []);
+  assert.deepEqual(worldView(state, member).cargo, [recipe.output]);
+  state.location!.position = { ...water, x: water.x + .5, z: water.z + .5 };
+  const wet = worldView(state, member).region!;
+  assert.equal(wet.palette.find(block => block.id === 'water')?.liquid, true);
+  assert.ok(wet.blocks.some(block => block.blockId === 'water' && block.position.x === water.x));
+  assert.deepEqual(command(state, { type: 'collect' }, member).outcome.manifests[0].cargo, [recipe.output]);
 });
 
 test('only current leader moves the whole party and a foreign party cannot read or act', () => {

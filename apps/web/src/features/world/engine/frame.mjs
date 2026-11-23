@@ -9,7 +9,7 @@ let lastHit = 0, previousTarget = '', eyeHeight = 0, accumulator = 0, predicted,
 let inputs = [], awaiting = false, sentUntil = 0;
 const registered = new Set(), keys = new Set();
 const send = (type, data = {}) => parent.postMessage({ channel: 'game-world', type, ...data }, location.origin);
-const solid = p => projection.voxel(p) !== 0;
+const solid = p => projection.solid(p);
 const target = () => { const p = noa?.targetedBlock?.position; return p ? { x: p[0], y: p[1], z: p[2] } : null; };
 function replay() {
   if (!baseline) return;
@@ -31,8 +31,17 @@ function pause(value) {
 }
 function action(type) {
   if (!noa || paused || locked || !document.pointerLockElement || !noa.targetedBlock) return;
-  const p = type === 'build' ? noa.targetedBlock.adjacent : noa.targetedBlock.position;
-  send(type, { position: { x: p[0], y: p[1], z: p[2] } });
+  const p = target();
+  const liquid = projection.liquids.has(projection.voxel(p));
+  if (liquid) {
+    if (type === 'build') send('fill', { position: p });
+    return;
+  }
+  if (type === 'hit') send('hit', { position: p });
+  else {
+    const [x, y, z] = noa.targetedBlock.adjacent;
+    send('build', { position: { x, y, z } });
+  }
 }
 function direction() {
   if (!document.pointerLockElement) return { x: 0, z: 0 };
@@ -44,11 +53,10 @@ function direction() {
 }
 function initialize(next) {
   const p = next.position, scale = next.region.blockSizeMeters;
-  projection = projectWorldToNoa(next.region, p);
   noa = new Engine({ domElement: document.querySelector('#world'), playerStart: [p.x, p.y, p.z],
     playerWidth: worldMovementRules.widthMeters / scale, playerHeight: worldMovementRules.heightMeters / scale,
-    chunkSize: 8, chunkAddDistance: [2, 1], chunkRemoveDistance: [3, 2], blockTestDistance: worldMovementRules.reachMeters / scale + 1,
-    maxRenderRate: 60, stickyPointerLock: false, playerShadowComponent: false, clearColor: [.55, .73, .82], preventDefaults: true, silent: true,
+    chunkSize: 16, chunkAddDistance: [3, 1], chunkRemoveDistance: [4, 2], blockTestDistance: worldMovementRules.reachMeters / scale + 1,
+    maxRenderRate: 60, stickyPointerLock: false, playerShadowComponent: false, clearColor: [.58, .76, .87], preventDefaults: true, silent: true,
     bindings: {} });
   for (const component of ['receivesInputs', 'movement', 'physics']) noa.entities.removeComponent(noa.playerEntity, component);
   eyeHeight = worldMovementRules.heightMeters / scale * .9;
@@ -104,18 +112,24 @@ function initialize(next) {
 }
 function sync(next) {
   if (snapshot && next.revision < snapshot.revision) return;
-  if (!noa) initialize(next);
-  const old = projection;
-  projection = projectWorldToNoa(next.region, next.position, old.types);
-  for (const block of next.region.palette) if (!registered.has(block.id)) {
-    const rgb = block.color.match(/[a-f\d]{2}/gi).map(value => parseInt(value, 16) / 255);
-    noa.registry.registerMaterial(block.id, { color: rgb });
-    noa.registry.registerBlock(projection.types.get(block.id), { material: block.id }); registered.add(block.id);
-  }
+  next.region ??= snapshot?.region;
+  if (!next.region) return;
   if (!snapshot || next.region.revision !== snapshot.region.revision) {
-    const size = next.region.size;
-    for (let x = 0; x < size.x; x++) for (let y = 0; y < size.y; y++) for (let z = 0; z < size.z; z++) {
-      const p = { x, y, z }, value = projection.voxel(p); if (value !== old.voxel(p)) noa.setBlock(value, x, y, z);
+    const old = projection;
+    projection = projectWorldToNoa(next.region, next.position, old?.types);
+    if (!noa) initialize(next);
+    for (const block of next.region.palette) if (!registered.has(block.id)) {
+      const rgb = block.color.match(/[a-f\d]{2}/gi).map(value => parseInt(value, 16) / 255);
+      noa.registry.registerMaterial(block.id, { color: block.liquid ? [...rgb, .68] : rgb });
+      noa.registry.registerBlock(projection.types.get(block.id), { material: block.id, solid: !block.liquid, opaque: !block.liquid });
+      registered.add(block.id);
+    }
+    if (old) {
+      const size = next.region.size;
+      for (let x = 0; x < size.x; x++) for (let y = 0; y < size.y; y++) for (let z = 0; z < size.z; z++) {
+        const p = { x, y, z }, value = projection.voxel(p);
+        if (value !== old.voxel(p)) noa.setBlock(value, x, y, z);
+      }
     }
   }
   const motion = next.motion ?? createWorldMotion(next.position, solid, next.region.blockSizeMeters);

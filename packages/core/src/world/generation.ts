@@ -1,5 +1,6 @@
 import { worldSettingsSchema } from './config';
 import { worldSeed } from './random';
+import { createWorldRelief } from './relief';
 import { voxelIndex } from './voxels';
 import type { VoxelChunk, VoxelPosition, WorldCatalog, WorldCell, WorldRegion, WorldSettings } from './types';
 
@@ -29,16 +30,25 @@ export function generateWorldRegion(seed: number, map: WorldCell[], cellId: stri
   const size = settings.regionSize;
   const dense: (string | null)[] = Array(size.x * size.y * size.z).fill(null);
   const heights = new Array<number>(size.x * size.z);
+  const treeDensity = new Float32Array(size.x * size.z);
   const center = { x: Math.floor(size.x / 2), z: Math.floor(size.z / 2) };
   const heightAt = (x: number, z: number) => settings.minGroundHeight
     + worldSeed(regionSeed, `height:${x}:${z}`) % (settings.maxGroundHeight - settings.minGroundHeight + 1);
-  const spawnHeight = heightAt(center.x, center.z);
+  const reliefAt = createWorldRelief(regionSeed, settings, biome);
+  const spawnHeight = reliefAt?.(center.x, center.z).height ?? heightAt(center.x, center.z);
   const set = (p: VoxelPosition, block: string) => { dense[voxelIndex(p, size)] = block; };
   for (let z = 0; z < size.z; z++) for (let x = 0; x < size.x; x++) {
-    const height = Math.abs(x - center.x) <= 1 && Math.abs(z - center.z) <= 1 ? spawnHeight : heightAt(x, z);
-    heights[z * size.x + x] = height;
+    const isSpawn = Math.abs(x - center.x) <= 1 && Math.abs(z - center.z) <= 1;
+    const relief = isSpawn ? undefined : reliefAt?.(x, z);
+    const height = isSpawn ? spawnHeight : relief?.height ?? heightAt(x, z);
+    const column = z * size.x + x;
+    heights[column] = height;
+    treeDensity[column] = relief?.trees ?? 1;
+    const surface = relief?.surface ?? biome.surfaceBlockId;
+    const soil = relief?.soil ?? biome.soilBlockId;
+    const stone = relief?.stone ?? biome.stoneBlockId;
     for (let y = 0; y < height; y++) {
-      let block = y === 0 ? catalog.foundationBlockId : y === height - 1 ? biome.surfaceBlockId : y === height - 2 ? biome.soilBlockId : biome.stoneBlockId;
+      let block = y === 0 ? catalog.foundationBlockId : y === height - 1 ? surface : y === height - 2 ? soil : stone;
       if (y > 0 && y < height - 2) {
         // Each eligible entry has an independent roll; the first successful vein owns this block.
         const depth = height - 1 - y;
@@ -48,15 +58,23 @@ export function generateWorldRegion(seed: number, map: WorldCell[], cellId: stri
       }
       set({ x, y, z }, block);
     }
+    if (relief && biome.relief) for (let y = height; y < relief.waterLevel; y++) {
+      set({ x, y, z }, biome.relief.waterBlockId);
+    }
   }
   for (let z = 1; z < size.z - 1; z++) for (let x = 1; x < size.x - 1; x++) {
     if (!biome.trees.length || (Math.abs(x - center.x) <= 2 && Math.abs(z - center.z) <= 2)
-      || worldSeed(regionSeed, `tree:${x}:${z}`) % 10000 >= settings.treeChanceBps) continue;
+      || worldSeed(regionSeed, `tree:${x}:${z}`) % 10000 >= settings.treeChanceBps * treeDensity[z * size.x + x]) continue;
     const tree = biome.trees[worldSeed(regionSeed, `species:${x}:${z}`) % biome.trees.length];
     const ground = heights[z * size.x + x];
     const crownY = ground + tree.height;
     const crown: VoxelPosition[] = [];
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) crown.push({ x: x + dx, y: crownY, z: z + dz });
+    if (reliefAt) {
+      crown.push({ x, y: crownY + 1, z });
+      if (tree.height <= 3) crown.push({ x: x - 1, y: crownY + 1, z }, { x: x + 1, y: crownY + 1, z },
+        { x, y: crownY + 1, z: z - 1 }, { x, y: crownY + 1, z: z + 1 });
+    }
     const trunk = Array.from({ length: tree.height }, (_, dy) => ({ x, y: ground + dy, z }));
     if ([...trunk, ...crown].some(p => p.y >= size.y || dense[voxelIndex(p, size)] !== null)) continue;
     for (const p of trunk) set(p, tree.trunkBlockId);
@@ -81,5 +99,6 @@ export function generateWorldRegion(seed: number, map: WorldCell[], cellId: stri
   return {
     cellId, seed: regionSeed, revision: 0, size: { ...size }, chunkSize: { ...chunkSize },
     spawn: { ...center, y: spawnHeight }, chunks,
+    ...(reliefAt && biome.relief ? { liquidBlockIds: [biome.relief.waterBlockId] } : {}),
   };
 }

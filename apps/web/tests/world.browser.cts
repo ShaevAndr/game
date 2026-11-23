@@ -6,7 +6,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { applyWorldCommand, createCharacter, createVoxelWorld, defaultWorldSettings, initialWorldCatalog, seedContent, worldView, writeWorldBlock,
-  type Party, type VoxelWorld, type WorldCommand, type WorldCommandResult, type WorldCargoDocument, type WorldActor, worldBuildingRecipes, worldVoxel } from '@game/core';
+  type Party, type VoxelWorld, type WorldCommand, type WorldCommandResult, type WorldCargoDocument, type WorldActor, findWorldRecipe, waterFillingRecipe, worldVoxel } from '@game/core';
 
 // Real Chromium/WebGL and the full application; the API fixture uses the shared pure world rules.
 // PostgreSQL, authorization and RabbitMQ have separate test:world/test:cargo integration checks.
@@ -69,8 +69,11 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     if (path.endsWith('/actions') && world) {
       actions.push(body); const previous = receipts.get(body.operationId); if (previous) return send(previous, 201);
       try {
-        const transition = applyWorldCommand(world, body, actor(), body.action.type === 'harvest' ? { power: 25, usedAt: Date.now(), instanceId: body.action.toolInstanceId, ownerCharacterId: character.id, toolClassId: body.action.toolInstanceId === shovel ? 'shovel' : body.action.toolInstanceId === pickaxe ? 'pickaxe' : 'axe' } : undefined, () => true, body.action.type === 'build' ? { ownerCharacterId: character.id, recipeId: body.action.recipeId, materials: worldBuildingRecipes.find(entry => entry.id === body.action.recipeId)!.ingredients.map(cost => ({ ...cost, instanceId: randomUUID(), reservationId: randomUUID() })) } : undefined, body.action.type === 'move' ? { usedAt: Date.now() } : undefined);
+        const recipe = body.action.type === 'build' ? findWorldRecipe(body.action.recipeId) : body.action.type === 'fill' ? waterFillingRecipe : undefined;
+        if (body.action.type === 'fill' && !resources.get('clay-flask')) return send({ message: 'Нужна пустая фляга' }, 400);
+        const transition = applyWorldCommand(world, body, actor(), body.action.type === 'harvest' ? { power: 25, usedAt: Date.now(), instanceId: body.action.toolInstanceId, ownerCharacterId: character.id, toolClassId: body.action.toolInstanceId === shovel ? 'shovel' : body.action.toolInstanceId === pickaxe ? 'pickaxe' : 'axe' } : undefined, () => true, recipe ? { ownerCharacterId: character.id, recipeId: recipe.id, materials: recipe.ingredients.map(cost => ({ ...cost, instanceId: randomUUID(), reservationId: randomUUID() })) } : undefined, body.action.type === 'move' ? { usedAt: Date.now() } : undefined);
         if (body.action.type === 'build') { flint -= 4; resin--; }
+        if (body.action.type === 'fill') resources.delete('clay-flask');
         world = transition.state;
         if (body.action.type === 'enter') { const p = world.location!.position!; writeWorldBlock(world.regions.find(region => region.cellId === world!.location!.cellId)!, { ...worldVoxel(p), y: Math.floor(p.y) - 1 }, 'soil'); }
         for (const manifest of transition.outcome.manifests) {
@@ -151,6 +154,13 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     await shot('world-initial.png');
     const bounds = await canvas.boundingBox(); assert.ok(bounds);
     await canvas.click({ position: { x: bounds.width / 2, y: bounds.height * .6 } });
+    await helpFrame.waitForFunction(() => !!document.pointerLockElement);
+    await canvas.evaluate(async canvas => {
+      for (let i = 0; i < 6; i++) {
+        canvas.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, movementY: 100, bubbles: true }));
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      }
+    });
     await page.locator('.world-target > p').filter({ hasText: /^Блок / }).waitFor();
     await page.keyboard.press('Escape');
     await page.getByText(/Блоки рядом/).click();
@@ -296,6 +306,21 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     await page.mouse.down();
     try { await received('Кремень ×2').waitFor(); } finally { await page.mouse.up(); }
     assert.ok(actions.some(action => action.expectedRevision > beforeBuild && action.action.type === 'harvest')); // LMB still hits while a building is assigned.
+
+    const placement = actions.find(action => action.expectedRevision === beforeBuild && action.action.type === 'build')!.action;
+    assert.equal(placement.type, 'build');
+    if (placement.type !== 'build') throw new Error('Expected building position');
+    const pond = world!.regions.find(entry => entry.cellId === world!.location!.cellId)!;
+    writeWorldBlock(pond, placement.position, 'water'); pond.revision++; world!.revision++;
+    resources.set('clay-flask', 1);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await frame.waitForFunction(() => document.querySelector('#target-info')?.textContent?.includes('ПКМ — набрать воду'));
+    await page.getByText('Пустых фляг в рюкзаке: 1', { exact: true }).waitFor();
+    const filled = page.waitForResponse(response => response.url().endsWith('/actions') && response.request().postDataJSON()?.action.type === 'fill');
+    await page.mouse.click(0, 0, { button: 'right' }); assert.equal((await filled).status(), 201);
+    await received('Фляга с пресной водой ×1').waitFor();
+    assert.equal(resources.get('clay-flask'), undefined); assert.equal(resources.get('water-flask'), 1);
+    await frame.waitForFunction(() => document.querySelector('#target-info')?.textContent?.includes('Изготовьте пустую глиняную флягу'));
     await page.keyboard.press('Escape');
 
     await showButtons();

@@ -147,7 +147,7 @@ test('main server admits world commands against current parties and canonical re
       await call(b.token, `/item-instances/${bShovel}`, { operationId: randomUUID(), quantity: 1 }, 409, 'DELETE');
       const bag = await call<{ inventoryId: string }>(b.token, `/characters/${b.hero.id}/inventories`, { operationId: randomUUID(), name: 'Запасной рюкзак', capacity: 5 });
       await call(b.token, '/inventory-transfers', { operationId: randomUUID(), instanceId: bShovel, targetInventoryId: bag.inventoryId, quantity: 1 }, 409);
-      process.env.RABBITMQ_URL = 'amqp://game:game@127.0.0.1:1'; await main!.close(); main = undefined; main = await mainApp();
+      process.env.RABBITMQ_URL = ''; await main!.close(); main = undefined; main = await mainApp();
       assert.equal((await main!.get(Database).sql.selectFrom('inventory_world_reservations').selectAll().where('instance_id', '=', bShovel).execute()).length, 1);
       process.env.RABBITMQ_URL = rabbitUrl;
       const deadline = Date.now() + 20000;
@@ -171,6 +171,10 @@ test('main server admits world commands against current parties and canonical re
       const repository = world!.get(WorldRepository), record = (await repository.load(worldId, context))!;
       const position = { ...worldVoxel(record.state.location!.position!), x: Math.floor(record.state.location!.position!.x) + 2 };
       const region = record.state.regions.find(entry => entry.cellId === record.state.location!.cellId)!;
+      // Keep the target supported and visible for every generated terrain seed.
+      for (let x = position.x - 1; x <= position.x; x++) for (let y = position.y; y <= position.y + 3; y++)
+        writeWorldBlock(region, { x, y, z: position.z }, null);
+      writeWorldBlock(region, { ...position, y: position.y - 1 }, 'soil');
       writeWorldBlock(region, position, blockId); region.revision++;
       const revision = record.state.revision++; await repository.save(record.state, revision, context); return position;
     });
@@ -229,6 +233,41 @@ test('main server admits world commands against current parties and canonical re
       assert.equal((await main!.get(Database).sql.selectFrom('inventory_world_reservations').selectAll().execute()).length, 0);
     });
 
+    await t.test('a crafted flask fills once across redelivery and is imported into the member backpack', async () => {
+      const service = main!.get(InventoryService), position = await resource('water');
+      const count = async (id: string) => (await inventory(b)).items.filter(item => item.itemId === id).reduce((sum, item) => sum + item.quantity, 0);
+      const fill = async (p = position) => ({ operationId: randomUUID(), expectedRevision: (await state(b)).revision, action: { type: 'fill', position: p } });
+      await call(b.token, `${path}/actions`, await fill(), 400);
+      await service.receive(b.hero.id, 'river-clay', 2, randomUUID());
+      await service.receive(b.hero.id, 'peat', 1, randomUUID());
+      await call(b.token, `/characters/${b.hero.id}/crafting/recipes/craft-clay-flask/apply`, { operationId: randomUUID() });
+      assert.equal(await count('clay-flask'), 1);
+      await call(b.token, `${path}/actions`, await fill({ ...position, y: 0 }), 400);
+      assert.equal(await count('clay-flask'), 1);
+
+      const remote = main!.get(WorldRemote), deliver = remote.deliver.bind(remote), request = await fill();
+      try {
+        remote.deliver = async envelope => {
+          const result = await deliver(envelope);
+          if (envelope.payload.kind === 'action' && envelope.payload.request.command.operationId === request.operationId)
+            throw new Error('simulated lost filling reply');
+          return result;
+        };
+        await call(b.token, `${path}/actions`, request, 503);
+        assert.equal(await count('clay-flask'), 1);
+      } finally { remote.deliver = deliver; }
+      const outcome = await call<WorldCommandResult>(b.token, `${path}/actions`, request);
+      assert.deepEqual(outcome.outcome.loot, [{ itemId: 'water-flask', quantity: 1 }]);
+      assert.deepEqual(await call(b.token, `${path}/actions`, request), outcome);
+      assert.equal(await count('clay-flask'), 0);
+      const before = await state(b);
+      const collection = { operationId: randomUUID(), expectedRevision: before.revision, action: { type: 'collect' } };
+      await call(b.token, `${path}/actions`, collection);
+      await call(b.token, `${path}/actions`, collection);
+      assert.equal(await count('water-flask'), 1);
+      assert.deepEqual((await state(b)).region, before.region);
+    });
+
     await t.test('two canonical axes work by class; leadership changes preserve the altered world', async () => {
       for (const [index, blockId] of ['oak-trunk', 'pine-trunk'].entries()) {
         const position = await resource(blockId), before = await state(a);
@@ -273,19 +312,24 @@ test('main server admits world commands against current parties and canonical re
     });
 
     await t.test('character changes keep loot attached to the old hero, and disband closes the same world', async () => {
+      const position = await resource('soil'), before = await state(b);
+      await call(b.token, `${path}/actions`, { operationId: randomUUID(), expectedRevision: before.revision,
+        action: { type: 'harvest', position, toolInstanceId: bShovel } });
       const original = await state(b);
+      const previousManifests = new Set((await sealed(b)).map(manifest => manifest.id));
+      const newCargo = async () => (await sealed(b, b.hero.id)).filter(manifest => !previousManifests.has(manifest.id)).map(manifest => manifest.cargo);
       const another = await call<Character>(b.token, '/characters', { name: 'Другой герой' });
       await call(b.token, '/identity/session/character', { characterId: another.id });
       await call(b.token, path, undefined, 409);
       await call(b.token, '/world/expeditions/current', undefined, 409);
       await partyAction(b, { type: 'change-character' });
       const switched = await state(b); assert.equal(switched.xp, 0); assert.deepEqual(switched.cargo, []);
-      assert.deepEqual((await sealed(b, b.hero.id))[0].cargo, original.cargo);
+      assert.deepEqual(await newCargo(), [original.cargo]);
       await partyAction(b, { type: 'disband' });
       await main!.get(WorldGatewayService).drain(worldId);
       const record = await world!.get(WorldTransactions).run(context => world!.get(WorldRepository).load(worldId, context));
       assert.equal(record!.state.status, 'closed'); assert.deepEqual(record!.state.regions, []);
-      assert.deepEqual((await sealed(b, b.hero.id))[0].cargo, original.cargo);
+      assert.deepEqual(await newCargo(), [original.cargo]);
       await call(b.token, `${path}/actions`, { operationId: randomUUID(), expectedRevision: record!.state.revision, action: { type: 'enter' } }, 403);
     });
   } finally {

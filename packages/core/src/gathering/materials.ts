@@ -20,6 +20,10 @@ export const gatheringItems: Item[] = [
   material('water-crystal', 'Кристалл воды', 'Цельный образец для лечебных составов.'),
   material('fire-crystal', 'Кристалл огня', 'Цельный образец для огненных свитков.'),
   material('earth-crystal', 'Кристалл земли', 'Цельный образец для укрепления брони.'),
+  material('river-clay', 'Береговая глина', 'Глина для изготовления фляг.'),
+  material('clay-flask', 'Пустая глиняная фляга', 'Подойдите к пресной воде в 3D-мире и наполните флягу правой кнопкой мыши.'),
+  material('water-flask', 'Фляга с пресной водой', 'Заполненная фляга из лесной экспедиции.'),
+  material('snow-chunk', 'Комок снега', 'Снег с горных вершин.'),
   ...[
     ['woodcutting-axe', 'Топор лесоруба', 'Многоразовый инструмент для заготовки стволов.', 'axe'],
     ['herbal-sickle', 'Серп травника', 'Многоразовый инструмент для аккуратного сбора растений и коры.', 'sickle'],
@@ -41,6 +45,7 @@ export const gatheringRecipes: CraftingRecipe[] = [
   recipe('craft-crystal-chisel', 'Кристаллическое зубило', [['copper-ore', 3], ['quartz', 2], ['tree-resin', 1]], 'crystal-chisel', 1, 'blacksmith'),
   recipe('craft-digging-shovel', 'Землекопная лопата', [['oak-wood', 2], ['flint', 3]], 'digging-shovel', 1, 'blacksmith'),
   recipe('craft-copper-axe', 'Медный топор', [['oak-wood', 3], ['copper-ore', 3], ['tree-resin', 1]], 'copper-axe', 1, 'blacksmith'),
+  recipe('craft-clay-flask', 'Пустая глиняная фляга', [['river-clay', 2], ['peat', 1]], 'clay-flask'),
   recipe('weave-forest-armor', 'Плетёная лесная броня', [['wild-flax', 4], ['reed', 3], ['tree-resin', 2]], 'leather-armor'),
   recipe('forge-woodland-sword', 'Меч с сосновой рукоятью', [['iron-ore', 4], ['pine-wood', 2], ['copper-ore', 1]], 'iron-sword'),
   recipe('brew-silverleaf-potion', 'Настой серебролиста', [['silverleaf', 2], ['healing-herb', 2]], 'greater-potion'),

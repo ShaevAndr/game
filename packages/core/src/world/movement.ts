@@ -1,5 +1,5 @@
 import type { VoxelPosition, WorldPosition, WorldMotion, WorldInputFrame, WorldRegion } from './types';
-import { insideRegion, worldBlockAt } from './voxels';
+import { worldVoxelSolid } from './voxels';
 
 export const worldMovementRules = { widthMeters: .6, heightMeters: 1.8, speedMeters: 2.5, jumpMeters: 5.5,
   gravityMeters: 20, stepMeters: .5, frameMs: 50, maxFrames: 4, reachMeters: 2 } as const;
@@ -8,7 +8,7 @@ const axes = ['x', 'y', 'z'] as const;
 const epsilon = 1e-7;
 export const worldVoxel = (p: WorldPosition): VoxelPosition => ({ x: Math.floor(p.x), y: Math.floor(p.y + epsilon), z: Math.floor(p.z) });
 export const worldSpawnPosition = (p: VoxelPosition): WorldPosition => ({ x: p.x + .5, y: p.y, z: p.z + .5 });
-export const worldRegionSolid = (region: WorldRegion): WorldSolid => p => !insideRegion(region, p) || worldBlockAt(region, p) !== null;
+export const worldRegionSolid = (region: WorldRegion): WorldSolid => p => worldVoxelSolid(region, p);
 export function worldBodyBounds(p: WorldPosition, scale: number) {
   const half = worldMovementRules.widthMeters / scale / 2;
   return { min: { x: p.x - half, y: p.y, z: p.z - half }, max: { x: p.x + half, y: p.y + worldMovementRules.heightMeters / scale, z: p.z + half } };
@@ -92,7 +92,7 @@ export function worldBlockVisible(region: WorldRegion, p: WorldPosition, target:
   for (let i = 0; i < steps; i++) {
     const t = i / steps, voxel = worldVoxel({ x: eye.x + (end.x - eye.x) * t, y: eye.y + (end.y - eye.y) * t, z: eye.z + (end.z - eye.z) * t });
     if (axes.every(axis => voxel[axis] === target[axis])) return true;
-    if (!insideRegion(region, voxel) || worldBlockAt(region, voxel) !== null) return false;
+    if (worldVoxelSolid(region, voxel)) return false;
   }
   return true;
 }

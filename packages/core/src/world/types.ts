@@ -12,7 +12,7 @@ export interface WorldSettings {
 }
 export interface WorldDrop extends GatheringLoot { chanceBps: number }
 export interface WorldBlockDefinition {
-  id: string; name: string; color: string; maxHp?: number;
+  id: string; name: string; color: string; maxHp?: number; liquid?: true;
   harvest?: {
     resourceId: string; resourceType: ResourceType; level: number;
     allowedToolClassIds: string[]; drops: WorldDrop[];
@@ -23,6 +23,10 @@ export interface WorldBiome {
   surfaceBlockId: string; soilBlockId: string; stoneBlockId: string;
   trees: { trunkBlockId: string; crownBlockId: string; height: number }[];
   veins: { blockId: string; minDepth: number; maxDepth: number; chanceBps: number }[];
+  relief?: {
+    waterBlockId: string; sandBlockId: string; clayBlockId: string;
+    graniteBlockId: string; snowBlockId: string; screeBlockId: string;
+  };
 }
 export interface WorldCatalog {
   toolClasses: { id: string; name: string }[];
@@ -37,6 +41,7 @@ export interface VoxelChunk {
 export interface WorldRegion {
   cellId: string; seed: number; revision: number;
   size: VoxelPosition; chunkSize: VoxelPosition; spawn: VoxelPosition; chunks: VoxelChunk[];
+  liquidBlockIds?: string[];
   blockHealth?: Record<string, { hp: number; maxHp: number }>;
   lastHitAt?: Record<string, number>;
 }
@@ -48,7 +53,7 @@ export interface WorldActor {
 export interface WorldTool {
   instanceId: string; ownerCharacterId: string; toolClassId: string; power: number; usedAt: number;
 }
-export interface WorldBuildPermit {
+export interface WorldRecipePermit {
   ownerCharacterId: string; recipeId: string;
   materials: { instanceId: string; reservationId: string; itemId: string; quantity: number }[];
 }
@@ -68,7 +73,7 @@ export interface WorldCargoManifest {
 }
 /** Internal result for the application's atomic commit; rolls must not go to the browser. */
 export interface WorldOutcome {
-  type: 'travel' | 'enter' | 'leave' | 'move' | 'harvest' | 'build' | 'collect' | 'close';
+  type: 'travel' | 'enter' | 'leave' | 'move' | 'harvest' | 'build' | 'fill' | 'collect' | 'close';
   hit?: { damage: number; hp: number; maxHp: number; destroyed: boolean };
   success: boolean; loot: GatheringLoot[]; xpGained: number; rolls: number[];
   manifests: WorldCargoManifest[];

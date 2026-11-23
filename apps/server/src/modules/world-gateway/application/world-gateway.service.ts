@@ -1,7 +1,7 @@
 import { StateChanges } from '../../../shared/application/state-changes';
 import { ConflictException, ForbiddenException, HttpException, Inject, Injectable, Logger, Optional, NotFoundException, ServiceUnavailableException, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
-import { canonicalJson, normalizedWorldCommandSchema, publicWorldStartSchema, worldIdSchema, type AccountSession, type Party, type WorldIdentity, cargoOfferSchema } from '@game/core';
+import { canonicalJson, normalizedWorldCommandSchema, publicWorldStartSchema, worldIdSchema, type AccountSession, type Party, type WorldIdentity, cargoOfferSchema, waterFillingRecipe } from '@game/core';
 import { UnitOfWork } from '../../../shared/application/unit-of-work';
 import { PartiesService } from '../../parties/application/parties.service';
 import { InventoryService } from '../../inventory/application/inventory.service';
@@ -63,8 +63,10 @@ export class WorldGatewayService implements OnModuleInit, OnModuleDestroy {
   async execute(session: AccountSession, worldId: string, raw: unknown) {
     this.enabled(); worldId = worldIdSchema.parse(worldId);
     const command = normalizedWorldCommandSchema.parse(raw), playerId = session.account.id;
+    const { action } = command;
+    const recipeId = action.type === 'build' ? action.recipeId : action.type === 'fill' ? waterFillingRecipe.id : undefined;
     const signature = hash({ kind: 'action', worldId, playerId, command });
-    const content = command.action.type === 'harvest' || command.action.type === 'build' ? await this.content.get(true) : undefined;
+    const content = action.type === 'harvest' || recipeId ? await this.content.get(true) : undefined;
     const entry = await this.transactions.run(async context => {
       let existing = this.matching(await this.journal.operation(worldId, playerId, command.operationId, context), signature);
       if (existing) return existing;
@@ -74,12 +76,14 @@ export class WorldGatewayService implements OnModuleInit, OnModuleDestroy {
       if (existing) return existing;
       if (!registration || registration.partyId !== party.id) throw new ForbiddenException('Нет доступа к экспедиции этой группы');
       if (registration.state !== 'active') throw new ConflictException('Экспедиция завершается или уже закрыта');
-      if (command.action.type !== 'harvest' && command.action.type !== 'build' && command.action.type !== 'collect' && party.leaderPlayerId !== playerId) throw new ForbiddenException('Отрядом управляет лидер');
+      if (action.type !== 'harvest' && !recipeId && action.type !== 'collect' && party.leaderPlayerId !== playerId) throw new ForbiddenException('Отрядом управляет лидер');
       const actor = identity(party, session), admissionId = randomUUID();
-      const tool = command.action.type === 'harvest'
-        ? await this.inventory.reserveWorldTool(actor.characterId, command.action.toolInstanceId, admissionId, worldId, content!, context) : undefined;
-      const build = command.action.type === 'build' ? await this.inventory.reserveWorldBuilding(actor.characterId, command.action.recipeId, worldId, content!, context) : undefined;
-      return this.journal.append(worldId, { kind: 'action', party: worldPartySnapshot(party), request: { actor, command, ...(tool ? { tool } : {}), ...(build ? { build } : {}), ...(command.action.type === 'move' ? { movement: { usedAt: Date.now() } } : {}) } },
+      const tool = action.type === 'harvest'
+        ? await this.inventory.reserveWorldTool(actor.characterId, action.toolInstanceId, admissionId, worldId, content!, context) : undefined;
+      const permit = recipeId ? await this.inventory.reserveWorldRecipe(actor.characterId, recipeId, worldId, content!, context) : undefined;
+      return this.journal.append(worldId, { kind: 'action', party: worldPartySnapshot(party), request: { actor, command,
+        ...(tool ? { tool } : {}), ...(permit ? action.type === 'fill' ? { fill: permit } : { build: permit } : {}),
+        ...(action.type === 'move' ? { movement: { usedAt: Date.now() } } : {}) } },
         playerId, command.operationId, signature, context, admissionId);
     });
     return this.resolve(entry);
@@ -144,14 +148,15 @@ export class WorldGatewayService implements OnModuleInit, OnModuleDestroy {
             result.body = { ...result.body, inventoryDelivery: delivery };
           }
         }
-        const content = payload.kind === 'action' && payload.request.build ? await this.content.get(true) : undefined;
+        const recipePermit = payload.kind === 'action' ? payload.request.build ?? payload.request.fill : undefined;
+        const content = recipePermit ? await this.content.get(true) : undefined;
         await this.transactions.run(async context => {
           await this.journal.registration(worldId, context);
           // Another process may already have completed this exact delivery.
           if (entry.playerId && entry.operationId && (await this.journal.operation(worldId, entry.playerId, entry.operationId, context))?.result) return;
           const payload = entry.delivery.payload;
-          if (payload.kind === 'action' && payload.request.build)
-            await this.inventory.finishWorldBuilding(payload.request.build, result.status < 400 && 'outcome' in result.body && result.body.outcome.success, content!, context);
+          if (recipePermit)
+            await this.inventory.finishWorldRecipe(recipePermit, result.status < 400 && 'outcome' in result.body && result.body.outcome.success, content!, context);
           if (payload.kind === 'action' && payload.request.tool)
             await this.inventory.releaseWorldTool(entry.delivery.id, payload.request.tool.ownerCharacterId, context);
           await this.journal.complete(entry, result, context);

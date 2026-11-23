@@ -58,14 +58,24 @@ test('noa collision projection keeps sealed voxels solid and opens only connecte
   const projection = projectWorldToNoa(region, { x: 0, y: 0, z: 0 });
   assert.equal(projection.voxel({ x: 0, y: 1, z: 0 }), 0);
   assert.equal(projection.voxel({ x: 2, y: 2, z: 2 }), 1);
-  assert.equal(projection.voxel({ x: -1, y: 0, z: 0 }), 1);
+  assert.equal(projection.solid({ x: -1, y: 0, z: 0 }), true);
+  assert.equal(projection.voxel({ x: -1, y: 0, z: 0 }), 0);
   assert.ok(projection.voxel({ x: 1, y: 1, z: 1 }) > 1);
   region.blocks = region.blocks.filter(block => !(block.position.x === 1 && block.position.y === 2 && block.position.z === 2));
   const opened = projectWorldToNoa(region, { x: 0, y: 0, z: 0 }, projection.types);
   assert.equal(opened.voxel({ x: 2, y: 2, z: 2 }), 0);
   assert.equal(opened.types.get('wall'), projection.types.get('wall'));
 });
-
+test('noa renders water while predicting movement from a submerged position', () => {
+  const water = { x: 1, y: 1, z: 1 }, floor = { ...water, y: 0 };
+  const region = { size: { x: 3, y: 3, z: 3 }, palette: [{ id: 'clay' }, { id: 'water', liquid: true }],
+    blocks: [{ position: water, blockId: 'water' }, { position: floor, blockId: 'clay' }] } as NonNullable<WorldExpeditionView['region']>;
+  const projection = projectWorldToNoa(region, { x: 1.5, y: 1, z: 1.5 });
+  assert.equal(projection.voxel(water), projection.types.get('water'));
+  assert.equal(projection.solid(water), false);
+  assert.equal(projection.solid(floor), true);
+  assert.equal(projection.solid({ ...water, y: 2 }), false);
+});
 
 test('reconciliation replays only unconfirmed inputs without applying acknowledged motion twice', () => {
   const solid = (p: { x: number; y: number; z: number }) => p.y < 2;

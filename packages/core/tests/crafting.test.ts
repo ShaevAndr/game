@@ -12,7 +12,9 @@ const recipe = (id: string) => seedContent.recipes!.find(value => value.id === i
 
 test('seeded recipes pass content validation and basic recipes are known by default', () => {
   assert.ok(contentSchema.safeParse(seedContent).success);
-  assert.equal(knownRecipes(seedContent.recipes!).length, 22);
+  const recipes = knownRecipes(seedContent.recipes!);
+  assert.equal(recipes.length, 23);
+  assert.ok(recipes.some(recipe => recipe.id === 'craft-clay-flask'));
   assert.ok(knownRecipes(seedContent.recipes!).every(recipe => recipe.knownByDefault));
 });
 

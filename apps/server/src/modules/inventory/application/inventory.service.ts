@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomInt, randomUUID } from 'node:crypto';
 import { addEquipmentSamples, equipmentSampleDefinitions, equipmentSampleSignature } from '@game/core';
-import { canonicalJson, receiveInventoryItems, resolveWorldTool, worldBuildingRecipes, validateWorldBuildPermit, type WorldBuildPermit } from '@game/core';
+import { canonicalJson, findWorldRecipe, receiveInventoryItems, resolveWorldTool, validateWorldRecipePermit, type WorldRecipePermit } from '@game/core';
 import { Content, InventoryCommand, InventoryState, ItemInstance, ItemStack, applyInventoryCommand, availableItemActions, backpackStacks, equipmentBonuses, equipmentAttributeSources, equipmentRequirementBlockers, projectCharacterAttributes, isBattleConsumable } from '@game/core';
 import { z } from 'zod';
 import { TransactionContext, UnitOfWork } from '../../../shared/application/unit-of-work';
@@ -245,12 +245,12 @@ export class InventoryService {
     });
   }
 
-  async reserveWorldBuilding(ownerId: string, recipeId: string, worldId: string, content: Content, context: TransactionContext): Promise<WorldBuildPermit> {
-    const recipe = worldBuildingRecipes.find(entry => entry.id === recipeId);
-    if (!recipe) throw new BadRequestException('Неизвестная постройка');
+  async reserveWorldRecipe(ownerId: string, recipeId: string, worldId: string, content: Content, context: TransactionContext): Promise<WorldRecipePermit> {
+    const recipe = findWorldRecipe(recipeId);
+    if (!recipe) throw new BadRequestException('Неизвестный рецепт мира');
     const state = await this.state(ownerId, content, context), primary = state.inventories.find(bag => bag.primary);
     const reserved = await this.reservations.forOwner(ownerId, context);
-    const materials: WorldBuildPermit['materials'] = [];
+    const materials: WorldRecipePermit['materials'] = [];
     for (const cost of recipe.ingredients) {
       let remaining = cost.quantity;
       for (const item of state.items.filter(item => item.inventoryId === primary?.id && !item.equippedSlot && item.itemId === cost.itemId && !reserved.some(row => row.instanceId === item.id)).sort((a, b) => a.id.localeCompare(b.id))) {
@@ -264,15 +264,15 @@ export class InventoryService {
     return { ownerCharacterId: ownerId, recipeId, materials };
   }
   /** Runs with the journal completion transaction. A lost response keeps every stack reserved. */
-  async finishWorldBuilding(permit: WorldBuildPermit, success: boolean, content: Content, context: TransactionContext) {
-    validateWorldBuildPermit(permit, permit.recipeId, permit.ownerCharacterId);
+  async finishWorldRecipe(permit: WorldRecipePermit, success: boolean, content: Content, context: TransactionContext) {
+    validateWorldRecipePermit(permit, permit.recipeId, permit.ownerCharacterId);
     const state = await this.state(permit.ownerCharacterId, content, context);
     const reserved = await this.reservations.forOwner(state.ownerId, context);
     for (const row of permit.materials) {
-      if (!reserved.some(entry => entry.instanceId === row.instanceId && entry.operationId === row.reservationId)) throw new ConflictException('Резерв строительства не найден');
+      if (!reserved.some(entry => entry.instanceId === row.instanceId && entry.operationId === row.reservationId)) throw new ConflictException('Резерв рецепта не найден');
       if (success) {
         const item = state.items.find(item => item.id === row.instanceId && item.itemId === row.itemId);
-        if (!item || item.quantity < row.quantity) throw new ConflictException('Материалы строительства изменились');
+        if (!item || item.quantity < row.quantity) throw new ConflictException('Материалы рецепта изменились');
         item.quantity -= row.quantity;
       }
       await this.reservations.release(row.reservationId, state.ownerId, context);

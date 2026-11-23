@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { worldBuildingRecipes, type VoxelPosition } from '@game/core';
+import { waterFillingRecipe, worldBuildingRecipes, type VoxelPosition } from '@game/core';
 import { reachableBlock, sameVoxel, directionFrames, worldTools } from './interaction';
 import type { WorldScreenProps } from './world-screen';
 
@@ -23,6 +23,8 @@ export function useWorldControls({ world, playerId, party, partyReady, partyBusy
   const primary = world.inventory?.inventories.find(bag => bag.primary);
   const amount = (itemId: string) => world.inventory?.items.filter(item => item.itemId === itemId && item.inventoryId === primary?.id && !item.equippedSlot && !item.actions.some(action => action.reason === 'Инструмент используется командой мира')).reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const canBuild = recipe.ingredients.every(cost => amount(cost.itemId) >= cost.quantity);
+  const flaskCount = amount(waterFillingRecipe.ingredients[0].itemId);
+  const canFill = flaskCount >= waterFillingRecipe.ingredients[0].quantity;
   const paused = inventoryOpen || menu !== null || helpOpen;
   const hit = (p: VoxelPosition) => {
     if (controlsLocked || paused || !position || !reachableBlock(position, p, view?.region?.blockSizeMeters)) return;
@@ -30,9 +32,15 @@ export function useWorldControls({ world, playerId, party, partyReady, partyBusy
     const allowed = view?.region?.palette.find(entry => entry.id === block?.blockId)?.allowedToolClassIds ?? [];
     if (tool && !tool.reserved && allowed.includes(tool.toolClassId)) world.act({ type: 'harvest', position: p, toolInstanceId: tool.id });
   };
+  const fill = (p: VoxelPosition) => {
+    if (controlsLocked || paused || !canFill || !position || !reachableBlock(position, p, view?.region?.blockSizeMeters)) return;
+    const block = view?.region?.blocks.find(entry => sameVoxel(entry.position, p));
+    if (view?.region?.palette.some(entry => entry.id === block?.blockId && entry.liquid)) world.act({ type: 'fill', position: p });
+  };
   const move = (dx: number, dz: number, jump = false) => { if (view && isLeader && !controlsLocked && !paused) return world.act({ type: 'move', frames: directionFrames(view, dx, dz, jump) }); return false; };
   const reason = !selectedBlock ? 'Выберите блок в сцене или в списке рядом.' : !position || !reachableBlock(position, selectedBlock.position, view?.region?.blockSizeMeters) ? 'Подойдите ближе к выбранному блоку.'
-    : !blockType?.allowedToolClassIds.length ? 'Этот блок нельзя добывать.' : !tool ? 'В основном рюкзаке нужен подходящий инструмент.'
+    : blockType?.liquid ? canFill ? '' : 'Изготовьте пустую глиняную флягу в «Крафте» и положите её в основной рюкзак.'
+      : !blockType?.allowedToolClassIds.length ? 'Этот блок нельзя добывать.' : !tool ? 'В основном рюкзаке нужен подходящий инструмент.'
       : tool.reserved ? 'Инструмент занят предыдущим действием.' : !blockType.allowedToolClassIds.includes(tool.toolClassId) ? 'Выберите подходящий инструмент.' : '';
   const near = view?.region?.blocks.filter(block => position && reachableBlock(position, block.position, view?.region?.blockSizeMeters)) ?? [];
   useEffect(() => { setSelected(null); }, [view?.id, view?.region?.cellId]);
@@ -53,5 +61,5 @@ export function useWorldControls({ world, playerId, party, partyReady, partyBusy
   const movementEnabled = isLeader && !partyBusy && partyReady && world.ready && !world.stale && !world.pending && (!world.busy || world.moving);
   return { movementEnabled, position, selected, setSelected, tool, tools, setToolId, menu, setMenu, recipeId, setRecipeId,
     recipe, canBuild, isLeader, controlsLocked, leader, itemName, selectedBlock, blockType, amount,
-    paused, hit, move, reason, near };
+    paused, hit, fill, flaskCount, move, reason, near };
 }

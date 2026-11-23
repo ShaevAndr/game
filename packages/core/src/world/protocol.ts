@@ -21,19 +21,23 @@ export const startWorldSchema = z.object({
     ctx.addIssue({ code: 'custom', message: 'Лидер должен входить в состав отряда' });
 });
 export type StartWorldRequest = z.infer<typeof startWorldSchema>;
+const worldRecipePermitSchema = z.object({
+  ownerCharacterId: worldIdSchema, recipeId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
+  materials: z.array(z.object({ instanceId: worldIdSchema, reservationId: worldIdSchema, itemId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), quantity: z.number().int().positive().max(10000) }).strict()).min(1).max(64),
+}).strict();
 export const executeWorldSchema = z.object({
   actor: worldIdentitySchema, command: worldCommandSchema.transform(command => ({ ...command,
     operationId: command.operationId.toLowerCase(), action: command.action.type === 'harvest'
       ? { ...command.action, toolInstanceId: command.action.toolInstanceId.toLowerCase() } : command.action,
   })),
   movement: z.object({ usedAt: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) }).strict().optional(),
-  build: z.object({ ownerCharacterId: worldIdSchema, recipeId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
-    materials: z.array(z.object({ instanceId: worldIdSchema, reservationId: worldIdSchema, itemId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), quantity: z.number().int().positive().max(10000) }).strict()).min(1).max(64),
-  }).strict().optional(),
+  build: worldRecipePermitSchema.optional(),
+  fill: worldRecipePermitSchema.optional(),
   tool: z.object({ instanceId: worldIdSchema, ownerCharacterId: worldIdSchema, toolClassId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), power: z.number().int().min(1).max(1000000), usedAt: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) }).strict().optional(),
 }).strict().superRefine((value, ctx) => {
   if (value.command.action.type !== 'move' && value.movement) ctx.addIssue({ code: 'custom', message: 'Допуск движения передаётся только с движением' });
   if (value.command.action.type !== 'build' && value.build) ctx.addIssue({ code: 'custom', message: 'Материалы передаются только для строительства' });
+  if (value.command.action.type !== 'fill' && value.fill) ctx.addIssue({ code: 'custom', message: 'Тара передаётся только для набора воды' });
   if (value.command.action.type !== 'harvest' && value.tool)
     ctx.addIssue({ code: 'custom', message: 'Инструмент передаётся только для добычи' });
 });
@@ -86,7 +90,7 @@ export const worldDeliveryResultSchema = z.object({
     z.object({ worldId: worldIdSchema, operationId: worldIdSchema, revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
       motion: z.object({ position: z.object({ x: z.number().finite(), y: z.number().finite(), z: z.number().finite() }).strict(), velocity: z.object({ x: z.number().finite(), y: z.number().finite(), z: z.number().finite() }).strict(), grounded: z.boolean(), sequence: z.number().int().nonnegative() }).strict().optional(),
       inventoryDelivery: z.object({ status: z.enum(['imported', 'available']), reason: z.string().optional() }).strict().optional(),
-      outcome: z.object({ type: z.enum(['start', 'party', 'travel', 'enter', 'leave', 'move', 'harvest', 'build', 'collect', 'close']), success: z.boolean(),
+      outcome: z.object({ type: z.enum(['start', 'party', 'travel', 'enter', 'leave', 'move', 'harvest', 'build', 'fill', 'collect', 'close']), success: z.boolean(),
         hit: z.object({ damage: z.number().int().nonnegative(), hp: z.number().int().nonnegative(), maxHp: z.number().int().positive(), destroyed: z.boolean() }).strict().optional(),
         loot: z.array(z.object({ itemId: z.string(), quantity: z.number().int().positive() }).strict()),
         xpGained: z.number().int().nonnegative(), manifestIds: z.array(z.string()) }).strict(),

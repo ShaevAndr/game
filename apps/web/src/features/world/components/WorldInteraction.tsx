@@ -10,14 +10,16 @@ interface Props {
 
 export function WorldInteraction({ world, controls }: Props) {
   const { view } = world;
-  const { position, selectedBlock, controlsLocked, paused, reason, hit, near,
+  const { position, selectedBlock, blockType, controlsLocked, paused, reason, hit, fill, near,
     selected, setSelected, isLeader, move } = controls;
   if (!view?.region || !position) return null;
   return <div className="world-interaction">
-          <article className="panel world-target"><div className="section-label">ДОБЫЧА</div><h3>Выбор блока и удар</h3>
+          <article className="panel world-target"><div className="section-label">ДОБЫЧА</div><h3>Взаимодействие с блоком</h3>
             <p>{selectedBlock ? `Блок ${selectedBlock.position.x}, ${selectedBlock.position.y}, ${selectedBlock.position.z}` : 'Нажми на блок в 3D-сцене. Добывать можно рядом с отрядом.'}</p>
-            <p className="world-action-reason" aria-live="polite">{reason || 'Инструмент подходит. Можно добывать.'}</p>
-            <button className="primary" disabled={controlsLocked || paused || !!reason} onClick={() => { if (selectedBlock) hit(selectedBlock.position); }}>Бить</button>
+            <p className="world-action-reason" aria-live="polite">{reason || (blockType?.liquid ? 'Можно наполнить одну флягу.' : 'Инструмент подходит. Можно добывать.')}</p>
+            <button className="primary" disabled={controlsLocked || paused || !!reason} onClick={() => {
+              if (selectedBlock) (blockType?.liquid ? fill : hit)(selectedBlock.position);
+            }}>{blockType?.liquid ? 'Набрать воду' : 'Бить'}</button>
             <details className="world-nearby"><summary>Блоки рядом · {near.length}</summary><div>{near.map(block => <button className={sameVoxel(block.position, selected) ? 'chosen' : ''} key={voxelKey(block.position)} onClick={() => setSelected(block.position)} aria-pressed={sameVoxel(block.position, selected)}>
               {view.region!.palette.find(entry => entry.id === block.blockId)?.name ?? block.blockId}<small>{block.position.x}, {block.position.y}, {block.position.z}</small></button>)}</div></details>
           </article>

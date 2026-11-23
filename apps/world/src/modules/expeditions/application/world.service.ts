@@ -67,7 +67,7 @@ export class WorldService {
       if (replay) return replay;
       if (record.state.revision !== request.command.expectedRevision) throw new ConflictException('Состояние мира изменилось; перечитайте снимок');
       let transition: ReturnType<typeof applyWorldCommand>;
-      try { transition = applyWorldCommand(record.state, request.command, actor, request.tool, undefined, request.build, request.movement); }
+      try { transition = applyWorldCommand(record.state, request.command, actor, request.tool, undefined, request.build ?? request.fill, request.movement); }
       catch (error) { throw new BadRequestException((error as Error).message); }
       if (!await this.repository.save(transition.state, record.state.revision, context)) throw new ConflictException('Состояние мира изменилось');
       await this.repository.seal(transition.outcome.manifests, context);
