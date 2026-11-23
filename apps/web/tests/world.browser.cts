@@ -359,6 +359,19 @@ test('world screen: rendering, targeting, leader movement, recovery, cargo and m
     await showButtons(fallback);
     await fallback.getByText(/Блоки рядом/).click(); assert.ok(await fallback.locator('.world-nearby button').count() > 0);
     await fallback.close();
-  } catch (error) { await shot('world-failure.png'); for (const frame of page.frames()) if (frame.url().includes('world.html')) console.error({ trace: await frame.evaluate(() => (window as unknown as { worldInputTrace: unknown[] }).worldInputTrace), hud: await frame.locator('#position-info').getAttribute('data-grounded'), position: world?.location?.position, motion: world?.location?.motion, recentInputs: actions.filter(action => action.action.type === 'move').slice(-3).map(action => action.action) }); throw error; }
+  } catch (error) {
+    for (const frame of page.frames()) if (frame.url().includes('world.html')) console.error(JSON.stringify({
+      trace: await frame.evaluate(() => (window as unknown as { worldInputTrace: unknown[] }).worldInputTrace),
+      target: await frame.locator('#target-info').textContent(),
+      hp: await frame.locator('#hp-readout').textContent(),
+      pointerLocked: await frame.evaluate(() => !!document.pointerLockElement),
+      status: await page.locator('.world-status-layer').allTextContents(),
+      position: world?.location?.position,
+      buffer: world?.gatherers[0].cargo,
+      deliveries: cargo.map(document => ({ cargo: document.cargo, status: document.status })),
+      recentActions: actions.slice(-10).map(command => command.action),
+    }));
+    await shot('world-failure.png'); throw error;
+  }
   finally { await context.close(); }
 });
